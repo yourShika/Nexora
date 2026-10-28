@@ -3,6 +3,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod attach;
 mod files;
 mod run;
 
@@ -101,7 +102,13 @@ pub fn run() {
             files::finish_backup,
             run::shells,
             run::run_script,
-            run::cancel_run
+            run::cancel_run,
+            attach::save_attachment,
+            attach::import_attachment,
+            attach::open_attachment,
+            attach::reveal_attachment,
+            attach::read_text_file,
+            attach::export_files
         ])
         .manage(run::Runs::default())
         .setup(|app| {

@@ -2,8 +2,9 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { Extension } from '@tiptap/core'
 import { ReactRenderer } from '@tiptap/react'
 import Suggestion from '@tiptap/suggestion'
+import { pickAttachments } from './Attachment.jsx'
 import {
-  CheckSquare, Code, LinkSimple, ListBullets, ListChecks, ListNumbers, Minus, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
+  CheckSquare, Code, LinkSimple, ListBullets, ListChecks, ListNumbers, Minus, Paperclip, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
 } from '@phosphor-icons/react'
 
 // `keys`: weitere Suchwörter, damit auch "todo", "h1" oder "pre" trifft
@@ -21,6 +22,7 @@ const ITEMS = [
   { title: 'Trennlinie', keys: 'hr linie divider', icon: Minus, run: (c) => c.setHorizontalRule() },
   { title: 'Seite verlinken', keys: 'link verweis [[', icon: LinkSimple, run: (c) => c.insertContent('[[') },
   { title: 'LOP-Liste einbetten', keys: 'lop liste datenbank punkte', icon: ListChecks, run: (c) => c.insertContent({ type: 'lopEmbed', attrs: { id: null } }) },
+  { title: 'Datei anhängen', keys: 'anhang datei pdf upload', icon: Paperclip, run: (c, editor) => (attach(editor), c) },
 ]
 
 const List = forwardRef(function List({ items, command }, ref) {
@@ -78,7 +80,7 @@ export const SlashCommand = Extension.create({
           const q = query.toLowerCase()
           return ITEMS.filter((i) => `${i.title} ${i.keys}`.toLowerCase().includes(q))
         },
-        command: ({ editor, range, props }) => props.run(editor.chain().focus().deleteRange(range)).run(),
+        command: ({ editor, range, props }) => props.run(editor.chain().focus().deleteRange(range), editor).run(),
         render: popup(List),
       }),
     ]
@@ -112,4 +114,11 @@ export function popup(Component) {
       },
     }
   }
+}
+
+// Dateidialog, danach die gewählten Dateien als Anhänge an der Cursorstelle einfügen
+function attach(editor) {
+  pickAttachments()
+    .then((list) => list.length && editor.chain().focus().insertContent(list.map((attrs) => ({ type: 'attachment', attrs }))).run())
+    .catch((e) => alert(`Anhang nicht übernommen: ${e}`))
 }

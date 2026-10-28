@@ -74,7 +74,9 @@ Die neuen Nummern 52–71 werden beim Bau der passenden Stufe eingeordnet.
 - **0.6.0 (Stufe 1 fertig):** Symbol (Emoji) und Titelbild für Seiten, Listen, Abschnitte, Notizbücher; Versionsverlauf je Seite (höchstens alle 10 Minuten, 90 Tage) mit farbigem Vergleich (67) und Wiederherstellen; Blöcke per Griff ziehen; Seitenbaum per Ziehen umsortieren und verschieben; ungenutzte Bilder aufräumen; behoben: Bilder beim allerersten Start nicht sichtbar; Testversion mit eigenem Datenordner (`npm run app`)
 - **0.7.0 (Stufe 2, Teil Runbooks):** Ausführen von PowerShell 5.1/7, CMD und Python direkt per Klick (35), Live-Ausgabe mit Abbrechen, Platzhalter `{{Name}}` mit gemerkten Werten (36), „Ins Protokoll“ hängt Ausgabe mit Datum und Exit-Code an die Seite (37), Als Admin über UAC (38), Ausgabe als sortier-/filterbare Tabelle (66), Snippet-Übersicht (34), Seite sperren (68)
 - **0.8.0 (Stufe 2, Teil Verzahnung):** Seitenlinks mit `[[` (`[[Titel|id]]`, zeigt immer den aktuellen Titel) und Rückverweise unter dem Titel (19); LOP-Liste in Seite einbetten `[[lop:id]]` mit Anlegen und Abhaken (10, deckt 9 ab); Verlauf je Punkt mit Feldänderungen und Kommentaren (11); Vorlagen mit `{{Datum}}` (20); Checkliste als LOP-Punkte mit Stichtag und `-3`/`+2` (53); flüssigere Animationen
-- Rest von Stufe 2: Dateien (26, 28, 46)
+- **0.8.1:** zusätzlich MSI-Installer (GPO/Intune), getrennte Update-Kanäle für exe und msi
+- **0.9.0 (Stufe 2 fertig):** Anhänge per Ziehen, Einfügen oder `/` „Datei anhängen“ (`[[datei:uuid/Name|Bytes]]`, ausführbare Dateien nur „im Ordner zeigen“) (28); .txt/.md/.log importieren per Rechtsklick oder Ziehen auf den Baum, alte ANSI-Dateien werden erkannt (26); Markdown-Export eines Zweigs oder von allem, mit Bildern, Anhängen und relativen Links (46); Sicherung nimmt Anhänge mit
+- Als Nächstes Stufe 3 (Freie Seiten und Planung)
 
 ## Offen
 

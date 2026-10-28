@@ -117,17 +117,9 @@ fn copy_backup(src_dir: &Path, snap: &Path, target: &Path, stamp: &str, keep: us
     let dest = target.join(format!("nexora-{stamp}.db"));
     fs::copy(snap, &dest).map_err(|e| format!("Kopieren fehlgeschlagen: {e}"))?;
 
-    // Bilder ändern sich nie (eindeutige Namen): nur fehlende kopieren
-    let images = src_dir.join("bilder");
-    if images.is_dir() {
-        let out = target.join("bilder");
-        fs::create_dir_all(&out).map_err(|e| e.to_string())?;
-        for entry in fs::read_dir(&images).map_err(|e| e.to_string())?.flatten() {
-            let to = out.join(entry.file_name());
-            if !to.exists() {
-                fs::copy(entry.path(), &to).map_err(|e| format!("Bild nicht kopiert: {e}"))?;
-            }
-        }
+    // Bilder und Anhänge ändern sich nie (eindeutige Namen): nur fehlende kopieren
+    for folder in ["bilder", "anhaenge"] {
+        copy_missing(&src_dir.join(folder), &target.join(folder))?;
     }
 
     // Alte Stände über `keep` hinaus löschen; nur eigene Dateien anfassen
@@ -149,6 +141,23 @@ fn copy_backup(src_dir: &Path, snap: &Path, target: &Path, stamp: &str, keep: us
     Ok(dest.display().to_string())
 }
 
+// Ordner rekursiv spiegeln, vorhandene Dateien bleiben unangetastet
+fn copy_missing(from: &Path, to: &Path) -> Result<(), String> {
+    if !from.is_dir() {
+        return Ok(());
+    }
+    fs::create_dir_all(to).map_err(|e| e.to_string())?;
+    for entry in fs::read_dir(from).map_err(|e| e.to_string())?.flatten() {
+        let dest = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_missing(&entry.path(), &dest)?;
+        } else if !dest.exists() {
+            fs::copy(entry.path(), &dest).map_err(|e| format!("{} nicht kopiert: {e}", entry.path().display()))?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,6 +176,8 @@ mod tests {
         let (src, target) = (base.join("daten"), base.join("ziel"));
         fs::create_dir_all(src.join("bilder")).unwrap();
         fs::write(src.join("bilder").join("a.png"), b"x").unwrap();
+        fs::create_dir_all(src.join("anhaenge").join("id1")).unwrap();
+        fs::write(src.join("anhaenge").join("id1").join("Bericht.pdf"), b"pdf").unwrap();
         for (i, stamp) in ["2026-10-01_0800", "2026-10-02_0800", "2026-10-03_0800"].iter().enumerate() {
             let snap = src.join(format!("sicherung-{stamp}.db"));
             fs::write(&snap, format!("db{i}")).unwrap();
@@ -174,8 +185,9 @@ mod tests {
         }
         let mut names: Vec<String> = fs::read_dir(&target).unwrap().flatten().map(|e| e.file_name().into_string().unwrap()).collect();
         names.sort();
-        assert_eq!(names, ["bilder", "nexora-2026-10-02_0800.db", "nexora-2026-10-03_0800.db"]);
+        assert_eq!(names, ["anhaenge", "bilder", "nexora-2026-10-02_0800.db", "nexora-2026-10-03_0800.db"]);
         assert!(target.join("bilder").join("a.png").exists());
+        assert!(target.join("anhaenge").join("id1").join("Bericht.pdf").exists());
         fs::remove_dir_all(base).unwrap();
     }
 }

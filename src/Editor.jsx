@@ -17,6 +17,7 @@ import { CodeBlockView } from './CodeBlock.jsx'
 import BlockHandle from './BlockHandle.jsx'
 import { LopEmbed, PageLink, PageLinkSuggest } from './Links.jsx'
 import { assetUrl, isImage, relativeSrc, saveImage } from './images.js'
+import { Attachment, saveAttachment } from './Attachment.jsx'
 
 const lowlight = createLowlight(common)
 lowlight.register({ powershell, dos, dockerfile, nginx })
@@ -39,22 +40,38 @@ const Bild = Image.extend({
   resize: { enabled: true, alwaysPreserveAspectRatio: true, minWidth: 60, minHeight: 40, directions: ['left', 'right', 'bottom-left', 'bottom-right'] },
 })
 
-// Bilddateien speichern und einfügen; false, wenn keine Bilder dabei sind (dann normales Einfügen)
-function insertImages(view, files, pos, onError) {
-  const images = files.filter(isImage)
-  if (!images.length) return false
+// Dateien speichern und einfügen: Bilder als Bild, alles andere als Anhang.
+// false, wenn keine Dateien dabei sind (dann normales Einfügen)
+function insertFiles(view, files, pos, onError) {
+  if (!files.length) return false
   ;(async () => {
-    for (const file of images) {
+    // Abgelegtes kommt hinter den Block unter der Maus, statt Listen oder Absätze zu zerteilen
+    let at = pos == null ? null : (() => {
+      const $pos = view.state.doc.resolve(Math.min(pos, view.state.doc.content.size))
+      return $pos.depth > 0 ? $pos.after(1) : pos
+    })()
+    for (const file of files) {
       try {
-        const node = view.state.schema.nodes.image.create({ src: await saveImage(file) })
-        const tr = pos == null ? view.state.tr.replaceSelectionWith(node) : view.state.tr.insert(Math.min(pos, view.state.doc.content.size), node)
+        const { schema } = view.state
+        const node = isImage(file)
+          ? schema.nodes.image.create({ src: await saveImage(file) })
+          : schema.nodes.attachment.create(await saveAttachment(file))
+        const tr = at == null ? view.state.tr.replaceSelectionWith(node) : view.state.tr.insert(Math.min(at, view.state.doc.content.size), node)
         view.dispatch(tr)
+        // nächste Datei hinter die eben eingefügte, damit die Reihenfolge stimmt
+        if (at != null) at = tr.mapping.map(Math.min(at, tr.before.content.size), 1)
       } catch (e) {
-        onError(`Bild nicht gespeichert: ${e}`)
+        onError(`${file.name} nicht gespeichert: ${e}`)
       }
     }
   })()
   return true
+}
+
+// Beim Einfügen gewinnt Text: Word legt neben dem Text auch ein Bild der Auswahl in die Zwischenablage
+function pastedFiles(data) {
+  if (!data || data.getData('text/plain').trim()) return []
+  return [...data.files]
 }
 
 const extensions = [
@@ -70,6 +87,7 @@ const extensions = [
     placeholder: ({ node }) => (node.type.name === 'heading' ? 'Überschrift' : 'Tippe / für Blöcke'),
   }),
   Bild,
+  Attachment,
   PageLink,
   PageLinkSuggest,
   LopEmbed,
@@ -90,9 +108,9 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
     contentType: 'markdown',
     onUpdate: ({ editor }) => change.current(editor.getMarkdown()),
     editorProps: {
-      handlePaste: (view, event) => insertImages(view, [...(event.clipboardData?.files ?? [])], null, setError),
+      handlePaste: (view, event) => insertFiles(view, pastedFiles(event.clipboardData), null, setError),
       handleDrop: (view, event, _slice, moved) =>
-        !moved && insertImages(view, [...(event.dataTransfer?.files ?? [])], view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos, setError),
+        !moved && insertFiles(view, [...(event.dataTransfer?.files ?? [])], view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos, setError),
     },
   })
 

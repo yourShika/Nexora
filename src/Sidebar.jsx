@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import {
-  ArrowCircleUp, CaretRight, CheckSquare, Code, DotsThree, FileText, FolderSimple, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
+  ArrowCircleUp, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
   Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
@@ -152,6 +152,10 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
               )}
             </>
           )}
+          {['section', 'page'].includes(m.kind) && (
+            <MenuItem icon={DownloadSimple} onClick={run(() => actions.importFiles(m.id))}>Textdateien importieren …</MenuItem>
+          )}
+          <MenuItem icon={Export} onClick={run(() => actions.exportTree([m.id]))}>Als Markdown exportieren …</MenuItem>
           <MenuItem icon={PencilSimple} onClick={run(() => actions.startRename(m.id))}>Umbenennen</MenuItem>
           <MenuItem icon={Star} onClick={run(() => actions.save(m.id, { favorite: m.favorite ? 0 : 1 }))}>
             {m.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
@@ -203,6 +207,13 @@ function Row({ node, depth, ctx }) {
         }}
         onDragEnd={() => ((drag.current = null), setOver(null))}
         onDragOver={(e) => {
+          // Dateien aus dem Explorer: nur in Abschnitte und Seiten importieren
+          if (!drag.current && e.dataTransfer.types.includes('Files')) {
+            const ok = node.kind === 'section' || node.kind === 'page'
+            if (ok) e.preventDefault()
+            if (mark !== (ok ? 'inside' : null)) setOver(ok ? { id: node.id, zone: 'inside' } : null)
+            return
+          }
           if (!drag.current) return
           const zone = zoneAt(e)
           const ok = actions.canMove(drag.current, node.id, zone)
@@ -213,6 +224,7 @@ function Row({ node, depth, ctx }) {
         onDrop={(e) => {
           e.preventDefault()
           if (drag.current) actions.move(drag.current, node.id, zoneAt(e))
+          else if (e.dataTransfer.files.length) actions.importFiles(node.id, [...e.dataTransfer.files])
           drag.current = null
           setOver(null)
         }}

@@ -21,6 +21,8 @@ import { findUpdate, installUpdate } from './updates.js'
 import { applyTheme } from './theme.js'
 import { dayOf, describe, emptyConfig, fieldsOf, isDone, lopConfig, statusField, today, toggleDone } from './fields.js'
 import { parseQuick } from './quick.js'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { buildExport, decodeText, importedPage } from './io.js'
 import { setLinkData } from './Links.jsx'
 import { AppContext } from './ctx.js'
 
@@ -61,6 +63,13 @@ export default function App() {
   const [renaming, setRenaming] = useState(null)
   const [expanded, setExpanded] = useState(loadExpanded)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  // Hinweise verschwinden nach ein paar Sekunden von selbst
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(''), 6000)
+    return () => clearTimeout(t)
+  }, [notice])
   const [hotkey, setHotkey] = useState(DEFAULT_HOTKEY)
   const [hotkeyError, setHotkeyError] = useState('')
   const [searching, setSearching] = useState(false)
@@ -304,6 +313,59 @@ export default function App() {
     }
   }
 
+  // Textdateien als Seiten übernehmen: aus dem Explorer gezogen (File) oder per Dateidialog
+  async function importFiles(parentId, dropped) {
+    try {
+      let items
+      if (dropped) {
+        const texts = dropped.filter((f) => /\.(txt|md|markdown|log)$/i.test(f.name))
+        if (!texts.length) return setError('Importieren lassen sich .txt, .md und .log')
+        items = await Promise.all(texts.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })))
+      } else {
+        const picked = await openDialog({ multiple: true, title: 'Textdateien importieren', filters: [{ name: 'Text', extensions: ['txt', 'md', 'markdown', 'log'] }] })
+        if (!picked) return
+        items = await Promise.all([picked].flat().map(async (p) => ({ name: p.split(/[\\/]/).pop(), bytes: new Uint8Array(await invoke('read_text_file', { path: p })) })))
+      }
+      const created = []
+      for (const it of items) {
+        const { title, body } = importedPage(it.name, decodeText(it.bytes))
+        const node = await db.create('page', parentId, title)
+        await db.update(node.id, { body })
+        created.push(node)
+      }
+      setNodes((ns) => [...ns, ...created])
+      setExpanded((s) => new Set([...s, parentId]))
+      if (created.length === 1) setCurrent(created[0].id)
+      setNotice(`${created.length} ${created.length === 1 ? 'Seite' : 'Seiten'} importiert`)
+    } catch (e) {
+      fail(e)
+    }
+  }
+
+  // Markdown-Export: Baum ab `ids` (oder alles) in einen gewählten Ordner, mit Bildern und Anhängen
+  async function exportTree(ids, all) {
+    try {
+      const target = await openDialog({ directory: true, title: 'Ordner für den Export wählen' })
+      if (!target) return
+      const bodies = new Map()
+      const walk = async (id) => {
+        const n = tree.alive.get(id)
+        if (['page', 'row'].includes(n.kind)) bodies.set(id, await db.loadBody(id))
+        for (const k of [...tree.children(id), ...tree.rows(id)]) await walk(k.id)
+      }
+      for (const id of ids) await walk(id)
+      const out = buildExport(ids, { get: (x) => tree.alive.get(x), children: tree.children, rows: tree.rows, body: (x) => bodies.get(x) ?? '' })
+      // "Alles" landet in einem eigenen Unterordner mit Datum
+      const prefix = all ? `Nexora-Export ${today()}/` : ''
+      const files = out.files.map((f) => ({ ...f, path: prefix + f.path }))
+      const copies = out.copies.map((c) => ({ ...c, to: prefix + c.to }))
+      const n = await invoke('export_files', { target, files, copies })
+      setNotice(`${n} Seiten exportiert nach ${target}${all ? `\\${prefix.slice(0, -1)}` : ''}`)
+    } catch (e) {
+      fail(e)
+    }
+  }
+
   // Ziel beim Ziehen im Baum: zone 'before' | 'after' | 'inside' relativ zu target; null = nicht erlaubt
   function placement(id, targetId, zone) {
     const node = tree.alive.get(id)
@@ -322,6 +384,8 @@ export default function App() {
 
   const actions = {
     fromTemplate,
+    importFiles,
+    exportTree,
     canMove: (id, targetId, zone) => !!placement(id, targetId, zone),
     move(id, targetId, zone) {
       const to = placement(id, targetId, zone)
@@ -410,6 +474,7 @@ export default function App() {
     addRow,
     toggleRow,
     rowsFromChecklist,
+    exportAll: () => exportTree(tree.roots.map((n) => n.id), true),
     templates: [...tree.alive.values()].filter((n) => n.template),
   }
   const commands = [
@@ -534,6 +599,14 @@ export default function App() {
 
       {searching && <Search tree={tree} pathOf={pathOf} commands={commands} onOpen={actions.open} onClose={() => setSearching(false)} />}
 
+      {notice && !error && (
+        <div role="status" className="anim-toast fixed bottom-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-line bg-raised p-3 shadow-[var(--shadow)]">
+          <span className="flex-1">{notice}</span>
+          <button aria-label="Schließen" onClick={() => setNotice('')} className="text-muted hover:text-text">
+            <X size={16} />
+          </button>
+        </div>
+      )}
       {error && (
         <div role="alert" className="anim-toast fixed bottom-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-line bg-raised p-3 shadow-[var(--shadow)]">
           <span className="flex-1 text-danger">{error}</span>

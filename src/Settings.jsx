@@ -7,6 +7,7 @@ import { FolderOpen, GearSix, Keyboard, Monitor, Moon, Sun } from '@phosphor-ico
 import { BACKUP_DEFAULTS, loadBackupSettings } from './backup.js'
 import { deleteImages, unusedImages } from './images.js'
 import { shells } from './runner.js'
+import { useApp } from './ctx.js'
 import { ConfirmButton } from './Overview.jsx'
 import { View } from './Rows.jsx'
 import { accelFromEvent, bindHotkey, hotkeyLabel } from './hotkey.js'
@@ -309,7 +310,19 @@ export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBack
           Alles liegt in <code className="font-mono text-sm text-text">{dir ? `${dir}\\nexora.db` : '…'}</code>, Bilder daneben im Ordner <code className="font-mono text-sm text-text">bilder</code>.
         </p>
         <ImageCleanup />
+        <ExportAll />
       </section>
     </View>
+  )
+}
+
+// Alles als Markdown-Ordner: lesbar ohne Nexora, z. B. in VS Code oder Obsidian
+function ExportAll() {
+  const app = useApp()
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3">
+      <button onClick={app.exportAll} className="rounded-md border border-line bg-raised px-3 py-1.5 hover:border-faint">Alles als Markdown exportieren …</button>
+      <span className="text-muted">Ordner mit .md-Dateien, Bildern und Anhängen; Links zwischen Seiten bleiben erhalten.</span>
+    </div>
   )
 }
