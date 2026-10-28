@@ -94,6 +94,16 @@ export function formatDate(value, now = new Date()) {
   return date.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short', ...(y !== now.getFullYear() ? { year: 'numeric' } : {}) }) + time
 }
 
+// Feldwert als Text für den Verlauf eines Punkts
+export function describe(field, value) {
+  if (value == null || value === '' || (Array.isArray(value) && !value.length)) return '–'
+  if (field.type === 'status' || field.type === 'select') return option(field, value).name
+  if (field.type === 'multi') return value.map((v) => option(field, v).name).join(', ')
+  if (field.type === 'date') return formatDate(value)
+  if (field.type === 'checkbox') return value ? 'ja' : 'nein'
+  return String(value)
+}
+
 export const option = (field, id) => field?.options?.find((o) => o.id === id) ?? (id ? { id, name: id, color: 'grau' } : null)
 
 export const newId = () => crypto.randomUUID().slice(0, 8)

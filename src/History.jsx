@@ -24,7 +24,7 @@ export default function History({ nodeId, current, onRestore, onClose }) {
   const changes = diff.filter((d) => d.type === 'add' || d.type === 'del').length
 
   return (
-    <aside aria-label="Verlauf" className="flex w-[26rem] shrink-0 flex-col border-l border-line bg-side">
+    <aside aria-label="Verlauf" className="anim-panel flex w-[26rem] shrink-0 flex-col border-l border-line bg-side">
       <div className="flex h-12 shrink-0 items-center justify-between px-4">
         <h2 className="font-semibold">Verlauf</h2>
         <button aria-label="Schließen" onClick={onClose} className="rounded p-1 text-muted hover:bg-hover hover:text-text"><X size={16} /></button>

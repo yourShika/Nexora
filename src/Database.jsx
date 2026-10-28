@@ -239,7 +239,7 @@ function KanbanView({ db, rows, fields, onOpen, onRow }) {
               draggable
               onDragStart={(e) => e.dataTransfer.setData('text/plain', r.id)}
               onClick={() => onOpen(r.id)}
-              className="cursor-grab rounded-md border border-line bg-raised p-2.5 shadow-sm active:cursor-grabbing"
+              className="anim-row cursor-grab rounded-md border border-line bg-raised p-2.5 shadow-sm transition-[transform,box-shadow] duration-200 hover:-translate-y-px hover:shadow-md active:cursor-grabbing"
             >
               <p className={`mb-1.5 font-medium ${o.done ? 'text-muted line-through' : ''}`}>{r.title || 'Ohne Titel'}</p>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -276,7 +276,7 @@ function FieldsPanel({ config, onConfig, onClose }) {
   }
 
   return (
-    <aside aria-label="Felder" className="flex w-80 shrink-0 flex-col border-l border-line bg-side">
+    <aside aria-label="Felder" className="anim-panel flex w-80 shrink-0 flex-col border-l border-line bg-side">
       <div className="flex h-12 items-center justify-between px-4">
         <h2 className="font-semibold">Felder</h2>
         <button aria-label="Schließen" onClick={onClose} className="rounded p-1 text-muted hover:bg-hover hover:text-text"><X size={16} /></button>

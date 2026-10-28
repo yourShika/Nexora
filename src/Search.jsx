@@ -83,8 +83,8 @@ export default function Search({ tree, pathOf, commands, onOpen, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center bg-[rgb(10_20_22/0.35)] pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-label="Suchen" className="flex h-fit max-h-[70vh] w-[640px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-xl border border-line bg-raised shadow-[var(--shadow)]">
+    <div className="anim-fade fixed inset-0 z-50 flex justify-center bg-[rgb(10_20_22/0.35)] pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-label="Suchen" className="anim-zoom flex h-fit max-h-[70vh] w-[640px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-xl border border-line bg-raised shadow-[var(--shadow)]">
         <div className="flex items-center gap-3 border-b border-line px-4">
           <MagnifyingGlass size={18} className="shrink-0 text-muted" />
           <input

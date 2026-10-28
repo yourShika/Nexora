@@ -65,6 +65,12 @@ pub fn run() {
             sql: include_str!("../migrations/005_sperre.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "verzahnung",
+            sql: include_str!("../migrations/006_verzahnung.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

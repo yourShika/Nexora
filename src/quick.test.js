@@ -48,6 +48,15 @@ test('Uhrzeit mit und ohne Datum', () => {
   assert.deepEqual(q('Version 2.1 und 25:00'), { title: 'Version 2.1 und 25:00', props: {} })
 })
 
+test('Checklisten-Vorlage: Tage relativ zum Stichtag', () => {
+  const start = new Date(2026, 10, 2) // Mo, 2.11.2026
+  assert.deepEqual(parseQuick('Konto anlegen @IT -3 #onboarding', start), {
+    title: 'Konto anlegen',
+    props: { person: 'IT', due: '2026-10-30', tags: ['onboarding'] },
+  })
+  assert.equal(parseQuick('Laptop übergeben heute', start).props.due, '2026-11-02')
+})
+
 test('Priorität kurz, mehrere Tags ohne Doppel', () => {
   assert.deepEqual(q('Backup #srv #srv #nas !1'), { title: 'Backup', props: { prio: 'hoch', tags: ['srv', 'nas'] } })
 })

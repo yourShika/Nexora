@@ -20,7 +20,7 @@ export default function Menu({ x, y, onClose, children }) {
   }, [x, y, onClose])
 
   return (
-    <div ref={ref} role="menu" className="fixed z-40 min-w-48 rounded-lg border border-line bg-raised p-1 shadow-[var(--shadow)]">
+    <div ref={ref} role="menu" className="anim-pop fixed z-40 min-w-48 rounded-lg border border-line bg-raised p-1 shadow-[var(--shadow)]">
       {children}
     </div>
   )

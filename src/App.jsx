@@ -19,7 +19,10 @@ import { initImages } from './images.js'
 import { loadBackupSettings, maybeBackup, runBackup } from './backup.js'
 import { findUpdate, installUpdate } from './updates.js'
 import { applyTheme } from './theme.js'
-import { dayOf, emptyConfig, fieldsOf, isDone, lopConfig, statusField, today, toggleDone } from './fields.js'
+import { dayOf, describe, emptyConfig, fieldsOf, isDone, lopConfig, statusField, today, toggleDone } from './fields.js'
+import { parseQuick } from './quick.js'
+import { setLinkData } from './Links.jsx'
+import { AppContext } from './ctx.js'
 
 const DEFAULT_TITLE = { notebook: 'Neues Notizbuch', section: 'Neuer Abschnitt', page: '', database: 'Neue Liste', row: '' }
 // Wohin etwas im Baum darf (null = oberste Ebene)
@@ -215,8 +218,19 @@ export default function App() {
   const dbOf = (row) => tree.alive.get(row.parent_id) ?? null
 
   function save(id, fields) {
+    const node = tree.alive.get(id)
+    if (node?.kind === 'row' && fields.props) logChanges(node, fields.props)
     patch(id, { ...fields, updated_at: new Date().toISOString() })
     db.update(id, fields).catch(fail)
+  }
+
+  // Verlauf je Punkt: jede geänderte Eigenschaft als "Status: Offen → Wartet"
+  function logChanges(row, props) {
+    for (const f of fieldsOf(dbOf(row))) {
+      const [before, after] = [row.props?.[f.id] ?? null, props[f.id] ?? null]
+      if (f.type === 'nr' || JSON.stringify(before) === JSON.stringify(after)) continue
+      db.addActivity(row.id, 'change', `${f.name}: ${describe(f, before)} → ${describe(f, after)}`).catch(() => {})
+    }
   }
 
   // Fehlende Tag-Optionen in der Liste ergänzen, damit sie Farbe und Auswahl bekommen
@@ -252,6 +266,44 @@ export default function App() {
     }
   }
 
+  // Offene Checkpunkte einer Seite als LOP-Punkte anlegen; Kurzsyntax gilt relativ zum Stichtag
+  async function rowsFromChecklist(pageId, listId, day) {
+    const list = tree.alive.get(listId)
+    const items = [...(await db.loadBody(pageId)).matchAll(/^\s*- \[ \] (.+)$/gm)].map((m) => m[1].trim())
+    const [y, m, d] = day.split('-').map(Number)
+    const parsed = items.map((text) => parseQuick(text, new Date(y, m - 1, d)))
+    // Nummern und Tags einmal für alle vergeben, nicht je Punkt (der Zustand wäre zwischendurch veraltet)
+    let config = withTags(list, parsed.flatMap((p) => p.props.tags ?? []))
+    const sf = statusField(config.fields)
+    const numbering = config.fields.some((f) => f.type === 'nr')
+    const created = []
+    for (const [i, { title, props }] of parsed.entries()) {
+      const full = { ...(sf ? { [sf.id]: sf.options[0]?.id } : {}), ...props, ...(numbering ? { nr: config.nextNr + i } : {}) }
+      created.push(await db.create('row', listId, title || items[i], { props: full }))
+    }
+    if (numbering) config = { ...config, nextNr: config.nextNr + parsed.length }
+    save(listId, { config })
+    setNodes((ns) => [...ns, ...created])
+    return created.length
+  }
+
+  // Neue Seite aus einer Vorlage; {{Datum}} in Titel und Inhalt wird durch das heutige Datum ersetzt
+  async function fromTemplate(templateId, parentId) {
+    try {
+      const t = tree.alive.get(templateId)
+      const date = new Date().toLocaleDateString('de-DE')
+      const sub = (s) => (s ?? '').replaceAll('{{Datum}}', date)
+      const node = await db.create('page', parentId, sub(t.title))
+      const extra = { body: sub(await db.loadBody(templateId)), icon: t.icon ?? null, cover: t.cover ?? null }
+      await db.update(node.id, extra)
+      setNodes((ns) => [...ns, { ...node, icon: extra.icon, cover: extra.cover }])
+      setExpanded((s) => new Set([...s, parentId]))
+      setCurrent(node.id)
+    } catch (e) {
+      fail(e)
+    }
+  }
+
   // Ziel beim Ziehen im Baum: zone 'before' | 'after' | 'inside' relativ zu target; null = nicht erlaubt
   function placement(id, targetId, zone) {
     const node = tree.alive.get(id)
@@ -269,6 +321,7 @@ export default function App() {
   }
 
   const actions = {
+    fromTemplate,
     canMove: (id, targetId, zone) => !!placement(id, targetId, zone),
     move(id, targetId, zone) {
       const to = placement(id, targetId, zone)
@@ -330,6 +383,7 @@ export default function App() {
 
   function assign(row, list) {
     save(row.id, { parent_id: list.id, props: numbered(list, row.props ?? {}) })
+    db.addActivity(row.id, 'change', `Zugeteilt: ${list.title || 'Ohne Titel'}`).catch(() => {})
   }
 
   if (nodes === null) {
@@ -345,6 +399,19 @@ export default function App() {
     .filter((n) => n.kind === 'database')
     .map((d) => ({ ...d, title: pathOf(d.id).map((p) => p.title || 'Ohne Titel').join(' / ') }))
   live.current = { rows: liveRows, dbOf }
+  // Seitenlinks brauchen den aktuellen Titel auch beim Speichern als Markdown
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  setLinkData({ get: (id) => byId.get(id), list: () => [...tree.alive.values()] })
+  const app = {
+    alive: tree.alive,
+    databases,
+    open: actions.open,
+    rowsOf: tree.rows,
+    addRow,
+    toggleRow,
+    rowsFromChecklist,
+    templates: [...tree.alive.values()].filter((n) => n.template),
+  }
   const commands = [
     { label: 'Heute', run: () => actions.open('today') },
     { label: 'Eingang', run: () => actions.open('inbox') },
@@ -448,6 +515,7 @@ export default function App() {
   }
 
   return (
+    <AppContext.Provider value={app}>
     <div className="flex h-full">
       <Sidebar
         tree={tree}
@@ -461,12 +529,13 @@ export default function App() {
         onSearch={() => setSearching(true)}
         updates={updates}
       />
-      <main className="min-w-0 flex-1">{view}</main>
+      {/* key: bei jedem Seitenwechsel neu einblenden */}
+      <main key={current} className="anim-page min-w-0 flex-1">{view}</main>
 
       {searching && <Search tree={tree} pathOf={pathOf} commands={commands} onOpen={actions.open} onClose={() => setSearching(false)} />}
 
       {error && (
-        <div role="alert" className="fixed bottom-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-line bg-raised p-3 shadow-[var(--shadow)]">
+        <div role="alert" className="anim-toast fixed bottom-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-line bg-raised p-3 shadow-[var(--shadow)]">
           <span className="flex-1 text-danger">{error}</span>
           <button aria-label="Schließen" onClick={() => setError('')} className="text-muted hover:text-text">
             <X size={16} />
@@ -474,6 +543,7 @@ export default function App() {
         </div>
       )}
     </div>
+    </AppContext.Provider>
   )
 }
 

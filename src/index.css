@@ -82,6 +82,30 @@ body {
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 
+/* Bewegung: kurz und weich, nur opacity/transform (läuft auf der Grafikkarte, ruckelt nicht) */
+:root { --ease-out: cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes nx-pop { from { opacity: 0; transform: translateY(-4px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes nx-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes nx-drop { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+@keyframes nx-slide { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes nx-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes nx-zoom { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+.anim-pop { animation: nx-pop 0.16s var(--ease-out) both; transform-origin: top left; }
+.anim-page { animation: nx-rise 0.24s var(--ease-out) both; }
+.anim-row { animation: nx-rise 0.2s var(--ease-out) both; }
+.anim-tree { animation: nx-drop 0.18s var(--ease-out) both; }
+.anim-panel { animation: nx-slide 0.24s var(--ease-out) both; }
+.anim-fade { animation: nx-fade 0.16s ease-out both; }
+.anim-zoom { animation: nx-zoom 0.2s var(--ease-out) both; }
+.anim-toast { animation: nx-rise 0.26s var(--ease-out) both; }
+
+/* Weiche Farbwechsel bei Hover, Fokus und Auswahl */
+@layer base {
+  button, a, input, select, textarea, [role="option"], [role="treeitem"] > div, li {
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }

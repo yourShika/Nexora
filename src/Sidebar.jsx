@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react'
 import {
   ArrowCircleUp, CaretRight, CheckSquare, Code, DotsThree, FileText, FolderSimple, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
-  Star, Table, Trash, Tray, Warning,
+  Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
+import { useApp } from './ctx.js'
 import logo from '../src-tauri/icons/icon.svg'
 
 export const COLORS = {
@@ -25,6 +26,7 @@ export function NodeIcon({ node, size = 16 }) {
 
 export default function Sidebar({ tree, favorites, counts, current, expanded, renaming, actions, warning, onSearch, updates }) {
   const [menu, setMenu] = useState(null)
+  const templates = useApp()?.templates ?? []
 
   const openMenu = (e, node) => {
     e.preventDefault()
@@ -138,6 +140,16 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
             <>
               <MenuItem icon={ListChecks} onClick={run(() => actions.add('database', m.id, 'lop'))}>Neue LOP-Liste</MenuItem>
               <MenuItem icon={Table} onClick={run(() => actions.add('database', m.id))}>Neue leere Liste</MenuItem>
+              {templates.length > 0 && (
+                <>
+                  <div className="px-2 pb-0.5 pt-2 text-xs text-faint">Neue Seite aus Vorlage</div>
+                  {templates.slice(0, 10).map((t) => (
+                    <MenuItem key={t.id} icon={Stamp} onClick={run(() => actions.fromTemplate(t.id, m.id))}>
+                      {t.icon ? `${t.icon} ` : ''}{t.title || 'Ohne Titel'}
+                    </MenuItem>
+                  ))}
+                </>
+              )}
             </>
           )}
           <MenuItem icon={PencilSimple} onClick={run(() => actions.startRename(m.id))}>Umbenennen</MenuItem>
@@ -240,7 +252,7 @@ function Row({ node, depth, ctx }) {
         </span>
       </div>
       {open && kids.length > 0 && (
-        <ul role="group">
+        <ul role="group" className="anim-tree">
           {kids.map((k) => <Row key={k.id} node={k} depth={depth + 1} ctx={ctx} />)}
         </ul>
       )}

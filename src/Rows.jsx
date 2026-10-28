@@ -14,7 +14,7 @@ export function RowItem({ row, db, onOpen, onToggle, showDb, actions }) {
   const plainStatus = (row.props?.[sf?.id] ?? sf?.options[0]?.id) === sf?.options[0]?.id
   const shown = fields.filter((f) => f.type !== 'nr' && f.id !== 'followup' && !(f === sf && plainStatus))
   return (
-    <li className="group flex items-center gap-3 px-2 py-2 hover:bg-hover">
+    <li className="anim-row group flex items-center gap-3 px-2 py-2 hover:bg-hover">
       <input
         type="checkbox"
         checked={done}

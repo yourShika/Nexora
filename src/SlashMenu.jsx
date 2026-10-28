@@ -3,7 +3,7 @@ import { Extension } from '@tiptap/core'
 import { ReactRenderer } from '@tiptap/react'
 import Suggestion from '@tiptap/suggestion'
 import {
-  CheckSquare, Code, ListBullets, ListNumbers, Minus, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
+  CheckSquare, Code, LinkSimple, ListBullets, ListChecks, ListNumbers, Minus, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
 } from '@phosphor-icons/react'
 
 // `keys`: weitere Suchwörter, damit auch "todo", "h1" oder "pre" trifft
@@ -19,6 +19,8 @@ const ITEMS = [
   { title: 'Code', keys: 'codeblock pre skript script', icon: Code, run: (c) => c.toggleCodeBlock({ language: 'powershell' }) },
   { title: 'Tabelle', keys: 'table', icon: Table, run: (c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
   { title: 'Trennlinie', keys: 'hr linie divider', icon: Minus, run: (c) => c.setHorizontalRule() },
+  { title: 'Seite verlinken', keys: 'link verweis [[', icon: LinkSimple, run: (c) => c.insertContent('[[') },
+  { title: 'LOP-Liste einbetten', keys: 'lop liste datenbank punkte', icon: ListChecks, run: (c) => c.insertContent({ type: 'lopEmbed', attrs: { id: null } }) },
 ]
 
 const List = forwardRef(function List({ items, command }, ref) {
@@ -77,31 +79,37 @@ export const SlashCommand = Extension.create({
           return ITEMS.filter((i) => `${i.title} ${i.keys}`.toLowerCase().includes(q))
         },
         command: ({ editor, range, props }) => props.run(editor.chain().focus().deleteRange(range)).run(),
-        render: () => {
-          let view
-          return {
-            onStart(props) {
-              view = new ReactRenderer(List, { props, editor: props.editor })
-              Object.assign(view.element.style, { position: 'fixed', zIndex: 40 })
-              document.body.append(view.element)
-              requestAnimationFrame(() => place(view.element, props.clientRect))
-            },
-            onUpdate(props) {
-              view.updateProps(props)
-              view.element.style.display = ''
-              place(view.element, props.clientRect)
-            },
-            onKeyDown({ event }) {
-              if (event.key === 'Escape') return (view.element.style.display = 'none'), true
-              return view.element.style.display !== 'none' && (view.ref?.onKeyDown(event) ?? false)
-            },
-            onExit() {
-              view.element.remove()
-              view.destroy()
-            },
-          }
-        },
+        render: popup(List),
       }),
     ]
   },
 })
+
+// Auswahlliste unter dem Cursor für Suggestion-Plugins (Slash-Menü, Seitenlinks)
+export function popup(Component) {
+  return () => {
+    let view
+    return {
+      onStart(props) {
+        view = new ReactRenderer(Component, { props, editor: props.editor })
+        Object.assign(view.element.style, { position: 'fixed', zIndex: 40 })
+        view.element.className = 'anim-pop'
+        document.body.append(view.element)
+        requestAnimationFrame(() => place(view.element, props.clientRect))
+      },
+      onUpdate(props) {
+        view.updateProps(props)
+        view.element.style.display = ''
+        place(view.element, props.clientRect)
+      },
+      onKeyDown({ event }) {
+        if (event.key === 'Escape') return (view.element.style.display = 'none'), true
+        return view.element.style.display !== 'none' && (view.ref?.onKeyDown(event) ?? false)
+      },
+      onExit() {
+        view.element.remove()
+        view.destroy()
+      },
+    }
+  }
+}

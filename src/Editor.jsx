@@ -15,6 +15,7 @@ import Image from '@tiptap/extension-image'
 import { SlashCommand } from './SlashMenu.jsx'
 import { CodeBlockView } from './CodeBlock.jsx'
 import BlockHandle from './BlockHandle.jsx'
+import { LopEmbed, PageLink, PageLinkSuggest } from './Links.jsx'
 import { assetUrl, isImage, relativeSrc, saveImage } from './images.js'
 
 const lowlight = createLowlight(common)
@@ -69,6 +70,9 @@ const extensions = [
     placeholder: ({ node }) => (node.type.name === 'heading' ? 'Überschrift' : 'Tippe / für Blöcke'),
   }),
   Bild,
+  PageLink,
+  PageLinkSuggest,
+  LopEmbed,
   Markdown,
   SlashCommand,
 ]
@@ -121,8 +125,8 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
         <EditorContent editor={editor} />
       </div>
       {zoom && (
-        <div role="dialog" aria-label="Bild groß" onClick={() => setZoom(null)} className="fixed inset-0 z-50 grid cursor-zoom-out place-items-center bg-[rgb(10_20_22/0.8)] p-8">
-          <img src={zoom} alt="" className="max-h-full max-w-full rounded shadow-[var(--shadow)]" />
+        <div role="dialog" aria-label="Bild groß" onClick={() => setZoom(null)} className="anim-fade fixed inset-0 z-50 grid cursor-zoom-out place-items-center bg-[rgb(10_20_22/0.8)] p-8">
+          <img src={zoom} alt="" className="anim-zoom max-h-full max-w-full rounded shadow-[var(--shadow)]" />
         </div>
       )}
     </>
