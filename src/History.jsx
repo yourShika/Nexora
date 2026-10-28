@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowCounterClockwise, X } from '@phosphor-icons/react'
 import * as db from './db.js'
 import { collapse, diffLines } from './diff.js'
+import { readable } from './free.js'
 
 const when = (iso) => {
   const d = new Date(iso)
@@ -20,7 +21,7 @@ export default function History({ nodeId, current, onRestore, onClose }) {
       .catch(() => setList([]))
   }, [nodeId])
 
-  const diff = useMemo(() => (sel ? collapse(diffLines(sel.body, current)) : []), [sel, current])
+  const diff = useMemo(() => (sel ? collapse(diffLines(readable(sel.body), readable(current))) : []), [sel, current])
   const changes = diff.filter((d) => d.type === 'add' || d.type === 'del').length
 
   return (

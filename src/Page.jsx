@@ -9,7 +9,7 @@ import History from './History.jsx'
 import * as db from './db.js'
 import Editor from './Editor.jsx'
 import FreeCanvas from './FreeCanvas.jsx'
-import { isFree, toFlow, toFree } from './free.js'
+import { hasInk, isFree, toFlow, toFree } from './free.js'
 import { IconButton } from './Sidebar.jsx'
 import { PropsPanel } from './Props.jsx'
 
@@ -116,7 +116,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
             </MenuItem>
             {node.kind === 'page' && !node.locked && body !== null && (
               <MenuItem icon={free ? Article : FrameCorners} onClick={() => (setMenu(null), replace(free ? toFlow(latest ?? body) : toFree(latest ?? body)))}>
-                {free ? 'In normale Seite umwandeln' : 'In freie Seite umwandeln'}
+                {free ? `In normale Seite umwandeln${hasInk(latest ?? body) ? ' (Zeichnung entfällt)' : ''}` : 'In freie Seite umwandeln'}
               </MenuItem>
             )}
             {node.kind === 'page' && (
