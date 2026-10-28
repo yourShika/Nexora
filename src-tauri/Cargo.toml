@@ -1,6 +1,6 @@
 [package]
 name = "nexora"
-version = "0.6.0"
+version = "0.7.0"
 description = "Notizen, LOP und Runbooks in einer schlanken Desktop-App"
 edition = "2021"
 
@@ -24,6 +24,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 # generate_context! braucht serde_json, sobald Plugin-Einstellungen in tauri.conf.json stehen
 serde_json = "1"
+serde = { version = "1", features = ["derive"] }
 
 [profile.release]
 codegen-units = 1

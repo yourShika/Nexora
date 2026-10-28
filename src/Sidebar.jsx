@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import {
-  ArrowCircleUp, CaretRight, CheckSquare, DotsThree, FileText, FolderSimple, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
+  ArrowCircleUp, CaretRight, CheckSquare, Code, DotsThree, FileText, FolderSimple, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
   Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
@@ -58,6 +58,7 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
           {[
             { id: 'today', label: 'Heute', icon: Lightning, count: counts.today },
             { id: 'inbox', label: 'Eingang', icon: Tray, count: counts.inbox },
+            { id: 'snippets', label: 'Snippets', icon: Code },
           ].map((v) => (
             <li key={v.id}>
               <button

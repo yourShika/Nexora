@@ -5,7 +5,7 @@ const db = async () => (conn ??= await Database.load('sqlite:nexora.db'))
 const now = () => new Date().toISOString()
 
 // Nur diese Spalten dürfen über update() geschrieben werden
-const FIELDS = new Set(['title', 'icon', 'color', 'cover', 'body', 'props', 'config', 'favorite', 'parent_id', 'sort', 'deleted_at'])
+const FIELDS = new Set(['title', 'icon', 'color', 'cover', 'locked', 'body', 'props', 'config', 'favorite', 'parent_id', 'sort', 'deleted_at'])
 const JSON_FIELDS = new Set(['props', 'config'])
 const encode = (k, v) => (JSON_FIELDS.has(k) && v != null ? JSON.stringify(v) : v)
 
@@ -22,7 +22,7 @@ function parse(row) {
 
 export async function allNodes() {
   const rows = await (await db()).select(
-    'SELECT id, parent_id, kind, title, icon, color, cover, props, config, sort, favorite, created_at, opened_at, updated_at, deleted_at FROM nodes ORDER BY sort',
+    'SELECT id, parent_id, kind, title, icon, color, cover, locked, props, config, sort, favorite, created_at, opened_at, updated_at, deleted_at FROM nodes ORDER BY sort',
   )
   return rows.map(parse)
 }
@@ -108,6 +108,11 @@ export async function search(match, limit = 40) {
 // Vollständige, in sich stimmige Kopie der Datenbank in eine neue Datei
 export async function vacuumInto(path) {
   await (await db()).execute('VACUUM INTO $1', [path])
+}
+
+// Seiten mit Codeblöcken (für die Snippet-Übersicht)
+export async function pagesWithCode() {
+  return (await db()).select("SELECT id, body FROM nodes WHERE deleted_at IS NULL AND body LIKE '%```%'")
 }
 
 export async function getSetting(key) {

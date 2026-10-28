@@ -4,6 +4,7 @@ use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod files;
+mod run;
 
 fn show(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
@@ -58,6 +59,12 @@ pub fn run() {
             sql: include_str!("../migrations/004_verlauf.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "sperre",
+            sql: include_str!("../migrations/005_sperre.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -85,8 +92,12 @@ pub fn run() {
             files::import_image,
             files::list_images,
             files::delete_images,
-            files::finish_backup
+            files::finish_backup,
+            run::shells,
+            run::run_script,
+            run::cancel_run
         ])
+        .manage(run::Runs::default())
         .setup(|app| {
             if !std::env::args().any(|a| a == "--hidden") {
                 show(app.handle());

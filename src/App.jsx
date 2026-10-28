@@ -10,6 +10,7 @@ import Page from './Page.jsx'
 import DatabaseView from './Database.jsx'
 import { Overview, TrashView } from './Overview.jsx'
 import { Inbox, Today } from './Rows.jsx'
+import Snippets from './Snippets.jsx'
 import Settings from './Settings.jsx'
 import Search from './Search.jsx'
 import { DEFAULT_HOTKEY, bindHotkey, hotkeyLabel } from './hotkey.js'
@@ -278,7 +279,7 @@ export default function App() {
     open(id) {
       setCurrent(id)
       setFresh(null)
-      if (!['trash', 'today', 'inbox', 'settings'].includes(id)) {
+      if (!['trash', 'today', 'inbox', 'settings', 'snippets'].includes(id)) {
         db.touch(id).catch(() => {})
         const node = tree.alive.get(id)
         setExpanded((s) => new Set([...s, ...pathOf(id).slice(0, -1).map((n) => n.id), ...(['notebook', 'section'].includes(node?.kind) ? [id] : [])]))
@@ -347,6 +348,7 @@ export default function App() {
   const commands = [
     { label: 'Heute', run: () => actions.open('today') },
     { label: 'Eingang', run: () => actions.open('inbox') },
+    { label: 'Snippets', run: () => actions.open('snippets') },
     { label: 'Schnellerfassung', run: () => invoke('toggle_capture') },
     { label: 'Neues Notizbuch', run: () => actions.add('notebook', null) },
     { label: 'Einstellungen', run: () => actions.open('settings') },
@@ -392,6 +394,8 @@ export default function App() {
         updates={updates}
       />
     )
+  } else if (current === 'snippets') {
+    view = <Snippets alive={tree.alive} pathOf={pathOf} onOpen={actions.open} />
   } else if (current === 'today') {
     view = <Today rows={liveRows} dbOf={dbOf} onOpen={actions.open} onToggle={toggleRow} />
   } else if (current === 'inbox') {

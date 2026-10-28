@@ -6,6 +6,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { FolderOpen, GearSix, Keyboard, Monitor, Moon, Sun } from '@phosphor-icons/react'
 import { BACKUP_DEFAULTS, loadBackupSettings } from './backup.js'
 import { deleteImages, unusedImages } from './images.js'
+import { shells } from './runner.js'
 import { ConfirmButton } from './Overview.jsx'
 import { View } from './Rows.jsx'
 import { accelFromEvent, bindHotkey, hotkeyLabel } from './hotkey.js'
@@ -125,6 +126,38 @@ function ImageCleanup() {
       ) : <span className="text-muted">Alle Bilder werden verwendet.</span>)}
       {msg && <span className="text-muted" aria-live="polite">{msg}</span>}
     </div>
+  )
+}
+
+// Welche Shells es gibt und ob PowerShell-Blöcke mit 7 statt 5.1 laufen
+function RunbookSection() {
+  const [list, setList] = useState(null)
+  const [pwsh, setPwsh] = useState(false)
+  useEffect(() => {
+    shells().then(setList)
+    db.getSetting('pwsh').then((v) => setPwsh(v === '1')).catch(() => {})
+  }, [])
+  if (!list) return null
+  const names = { powershell: 'PowerShell 5.1', pwsh: 'PowerShell 7', cmd: 'CMD', python: 'Python' }
+  return (
+    <section className="mb-10">
+      <h2 className="mb-1 font-semibold">Runbooks</h2>
+      <p className="mb-3 text-muted">
+        Codeblöcke in PowerShell, CMD und Python haben einen Ausführen-Knopf. Sie laufen als dein Benutzer, nur auf Klick; „Als Admin“ fragt Windows jedes Mal nach.
+        Gefunden auf diesem Rechner: {list.map((s) => names[s]).join(', ')}.
+      </p>
+      <label className="flex items-center gap-3">
+        <input
+          type="checkbox"
+          checked={pwsh}
+          disabled={!list.includes('pwsh')}
+          onChange={(e) => (setPwsh(e.target.checked), db.setSetting('pwsh', e.target.checked ? '1' : '0').catch(() => {}))}
+          className="size-4 accent-[var(--accent)]"
+        />
+        PowerShell-Blöcke mit PowerShell 7 ausführen
+        {!list.includes('pwsh') && <span className="text-xs text-faint">nicht installiert</span>}
+      </label>
+    </section>
   )
 }
 
@@ -265,6 +298,8 @@ export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBack
       </section>
 
       <BackupSection status={backup} onBackupNow={onBackupNow} />
+
+      <RunbookSection />
 
       <UpdateSection updates={updates} />
 

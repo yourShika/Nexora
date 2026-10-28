@@ -74,7 +74,7 @@ const extensions = [
 ]
 
 // Inhalt kommt und geht als Markdown; ein Editor je Seite (key im Aufrufer)
-export default function Editor({ markdown, onChange, onReady }) {
+export default function Editor({ markdown, onChange, onReady, editable = true }) {
   const change = useRef(onChange)
   change.current = onChange
   const [error, setError] = useState('')
@@ -96,6 +96,11 @@ export default function Editor({ markdown, onChange, onReady }) {
     if (editor) onReady?.(editor)
   }, [editor, onReady])
 
+  // Gesperrte Seite: lesen und Codeblöcke ausführen, aber nicht bearbeiten
+  useEffect(() => {
+    if (editor && editor.isEditable !== editable) editor.setEditable(editable)
+  }, [editor, editable])
+
   useEffect(() => {
     if (!zoom) return
     const close = (e) => e.key === 'Escape' && setZoom(null)
@@ -112,7 +117,7 @@ export default function Editor({ markdown, onChange, onReady }) {
       )}
       {/* Doppelklick auf ein Bild zeigt es groß; links Platz für den Ziehgriff */}
       <div ref={wrapper} onDoubleClick={(e) => e.target.tagName === 'IMG' && setZoom(e.target.src)} className="relative -ml-8 pl-8">
-        <BlockHandle editor={editor} wrapper={wrapper} />
+        {editable && <BlockHandle editor={editor} wrapper={wrapper} />}
         <EditorContent editor={editor} />
       </div>
       {zoom && (

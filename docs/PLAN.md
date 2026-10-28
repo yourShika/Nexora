@@ -72,7 +72,8 @@ Die neuen Nummern 52–71 werden beim Bau der passenden Stufe eingeordnet.
 - **0.4.0:** Bilder per Strg+V oder Ziehen (Datei in `bilder\`, im Markdown `![|400](bilder/<uuid>.png)` wie in Obsidian), Größe an Griffen ändern, Doppelklick zeigt groß; Sicherung mit Zielordner, Intervall (1 h, 4 h, täglich, wöchentlich) und Anzahl Stände, „Jetzt sichern“, Wiederherstellen siehe README
 - **0.5.0:** Umbenannt in Nexora; Installer (NSIS, ohne Admin) und Updates über GitHub-Releases (48), signiert, Hinweis in der Seitenleiste, „Nach Updates suchen“ in den Einstellungen
 - **0.6.0 (Stufe 1 fertig):** Symbol (Emoji) und Titelbild für Seiten, Listen, Abschnitte, Notizbücher; Versionsverlauf je Seite (höchstens alle 10 Minuten, 90 Tage) mit farbigem Vergleich (67) und Wiederherstellen; Blöcke per Griff ziehen; Seitenbaum per Ziehen umsortieren und verschieben; ungenutzte Bilder aufräumen; behoben: Bilder beim allerersten Start nicht sichtbar; Testversion mit eigenem Datenordner (`npm run app`)
-- Als Nächstes Stufe 2 (Runbooks und Verzahnung), siehe Tabelle
+- **0.7.0 (Stufe 2, Teil Runbooks):** Ausführen von PowerShell 5.1/7, CMD und Python direkt per Klick (35), Live-Ausgabe mit Abbrechen, Platzhalter `{{Name}}` mit gemerkten Werten (36), „Ins Protokoll“ hängt Ausgabe mit Datum und Exit-Code an die Seite (37), Als Admin über UAC (38), Ausgabe als sortier-/filterbare Tabelle (66), Snippet-Übersicht (34), Seite sperren (68)
+- Rest von Stufe 2: Verzahnung (10, 11, 19, 20, 53) und Dateien (26, 28, 46)
 
 ## Offen
 

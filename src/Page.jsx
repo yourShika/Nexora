@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ClockCounterClockwise, Star, Trash, WarningCircle } from '@phosphor-icons/react'
+import { ClockCounterClockwise, LockSimple, LockSimpleOpen, Star, Trash, WarningCircle } from '@phosphor-icons/react'
 import { Cover, IconRow } from './PageHead.jsx'
 import History from './History.jsx'
 import * as db from './db.js'
@@ -92,6 +92,9 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
         <IconButton label={node.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten'} onClick={() => onSave(node.id, { favorite: node.favorite ? 0 : 1 })}>
           <Star size={16} weight={node.favorite ? 'fill' : 'regular'} className={node.favorite ? 'text-accent' : ''} />
         </IconButton>
+        <IconButton label={node.locked ? 'Seite entsperren' : 'Seite sperren'} onClick={() => (flush(), onSave(node.id, { locked: node.locked ? 0 : 1 }))}>
+          {node.locked ? <LockSimple size={16} weight="fill" className="text-accent" /> : <LockSimpleOpen size={16} />}
+        </IconButton>
         <IconButton label="Verlauf" onClick={() => (flush(), setHistory(!history))}>
           <ClockCounterClockwise size={16} className={history ? 'text-accent' : ''} />
         </IconButton>
@@ -105,6 +108,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
         <IconRow node={node} onSave={onSave} />
         <input
           autoFocus={autoFocus}
+          readOnly={!!node.locked}
           value={title}
           placeholder="Ohne Titel"
           aria-label="Titel"
@@ -133,7 +137,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
             <div className="h-4 w-2/3 rounded bg-hover" />
           </div>
         ) : (
-          <Editor key={reload} markdown={body} onChange={(md) => (setLatest(md), queue({ body: md }))} onReady={onReady} />
+          <Editor key={reload} markdown={body} editable={!node.locked} onChange={(md) => (setLatest(md), queue({ body: md }))} onReady={onReady} />
         )}
       </article>
     </div>

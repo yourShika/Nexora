@@ -17,7 +17,7 @@ export function Cover({ node, onSave }) {
   return (
     <div className="group/cover relative h-44 w-full overflow-hidden bg-side">
       <img src={assetUrl(node.cover)} alt="" className="h-full w-full object-cover" />
-      <div className="absolute bottom-2 right-3 hidden gap-1 group-hover/cover:flex">
+      <div className={`absolute bottom-2 right-3 hidden gap-1 ${node.locked ? '' : 'group-hover/cover:flex'}`}>
         <CoverButton onClick={() => pickCover(node, onSave)}>Ändern</CoverButton>
         <CoverButton onClick={() => onSave(node.id, { cover: null })}>Entfernen</CoverButton>
       </div>
@@ -42,6 +42,9 @@ export function IconRow({ node, onSave, onError }) {
     setMenu({ x: r.left, y: r.bottom + 6 })
   }
   const setIcon = (icon) => (onSave(node.id, { icon }), setMenu(null))
+
+  // Gesperrt: Symbol nur anzeigen
+  if (node.locked) return node.icon ? <div className={`${node.cover ? '-mt-10' : ''} relative mb-2 text-[44px] leading-none`}>{node.icon}</div> : null
 
   return (
     <div className="group/head">
