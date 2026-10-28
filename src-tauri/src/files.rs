@@ -13,7 +13,7 @@ fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 // Name kommt vom Frontend (UUID + Endung); nur dieses Muster ist erlaubt, kein Pfad
-fn valid_image_name(name: &str) -> bool {
+pub(crate) fn valid_image_name(name: &str) -> bool {
     match name.rsplit_once('.') {
         Some((stem, ext)) => {
             stem.len() == 36

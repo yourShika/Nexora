@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ArrowLineDown, Copy } from '@phosphor-icons/react'
 import { EditorContent, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from '@tiptap/markdown'
@@ -18,6 +19,9 @@ import BlockHandle from './BlockHandle.jsx'
 import { LopEmbed, PageLink, PageLinkSuggest } from './Links.jsx'
 import { assetUrl, isImage, relativeSrc, saveImage } from './images.js'
 import { Attachment, saveAttachment } from './Attachment.jsx'
+import Menu, { MenuItem } from './Menu.jsx'
+import { useApp } from './ctx.js'
+import { imageText } from './ocr.js'
 
 const lowlight = createLowlight(common)
 lowlight.register({ powershell, dos, dockerfile, nginx })
@@ -101,6 +105,8 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
   change.current = onChange
   const [error, setError] = useState('')
   const [zoom, setZoom] = useState(null)
+  const [menu, setMenu] = useState(null)
+  const app = useApp()
   const wrapper = useRef(null)
   const editor = useEditor({
     extensions,
@@ -130,15 +136,56 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
     return () => removeEventListener('keydown', close)
   }, [zoom])
 
+  // Rechtsklick auf ein Bild: erkannten Text kopieren oder als Absätze darunter einfügen
+  function imageMenu(e) {
+    const file = e.target.tagName === 'IMG' && relativeSrc(e.target.getAttribute('src'))
+    if (!file?.startsWith?.('bilder/')) return
+    e.preventDefault()
+    setMenu({ x: e.clientX, y: e.clientY, file })
+  }
+  async function withText(file, use) {
+    setMenu(null)
+    let text
+    try {
+      text = (await imageText(file)).trim()
+    } catch (err) {
+      return setError(`Texterkennung fehlgeschlagen: ${err}`)
+    }
+    if (!text) return app?.notice('Kein Text im Bild gefunden.')
+    try {
+      await use(text)
+    } catch (err) {
+      setError(`Text aus dem Bild nicht übernommen: ${err}`)
+    }
+  }
+  const copyText = (file) => withText(file, (text) => navigator.clipboard.writeText(text).then(() => app?.notice('Text aus dem Bild kopiert.')))
+  const insertText = (file) =>
+    withText(file, (text) => {
+      let at = null
+      editor.state.doc.descendants((n, pos) => {
+        if (at === null && n.type.name === 'image' && n.attrs.src === file) at = pos + n.nodeSize
+        return at === null
+      })
+      if (at === null) return
+      const lines = text.split('\n').filter((l) => l.trim())
+      editor.chain().insertContentAt(at, lines.map((line) => ({ type: 'paragraph', content: [{ type: 'text', text: line }] }))).run()
+    })
+
   return (
     <>
+      {menu && (
+        <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+          <MenuItem icon={Copy} onClick={() => copyText(menu.file)}>Text aus dem Bild kopieren</MenuItem>
+          {editable && <MenuItem icon={ArrowLineDown} onClick={() => insertText(menu.file)}>Text unter dem Bild einfügen</MenuItem>}
+        </Menu>
+      )}
       {error && (
         <p role="alert" className="mb-3 text-danger">
           {error} <button onClick={() => setError('')} className="underline">Ausblenden</button>
         </p>
       )}
       {/* Doppelklick auf ein Bild zeigt es groß; links Platz für den Ziehgriff */}
-      <div ref={wrapper} onDoubleClick={(e) => e.target.tagName === 'IMG' && setZoom(e.target.src)} className="relative -ml-8 pl-8">
+      <div ref={wrapper} onDoubleClick={(e) => e.target.tagName === 'IMG' && setZoom(e.target.src)} onContextMenu={imageMenu} className="relative -ml-8 pl-8">
         {editable && <BlockHandle editor={editor} wrapper={wrapper} />}
         <EditorContent editor={editor} />
       </div>

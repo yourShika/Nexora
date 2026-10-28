@@ -5,6 +5,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod attach;
 mod files;
+mod ocr;
 mod run;
 
 fn show(app: &AppHandle) {
@@ -78,6 +79,12 @@ pub fn run() {
             sql: include_str!("../migrations/007_zeichnen.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "texterkennung",
+            sql: include_str!("../migrations/008_texterkennung.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -105,6 +112,7 @@ pub fn run() {
             files::import_image,
             files::list_images,
             files::delete_images,
+            ocr::ocr_image,
             files::finish_backup,
             run::shells,
             run::run_script,

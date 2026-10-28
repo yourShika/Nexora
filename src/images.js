@@ -1,5 +1,6 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { appConfigDir, join } from '@tauri-apps/api/path'
+import { indexImages } from './ocr.js'
 
 // Im Markdown steht "bilder/<uuid>.png" (relativ, damit der Datenordner umziehen kann);
 // angezeigt wird über das asset-Protokoll von Tauri.
@@ -43,5 +44,6 @@ export const deleteImages = (names) => invoke('delete_images', { names })
 export async function saveImage(file) {
   const name = `${crypto.randomUUID()}.${EXT[file.type]}`
   await invoke('save_image', new Uint8Array(await file.arrayBuffer()), { headers: { 'x-name': name } })
+  indexImages()
   return `bilder/${name}`
 }

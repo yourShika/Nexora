@@ -19,6 +19,7 @@ import Search from './Search.jsx'
 import { DEFAULT_HOTKEY, bindHotkey, hotkeyLabel } from './hotkey.js'
 import { checkReminders } from './notify.js'
 import { initImages } from './images.js'
+import { indexImages } from './ocr.js'
 import { loadBackupSettings, maybeBackup, runBackup } from './backup.js'
 import { findUpdate, installUpdate } from './updates.js'
 import { applyTheme } from './theme.js'
@@ -282,6 +283,8 @@ export default function App() {
         const up = []
         for (let n = byId.get(start?.parent_id); n; n = byId.get(n.parent_id)) up.push(n.id)
         setExpanded((s) => new Set([...s, ...up]))
+        // Text in Bildern erst, wenn die App steht; läuft still im Hintergrund
+        setTimeout(indexImages, 5000)
         return restoreWindows((id) => all.some((n) => n.id === id && !n.deleted_at)).then((ids) => setWindows(new Set(ids)))
       })
       .catch((e) => setError(`Datenbank nicht erreichbar: ${e}`))
@@ -614,6 +617,7 @@ export default function App() {
     alive: tree.alive,
     databases,
     open: actions.open,
+    notice: setNotice,
     rowsOf: tree.rows,
     addRow,
     toggleRow,

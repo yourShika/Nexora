@@ -1,6 +1,6 @@
 [package]
 name = "nexora"
-version = "0.13.0"
+version = "0.14.0"
 description = "Notizen, LOP und Runbooks in einer schlanken Desktop-App"
 edition = "2021"
 
@@ -25,6 +25,8 @@ tauri-plugin-process = "2"
 # generate_context! braucht serde_json, sobald Plugin-Einstellungen in tauri.conf.json stehen
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
+# Texterkennung über die Windows-OCR; dieselbe Version, die Tauri schon mitbringt
+windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams", "Win32_System_WinRT"] }
 
 [profile.release]
 codegen-units = 1

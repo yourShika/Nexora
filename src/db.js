@@ -6,8 +6,7 @@ let conn
 const db = async () => (conn ??= await Database.load('sqlite:nexora.db'))
 const now = () => new Date().toISOString()
 // Andere Fenster laden den Baum neu; reiner Seiteninhalt betrifft nur das Fenster, das ihn bearbeitet
-const from = getCurrentWindow().label
-const changed = () => emit('nodes-changed', { from }).catch(() => {})
+const changed = () => emit('nodes-changed', { from: getCurrentWindow().label }).catch(() => {})
 
 // Nur diese Spalten dürfen über update() geschrieben werden
 const FIELDS = new Set(['title', 'icon', 'color', 'cover', 'locked', 'template', 'body', 'props', 'config', 'favorite', 'parent_id', 'sort', 'deleted_at'])
@@ -104,12 +103,41 @@ export async function imageReferences() {
 
 // Volltext (FTS5, trigram); match ist ein fertiger FTS-Ausdruck. Treffer markiert mit \u0001 … \u0002
 export async function search(match, limit = 40) {
-  return (await db()).select(
+  const c = await db()
+  const text = await c.select(
     // trigram zählt Zeichen statt Wörter: 48 ergibt etwa eine halbe Zeile Kontext
     // Ausschnitt nur aus dem Seiteninhalt (Spalte 2), Treffer in Feldwerten brauchen keinen
     `SELECT id, snippet(search, 2, char(1), char(2), '…', 48) AS snip FROM search WHERE search MATCH $1 ORDER BY rank LIMIT $2`,
     [match, limit],
   )
+  // Text in Bildern zählt für jede Seite, in der das Bild steckt
+  const images = await c.select(
+    `SELECT n.id, 'Im Bild: ' || snippet(ocr, 1, char(1), char(2), '…', 32) AS snip FROM ocr
+     JOIN nodes n ON n.deleted_at IS NULL AND instr(n.body, ocr.file) > 0 WHERE ocr MATCH $1 ORDER BY rank LIMIT $2`,
+    [match, limit],
+  )
+  const seen = new Set(text.map((r) => r.id))
+  return [...text, ...images.filter((r) => !seen.has(r.id) && seen.add(r.id))]
+}
+
+export async function ocrFiles() {
+  return (await (await db()).select('SELECT file FROM ocr')).map((r) => r.file)
+}
+
+export async function ocrText(file) {
+  const [row] = await (await db()).select('SELECT text FROM ocr WHERE file = $1', [file])
+  return row?.text ?? null
+}
+
+export async function setOcr(file, text) {
+  const c = await db()
+  await c.execute('DELETE FROM ocr WHERE file = $1', [file])
+  await c.execute('INSERT INTO ocr (file, text) VALUES ($1, $2)', [file, text])
+}
+
+export async function dropOcr(files) {
+  const c = await db()
+  for (const file of files) await c.execute('DELETE FROM ocr WHERE file = $1', [file])
 }
 
 // Vollständige, in sich stimmige Kopie der Datenbank in eine neue Datei

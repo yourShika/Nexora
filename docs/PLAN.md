@@ -81,7 +81,9 @@ Die neuen Nummern 52–71 werden beim Bau der passenden Stufe eingeordnet.
 - **0.12.0 (Stufe 3, Teil Zeichnen):** Zeichnen auf der freien Seite (30): Stift, Textmarker, Linie, Pfeil, Rechteck, Ellipse, Radierer für ganze Striche, 6 Farben (Textfarbe passt sich Hell/Dunkel an), 3 Stärken, Strg+Z, Esc zurück zum Schreiben; Zoom 50–200 % mit Strg+Mausrad oder Leiste, der Punkt unter der Maus bleibt stehen. Striche stehen als `<!-- ink … -->`-Zeilen am Ende des Inhalts (Verlauf, Vorlagen, Sicherung nehmen sie mit), die Suche ignoriert sie (Migration 007), im Verlauf erscheinen sie als „✎ Stift“ usw., im Markdown-Export sind sie unsichtbar
 - Später: Zeichnungs-Block in normalen Seiten, Lasso, Druckstärke, Zeichnung im Export als SVG
 - **0.13.0 (Stufe 3, Teil Fenster):** Eigene Fenster für Seiten und Punkte (21): Strg+Klick (einstellbar: nie, Strg+Klick, immer), Rechtsklick und „…“-Menü; das Seitenfenster zeigt nur die Seite, Links und Suche darin öffnen im Hauptfenster; das Hauptfenster zeigt für die Seite „Fenster zeigen“/„Hierher holen“, damit dieselbe Seite nie doppelt bearbeitet wird; Titel und Listen gleichen sich zwischen den Fenstern ab; Pin „Immer im Vordergrund“; offene Fenster kommen nach dem Neustart mit Position, Größe und Pin wieder (Position nur, wenn der Bildschirm noch da ist)
-- Rest von Stufe 3: Texterkennung (29)
+- **0.14.0 (Stufe 3 fertig):** Texterkennung in Bildern (29) mit der in Windows eingebauten OCR (offline, Sprachen wie in Windows installiert): neue Bilder sofort im Hintergrund, vorhandene einmalig nach dem Start; Strg+K findet Text in Bildern („Im Bild: …“); Rechtsklick auf ein Bild: „Text aus dem Bild kopieren“ und „Text unter dem Bild einfügen“. Erkannter Text in eigener Suchtabelle (Migration 008)
+- Später: PDF-Anhänge durchsuchbar (ersten Seiten rendern und erkennen)
+- Als Nächstes Stufe 4 (Brücken: OneNote, Outlook, Vaultwarden)
 
 ## Offen
 
