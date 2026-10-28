@@ -14,6 +14,7 @@ import nginx from 'highlight.js/lib/languages/nginx'
 import Image from '@tiptap/extension-image'
 import { SlashCommand } from './SlashMenu.jsx'
 import { CodeBlockView } from './CodeBlock.jsx'
+import BlockHandle from './BlockHandle.jsx'
 import { assetUrl, isImage, relativeSrc, saveImage } from './images.js'
 
 const lowlight = createLowlight(common)
@@ -78,6 +79,7 @@ export default function Editor({ markdown, onChange, onReady }) {
   change.current = onChange
   const [error, setError] = useState('')
   const [zoom, setZoom] = useState(null)
+  const wrapper = useRef(null)
   const editor = useEditor({
     extensions,
     content: markdown,
@@ -108,8 +110,9 @@ export default function Editor({ markdown, onChange, onReady }) {
           {error} <button onClick={() => setError('')} className="underline">Ausblenden</button>
         </p>
       )}
-      {/* Doppelklick auf ein Bild zeigt es groß */}
-      <div onDoubleClick={(e) => e.target.tagName === 'IMG' && setZoom(e.target.src)}>
+      {/* Doppelklick auf ein Bild zeigt es groß; links Platz für den Ziehgriff */}
+      <div ref={wrapper} onDoubleClick={(e) => e.target.tagName === 'IMG' && setZoom(e.target.src)} className="relative -ml-8 pl-8">
+        <BlockHandle editor={editor} wrapper={wrapper} />
         <EditorContent editor={editor} />
       </div>
       {zoom && (

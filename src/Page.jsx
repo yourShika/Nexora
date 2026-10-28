@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Star, Trash, WarningCircle } from '@phosphor-icons/react'
+import { ClockCounterClockwise, Star, Trash, WarningCircle } from '@phosphor-icons/react'
+import { Cover, IconRow } from './PageHead.jsx'
+import History from './History.jsx'
 import * as db from './db.js'
 import Editor from './Editor.jsx'
 import { IconButton } from './Sidebar.jsx'
@@ -10,6 +12,9 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
   const [loadError, setLoadError] = useState(false)
   const [title, setTitle] = useState(node.title)
   const [status, setStatus] = useState('saved')
+  const [history, setHistory] = useState(false)
+  const [latest, setLatest] = useState(null)
+  const [reload, setReload] = useState(0)
   const pending = useRef({})
   const timer = useRef()
   const editor = useRef(null)
@@ -50,8 +55,24 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
 
   const onReady = useCallback((e) => (editor.current = e), [])
 
+  // Alte Fassung zurückholen: jetzigen Stand vorher sichern, dann Editor mit dem alten Inhalt neu aufbauen
+  async function restore(version) {
+    try {
+      await flush()
+      await db.snapshot(node.id)
+      await db.update(node.id, { body: version.body })
+      setBody(version.body)
+      setLatest(version.body)
+      setReload((k) => k + 1)
+      setHistory(false)
+    } catch {
+      setStatus('error')
+    }
+  }
+
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="flex h-full">
+    <div className="h-full min-w-0 flex-1 overflow-y-auto">
       <header className="sticky top-0 z-10 flex h-12 items-center gap-3 bg-bg/90 px-5 backdrop-blur">
         <nav aria-label="Pfad" className="flex min-w-0 flex-1 items-center gap-1.5 text-muted">
           {path.map((p, i) => (
@@ -71,12 +92,17 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
         <IconButton label={node.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten'} onClick={() => onSave(node.id, { favorite: node.favorite ? 0 : 1 })}>
           <Star size={16} weight={node.favorite ? 'fill' : 'regular'} className={node.favorite ? 'text-accent' : ''} />
         </IconButton>
+        <IconButton label="Verlauf" onClick={() => (flush(), setHistory(!history))}>
+          <ClockCounterClockwise size={16} className={history ? 'text-accent' : ''} />
+        </IconButton>
         <IconButton label="In den Papierkorb" onClick={() => (flush(), onRemove(node.id))}>
           <Trash size={16} />
         </IconButton>
       </header>
 
-      <article className="mx-auto max-w-[760px] px-6 pt-10 md:px-12">
+      <Cover node={node} onSave={onSave} />
+      <article className={`mx-auto max-w-[760px] px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-8'}`}>
+        <IconRow node={node} onSave={onSave} />
         <input
           autoFocus={autoFocus}
           value={title}
@@ -107,9 +133,11 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
             <div className="h-4 w-2/3 rounded bg-hover" />
           </div>
         ) : (
-          <Editor markdown={body} onChange={(md) => queue({ body: md })} onReady={onReady} />
+          <Editor key={reload} markdown={body} onChange={(md) => (setLatest(md), queue({ body: md }))} onReady={onReady} />
         )}
       </article>
+    </div>
+    {history && <History nodeId={node.id} current={latest ?? body ?? ''} onRestore={restore} onClose={() => setHistory(false)} />}
     </div>
   )
 }

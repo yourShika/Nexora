@@ -23,6 +23,22 @@ export function relativeSrc(src) {
 
 export const isImage = (file) => file.type in EXT
 
+// Bild aus dem Dateidialog in den Datenordner kopieren (Titelbild)
+export async function importImage(path) {
+  const ext = path.split('.').pop().toLowerCase().replace('jpeg', 'jpg')
+  const name = `${crypto.randomUUID()}.${ext}`
+  await invoke('import_image', { source: path, name })
+  return `bilder/${name}`
+}
+
+// Bilddateien, auf die nichts mehr verweist (auch nicht Papierkorb oder alte Fassungen)
+export async function unusedImages(references) {
+  const files = await invoke('list_images')
+  return files.filter(([name]) => !references.includes(`bilder/${name}`)).map(([name, size]) => ({ name, size }))
+}
+
+export const deleteImages = (names) => invoke('delete_images', { names })
+
 // Speichert eine Bilddatei im Datenordner und gibt den Markdown-Pfad zurück
 export async function saveImage(file) {
   const name = `${crypto.randomUUID()}.${EXT[file.type]}`

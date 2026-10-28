@@ -32,7 +32,9 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
     setMenu({ x: e.clientX, y: e.clientY, node })
   }
   const run = (fn) => () => (setMenu(null), fn())
-  const ctx = { tree, expanded, current, renaming, actions, openMenu }
+  const drag = useRef(null)
+  const [over, setOver] = useState(null)
+  const ctx = { tree, expanded, current, renaming, actions, openMenu, drag, over, setOver }
 
   const m = menu?.node
   return (
@@ -163,18 +165,47 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
 }
 
 function Row({ node, depth, ctx }) {
-  const { tree, expanded, current, renaming, actions, openMenu } = ctx
+  const { tree, expanded, current, renaming, actions, openMenu, drag, over, setOver } = ctx
   const kids = tree.children(node.id)
   const open = expanded.has(node.id)
   const foldable = kids.length > 0 || node.kind === 'notebook' || node.kind === 'section'
   const active = current === node.id
+  const mark = over?.id === node.id ? over.zone : null
+
+  // Oberes/unteres Drittel: davor/danach einsortieren, Mitte: hinein
+  const zoneAt = (e) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const y = (e.clientY - r.top) / r.height
+    return y < 0.3 ? 'before' : y > 0.7 ? 'after' : 'inside'
+  }
 
   return (
     <li role="treeitem" aria-expanded={foldable ? open : undefined} aria-selected={active}>
       <div
+        draggable={renaming !== node.id}
+        onDragStart={(e) => {
+          drag.current = node.id
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/plain', node.title)
+        }}
+        onDragEnd={() => ((drag.current = null), setOver(null))}
+        onDragOver={(e) => {
+          if (!drag.current) return
+          const zone = zoneAt(e)
+          const ok = actions.canMove(drag.current, node.id, zone)
+          if (ok) e.preventDefault()
+          if (mark !== (ok ? zone : null)) setOver(ok ? { id: node.id, zone } : null)
+        }}
+        onDragLeave={() => mark && setOver(null)}
+        onDrop={(e) => {
+          e.preventDefault()
+          if (drag.current) actions.move(drag.current, node.id, zoneAt(e))
+          drag.current = null
+          setOver(null)
+        }}
         onContextMenu={(e) => openMenu(e, node)}
         style={{ paddingLeft: 6 + depth * 14 }}
-        className={`group flex h-7 items-center gap-1 rounded-md pr-1 ${active ? 'bg-accent-soft text-text' : 'hover:bg-hover'}`}
+        className={`group flex h-7 items-center gap-1 rounded-md pr-1 ${active || mark === 'inside' ? 'bg-accent-soft text-text' : 'hover:bg-hover'} ${mark === 'before' ? 'shadow-[inset_0_2px_0_var(--accent)]' : mark === 'after' ? 'shadow-[inset_0_-2px_0_var(--accent)]' : ''}`}
       >
         <button
           tabIndex={-1}

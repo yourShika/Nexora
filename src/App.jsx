@@ -21,6 +21,8 @@ import { applyTheme } from './theme.js'
 import { dayOf, emptyConfig, fieldsOf, isDone, lopConfig, statusField, today, toggleDone } from './fields.js'
 
 const DEFAULT_TITLE = { notebook: 'Neues Notizbuch', section: 'Neuer Abschnitt', page: '', database: 'Neue Liste', row: '' }
+// Wohin etwas im Baum darf (null = oberste Ebene)
+const PARENTS = { notebook: [null], section: ['notebook'], page: ['section', 'page'], database: ['section', 'page'] }
 const SEED_SECTION = '7d1f3c2a-0b6e-4c55-9a1e-3f0d2b8c4e02'
 
 function loadExpanded() {
@@ -40,6 +42,7 @@ function buildTree(nodes) {
     const key = n.parent_id ?? null
     byParent.set(key, [...(byParent.get(key) ?? []), n])
   }
+  for (const list of byParent.values()) list.sort((a, b) => a.sort - b.sort)
   const alive = new Map()
   const walk = (parent) => (byParent.get(parent) ?? []).forEach((n) => (alive.set(n.id, n), walk(n.id)))
   walk(null)
@@ -248,7 +251,30 @@ export default function App() {
     }
   }
 
+  // Ziel beim Ziehen im Baum: zone 'before' | 'after' | 'inside' relativ zu target; null = nicht erlaubt
+  function placement(id, targetId, zone) {
+    const node = tree.alive.get(id)
+    const target = tree.alive.get(targetId)
+    if (!node || !target || id === targetId) return null
+    const parent = zone === 'inside' ? target : tree.alive.get(target.parent_id) ?? null
+    if (parent && pathOf(parent.id).some((n) => n.id === id)) return null
+    if (!PARENTS[node.kind]?.includes(parent?.kind ?? null)) return null
+    const sibs = tree.children(parent?.id ?? null).filter((n) => n.id !== id)
+    if (zone === 'inside') return { parent_id: parent.id, sort: (sibs.at(-1)?.sort ?? 0) + 1000 }
+    const i = sibs.findIndex((n) => n.id === target.id)
+    const [prev, next] = zone === 'before' ? [sibs[i - 1], target] : [target, sibs[i + 1]]
+    const sort = prev && next ? (prev.sort + next.sort) / 2 : prev ? prev.sort + 1000 : next.sort - 1000
+    return { parent_id: parent?.id ?? null, sort }
+  }
+
   const actions = {
+    canMove: (id, targetId, zone) => !!placement(id, targetId, zone),
+    move(id, targetId, zone) {
+      const to = placement(id, targetId, zone)
+      if (!to) return
+      save(id, to)
+      if (to.parent_id) setExpanded((s) => new Set([...s, to.parent_id]))
+    },
     open(id) {
       setCurrent(id)
       setFresh(null)
@@ -408,10 +434,11 @@ export default function App() {
         onRow={save}
         onConfig={(config) => save(node.id, { config })}
         onTitle={(title) => save(node.id, { title })}
+        onSave={save}
       />
     )
   } else if (node) {
-    view = <Overview node={node} kids={tree.children(node.id)} onOpen={actions.open} onAdd={actions.add} />
+    view = <Overview node={node} kids={tree.children(node.id)} onOpen={actions.open} onAdd={actions.add} onSave={save} />
   } else {
     view = <div className="grid h-full place-items-center text-muted">Wähle links eine Seite oder lege ein Notizbuch an.</div>
   }

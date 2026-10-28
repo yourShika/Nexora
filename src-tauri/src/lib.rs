@@ -52,6 +52,12 @@ pub fn run() {
             sql: include_str!("../migrations/003_suche.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "verlauf",
+            sql: include_str!("../migrations/004_verlauf.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -73,11 +79,23 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .invoke_handler(tauri::generate_handler![toggle_capture, files::save_image, files::finish_backup])
+        .invoke_handler(tauri::generate_handler![
+            toggle_capture,
+            files::save_image,
+            files::import_image,
+            files::list_images,
+            files::delete_images,
+            files::finish_backup
+        ])
         .setup(|app| {
             if !std::env::args().any(|a| a == "--hidden") {
                 show(app.handle());
             }
+            // Bilderordner anlegen und fürs asset-Protokoll freigeben: der Scope aus tauri.conf.json
+            // greift beim allerersten Start nicht, solange der Datenordner noch fehlt
+            let images = app.path().app_config_dir()?.join("bilder");
+            std::fs::create_dir_all(&images)?;
+            app.asset_protocol_scope().allow_directory(&images, true)?;
             let open = MenuItem::with_id(app, "open", "Öffnen", true, None::<&str>)?;
             let quick = MenuItem::with_id(app, "capture", "Schnellerfassung", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;

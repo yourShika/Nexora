@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowCounterClockwise, Plus, Trash } from '@phosphor-icons/react'
 import { NodeIcon } from './Sidebar.jsx'
+import { Cover, IconRow } from './PageHead.jsx'
 
 const KIND = { notebook: 'Notizbuch', section: 'Abschnitt', page: 'Seite', database: 'Liste', row: 'Punkt' }
 
 // Notizbuch oder Abschnitt: zeigt den Inhalt und lädt zum Anlegen ein
-export function Overview({ node, kids, onOpen, onAdd }) {
+export function Overview({ node, kids, onOpen, onAdd, onSave }) {
   const childKind = node.kind === 'notebook' ? 'section' : 'page'
   const label = childKind === 'section' ? 'Neuer Abschnitt' : 'Neue Seite'
   return (
-    <div className="mx-auto max-w-[760px] px-6 pt-16 md:px-12">
+    <div className="h-full overflow-y-auto">
+    <Cover node={node} onSave={onSave} />
+    <div className={`mx-auto max-w-[760px] px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-14'}`}>
+      <IconRow node={node} onSave={onSave} />
       <div className="mb-8 flex items-center gap-3">
-        <NodeIcon node={node} size={26} />
+        {!node.icon && <NodeIcon node={node} size={26} />}
         <h1 className="text-[32px] font-semibold leading-tight tracking-tight">{node.title || 'Ohne Titel'}</h1>
       </div>
       {kids.length ? (
@@ -37,6 +41,7 @@ export function Overview({ node, kids, onOpen, onAdd }) {
       >
         <Plus size={16} weight="bold" /> {label}
       </button>
+    </div>
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { ArrowSquareOut, Kanban, ListBullets, Plus, SlidersHorizontal, SortAscen
 import { Chip, FieldEditor, FieldValue } from './Props.jsx'
 import { QuickAdd, RowItem } from './Rows.jsx'
 import { ConfirmButton } from './Overview.jsx'
+import { Cover, IconRow } from './PageHead.jsx'
 import { CHIP_COLORS, TYPES, isDone, newId, statusField } from './fields.js'
 
 const TITLE = { id: 'title', name: 'Titel', type: 'title' }
@@ -32,7 +33,7 @@ function sortRows(rows, fields, sort) {
   })
 }
 
-export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig, onTitle }) {
+export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig, onTitle, onSave }) {
   const config = db.config
   const fields = config.fields
   const [panel, setPanel] = useState(false)
@@ -55,7 +56,9 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
   return (
     <div className="flex h-full">
       <div className="min-w-0 flex-1 overflow-y-auto">
-        <div className="px-6 pb-24 pt-14 md:px-12">
+        <Cover node={db} onSave={onSave} />
+        <div className={`px-6 pb-24 md:px-12 ${db.cover ? 'pt-4' : 'pt-10'}`}>
+          <IconRow node={db} onSave={onSave} />
           <input
             value={title}
             aria-label="Name der Liste"

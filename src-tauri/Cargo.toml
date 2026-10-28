@@ -1,6 +1,6 @@
 [package]
 name = "nexora"
-version = "0.5.0"
+version = "0.6.0"
 description = "Notizen, LOP und Runbooks in einer schlanken Desktop-App"
 edition = "2021"
 

@@ -71,7 +71,8 @@ Die neuen Nummern 52–71 werden beim Bau der passenden Stufe eingeordnet.
 - **0.3.0:** Suche mit Strg+K (Titel, Seiteninhalt inkl. Code, Feldwerte; Wortteile, Umlaute egal; Filter `#tag @person status: in:`; Befehle; zuletzt geöffnet), Uhrzeiten in Kurzsyntax und Datumsfeldern (`fr 14:00`, `14 Uhr`), Windows-Erinnerungen (Sammelmeldung morgens, Uhrzeit-Meldungen), Autostart versteckt im Tray (im fertigen Programm beim ersten Start an)
 - **0.4.0:** Bilder per Strg+V oder Ziehen (Datei in `bilder\`, im Markdown `![|400](bilder/<uuid>.png)` wie in Obsidian), Größe an Griffen ändern, Doppelklick zeigt groß; Sicherung mit Zielordner, Intervall (1 h, 4 h, täglich, wöchentlich) und Anzahl Stände, „Jetzt sichern“, Wiederherstellen siehe README
 - **0.5.0:** Umbenannt in Nexora; Installer (NSIS, ohne Admin) und Updates über GitHub-Releases (48), signiert, Hinweis in der Seitenleiste, „Nach Updates suchen“ in den Einstellungen
-- Rest von Stufe 1: Emoji/Cover, Versionsverlauf, Blöcke und Baum per Ziehen; ungenutzte Bilder aufräumen
+- **0.6.0 (Stufe 1 fertig):** Symbol (Emoji) und Titelbild für Seiten, Listen, Abschnitte, Notizbücher; Versionsverlauf je Seite (höchstens alle 10 Minuten, 90 Tage) mit farbigem Vergleich (67) und Wiederherstellen; Blöcke per Griff ziehen; Seitenbaum per Ziehen umsortieren und verschieben; ungenutzte Bilder aufräumen; behoben: Bilder beim allerersten Start nicht sichtbar; Testversion mit eigenem Datenordner (`npm run app`)
+- Als Nächstes Stufe 2 (Runbooks und Verzahnung), siehe Tabelle
 
 ## Offen
 

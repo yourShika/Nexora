@@ -5,7 +5,7 @@ const db = async () => (conn ??= await Database.load('sqlite:nexora.db'))
 const now = () => new Date().toISOString()
 
 // Nur diese Spalten dürfen über update() geschrieben werden
-const FIELDS = new Set(['title', 'icon', 'color', 'body', 'props', 'config', 'favorite', 'parent_id', 'sort', 'deleted_at'])
+const FIELDS = new Set(['title', 'icon', 'color', 'cover', 'body', 'props', 'config', 'favorite', 'parent_id', 'sort', 'deleted_at'])
 const JSON_FIELDS = new Set(['props', 'config'])
 const encode = (k, v) => (JSON_FIELDS.has(k) && v != null ? JSON.stringify(v) : v)
 
@@ -22,7 +22,7 @@ function parse(row) {
 
 export async function allNodes() {
   const rows = await (await db()).select(
-    'SELECT id, parent_id, kind, title, icon, color, props, config, sort, favorite, created_at, opened_at, updated_at, deleted_at FROM nodes ORDER BY sort',
+    'SELECT id, parent_id, kind, title, icon, color, cover, props, config, sort, favorite, created_at, opened_at, updated_at, deleted_at FROM nodes ORDER BY sort',
   )
   return rows.map(parse)
 }
@@ -72,10 +72,27 @@ export async function purge(id) {
   await (await db()).execute(deleteSubtree('id = $1'), [id])
 }
 
-// Papierkorb nach 30 Tagen leeren
+// Papierkorb nach 30 Tagen leeren, Versionen nach 90 Tagen
 export async function purgeOld() {
-  const limit = new Date(Date.now() - 30 * 864e5).toISOString()
-  await (await db()).execute(deleteSubtree('deleted_at IS NOT NULL AND deleted_at < $1'), [limit])
+  const conn = await db()
+  await conn.execute(deleteSubtree('deleted_at IS NOT NULL AND deleted_at < $1'), [new Date(Date.now() - 30 * 864e5).toISOString()])
+  await conn.execute('DELETE FROM versions WHERE created_at < $1', [new Date(Date.now() - 90 * 864e5).toISOString()])
+}
+
+// Frühere Fassungen einer Seite, neueste zuerst (die Datenbank legt sie beim Speichern an)
+export async function versions(id) {
+  return (await db()).select('SELECT id, title, body, created_at FROM versions WHERE node_id = $1 ORDER BY created_at DESC LIMIT 200', [id])
+}
+
+// Aktuellen Stand ausdrücklich sichern, z. B. bevor eine alte Fassung zurückgeholt wird
+export async function snapshot(id) {
+  await (await db()).execute('INSERT INTO versions (node_id, title, body) SELECT id, title, body FROM nodes WHERE id = $1', [id])
+}
+
+// Alle Texte, die auf Bilder verweisen können: Seiten (auch im Papierkorb), Titelbilder, alte Fassungen
+export async function imageReferences() {
+  const rows = await (await db()).select('SELECT body, cover FROM nodes UNION ALL SELECT body, NULL FROM versions')
+  return rows.map((r) => `${r.body ?? ''}\n${r.cover ?? ''}`).join('\n')
 }
 
 // Volltext (FTS5, trigram); match ist ein fertiger FTS-Ausdruck. Treffer markiert mit \u0001 … \u0002

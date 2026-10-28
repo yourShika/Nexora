@@ -5,6 +5,8 @@ import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
 import { open } from '@tauri-apps/plugin-dialog'
 import { FolderOpen, GearSix, Keyboard, Monitor, Moon, Sun } from '@phosphor-icons/react'
 import { BACKUP_DEFAULTS, loadBackupSettings } from './backup.js'
+import { deleteImages, unusedImages } from './images.js'
+import { ConfirmButton } from './Overview.jsx'
 import { View } from './Rows.jsx'
 import { accelFromEvent, bindHotkey, hotkeyLabel } from './hotkey.js'
 import { applyTheme, getTheme } from './theme.js'
@@ -87,6 +89,42 @@ function BackupSection({ status, onBackupNow }) {
             : 'Noch keine Sicherung gemacht.'}
       </p>
     </section>
+  )
+}
+
+// Bilder, auf die keine Seite, kein Papierkorb-Eintrag und keine alte Fassung mehr verweist
+function ImageCleanup() {
+  const [unused, setUnused] = useState(null)
+  const [msg, setMsg] = useState('')
+  const find = async () => {
+    try {
+      setMsg('')
+      setUnused(await unusedImages(await db.imageReferences()))
+    } catch (e) {
+      setMsg(`Suche fehlgeschlagen: ${e}`)
+    }
+  }
+  const remove = async () => {
+    try {
+      const n = await deleteImages(unused.map((u) => u.name))
+      setUnused(null)
+      setMsg(`${n} Bilder gelöscht.`)
+    } catch (e) {
+      setMsg(`Löschen fehlgeschlagen: ${e}`)
+    }
+  }
+  const mb = (unused ?? []).reduce((s, u) => s + u.size, 0) / 1048576
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3">
+      <button onClick={find} className="rounded-md border border-line bg-raised px-3 py-1.5 hover:border-faint">Ungenutzte Bilder suchen</button>
+      {unused && (unused.length ? (
+        <>
+          <span className="text-muted">{unused.length} Bilder ({mb.toFixed(1).replace('.', ',')} MB) werden nirgends mehr verwendet.</span>
+          <ConfirmButton onConfirm={remove} />
+        </>
+      ) : <span className="text-muted">Alle Bilder werden verwendet.</span>)}
+      {msg && <span className="text-muted" aria-live="polite">{msg}</span>}
+    </div>
   )
 }
 
@@ -235,6 +273,7 @@ export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBack
         <p className="text-muted">
           Alles liegt in <code className="font-mono text-sm text-text">{dir ? `${dir}\\nexora.db` : '…'}</code>, Bilder daneben im Ordner <code className="font-mono text-sm text-text">bilder</code>.
         </p>
+        <ImageCleanup />
       </section>
     </View>
   )

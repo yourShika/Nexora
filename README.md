@@ -11,8 +11,10 @@ Voraussetzungen: Node 24, Rust (stable, MSVC), Visual Studio Build Tools mit C++
 
 ```bash
 npm install
-npm run tauri dev
+npm run app
 ```
+
+`npm run app` startet die Testversion „Nexora Test“ mit eigenem Datenordner (`%APPDATA%\de.nexora.notizen.dev`), damit Tests nie die Daten eines installierten Nexora berühren.
 
 Installer bauen (landet unter `src-tauri/target/release/bundle/nsis`):
 

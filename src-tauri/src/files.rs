@@ -48,6 +48,54 @@ pub fn save_image(app: AppHandle, request: Request) -> Result<String, String> {
     Ok(name)
 }
 
+// Bilddatei vom Datenträger übernehmen (Titelbild aus dem Dateidialog); name wie bei save_image
+#[tauri::command]
+pub fn import_image(app: AppHandle, source: String, name: String) -> Result<String, String> {
+    if !valid_image_name(&name) {
+        return Err(format!("Ungültiger Bildname: {name}"));
+    }
+    let src = Path::new(&source);
+    let ext = src.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).unwrap_or_default();
+    if !IMAGE_TYPES.contains(&ext.as_str()) {
+        return Err("Nur PNG, JPG, GIF oder WebP".into());
+    }
+    if fs::metadata(src).map_err(|e| e.to_string())?.len() > MAX_IMAGE as u64 {
+        return Err("Bild ist größer als 50 MB".into());
+    }
+    let dir = data_dir(&app)?.join("bilder");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    fs::copy(src, dir.join(&name)).map_err(|e| format!("Bild nicht übernommen: {e}"))?;
+    Ok(name)
+}
+
+// Alle Bilddateien im Datenordner (Name, Größe in Bytes)
+#[tauri::command]
+pub fn list_images(app: AppHandle) -> Result<Vec<(String, u64)>, String> {
+    let dir = data_dir(&app)?.join("bilder");
+    if !dir.is_dir() {
+        return Ok(vec![]);
+    }
+    Ok(fs::read_dir(dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .filter_map(|e| Some((e.file_name().into_string().ok()?, e.metadata().ok()?.len())))
+        .filter(|(n, _)| valid_image_name(n))
+        .collect())
+}
+
+// Löscht nur gültige Bildnamen im Bilderordner, sonst nichts
+#[tauri::command]
+pub fn delete_images(app: AppHandle, names: Vec<String>) -> Result<usize, String> {
+    let dir = data_dir(&app)?.join("bilder");
+    let mut count = 0;
+    for name in names.iter().filter(|n| valid_image_name(n)) {
+        if fs::remove_file(dir.join(name)).is_ok() {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
 // snapshot: per VACUUM INTO erzeugte Datei im Datenordner ("sicherung-JJJJ-MM-TT_HHMM.db").
 // Kopiert sie als nexora-….db ins Ziel, ergänzt fehlende Bilder, behält die neuesten `keep` Stände.
 #[tauri::command]
