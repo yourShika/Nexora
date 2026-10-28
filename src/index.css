@@ -117,6 +117,7 @@ body {
   line-height: 1.65;
   padding-bottom: 40vh;
 }
+.free-box .tiptap { padding-bottom: 0; }
 .tiptap > * + * { margin-top: 0.6em; }
 .tiptap p.is-empty::before,
 .tiptap h1.is-empty::before,

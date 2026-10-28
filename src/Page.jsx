@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowBendDownRight, ClockCounterClockwise, DotsThree, ListChecks, LockSimple, LockSimpleOpen, Stamp, Star, Trash, WarningCircle } from '@phosphor-icons/react'
+import { Article, ArrowBendDownRight, ClockCounterClockwise, DotsThree, FrameCorners, ListChecks, LockSimple, LockSimpleOpen, Stamp, Star, Trash, WarningCircle } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { NodeIcon } from './Sidebar.jsx'
 import { useApp } from './ctx.js'
@@ -8,6 +8,8 @@ import { Cover, IconRow } from './PageHead.jsx'
 import History from './History.jsx'
 import * as db from './db.js'
 import Editor from './Editor.jsx'
+import FreeCanvas from './FreeCanvas.jsx'
+import { isFree, toFlow, toFree } from './free.js'
 import { IconButton } from './Sidebar.jsx'
 import { PropsPanel } from './Props.jsx'
 
@@ -61,25 +63,26 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
 
   const onReady = useCallback((e) => (editor.current = e), [])
 
-  // Alte Fassung zurückholen: jetzigen Stand vorher sichern, dann Editor mit dem alten Inhalt neu aufbauen
-  async function restore(version) {
+  // Inhalt ersetzen (alte Fassung, Umwandeln): jetzigen Stand vorher sichern, dann Editor neu aufbauen
+  async function replace(next) {
     try {
       await flush()
       await db.snapshot(node.id)
-      await db.update(node.id, { body: version.body })
-      setBody(version.body)
-      setLatest(version.body)
+      await db.update(node.id, { body: next })
+      setBody(next)
+      setLatest(next)
       setReload((k) => k + 1)
-      setHistory(false)
+      return true
     } catch {
       setStatus('error')
     }
   }
+  const free = isFree(body)
 
   return (
     <div className="flex h-full">
-    <div className="h-full min-w-0 flex-1 overflow-y-auto">
-      <header className="sticky top-0 z-10 flex h-12 items-center gap-3 bg-bg/90 px-5 backdrop-blur">
+    <div className={`h-full min-w-0 flex-1 ${free ? 'overflow-auto' : 'overflow-y-auto'}`}>
+      <header className="sticky left-0 top-0 z-10 flex h-12 items-center gap-3 bg-bg/90 px-5 backdrop-blur">
         <nav aria-label="Pfad" className="flex min-w-0 flex-1 items-center gap-1.5 text-muted">
           {path.map((p, i) => (
             <span key={p.id} className="flex min-w-0 items-center gap-1.5">
@@ -111,6 +114,11 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
             <MenuItem icon={node.locked ? LockSimpleOpen : LockSimple} onClick={() => (flush(), setMenu(null), onSave(node.id, { locked: node.locked ? 0 : 1 }))}>
               {node.locked ? 'Seite entsperren' : 'Seite sperren'}
             </MenuItem>
+            {node.kind === 'page' && !node.locked && body !== null && (
+              <MenuItem icon={free ? Article : FrameCorners} onClick={() => (setMenu(null), replace(free ? toFlow(latest ?? body) : toFree(latest ?? body)))}>
+                {free ? 'In normale Seite umwandeln' : 'In freie Seite umwandeln'}
+              </MenuItem>
+            )}
             {node.kind === 'page' && (
               <MenuItem icon={Stamp} onClick={() => (setMenu(null), onSave(node.id, { template: node.template ? 0 : 1 }))}>
                 {node.template ? 'Keine Vorlage mehr' : 'Als Vorlage verwenden'}
@@ -126,7 +134,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
       </header>
 
       <Cover node={node} onSave={onSave} />
-      <article className={`mx-auto max-w-[760px] px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-8'}`}>
+      <article className={`${free ? '' : 'mx-auto max-w-[760px]'} px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-8'}`}>
         <IconRow node={node} onSave={onSave} />
         <input
           autoFocus={autoFocus}
@@ -164,12 +172,14 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
             <div className="h-4 w-1/2 rounded bg-hover" />
             <div className="h-4 w-2/3 rounded bg-hover" />
           </div>
+        ) : free ? (
+          <FreeCanvas key={reload} body={body} editable={!node.locked} onChange={(md) => (setLatest(md), queue({ body: md }))} />
         ) : (
           <Editor key={reload} markdown={body} editable={!node.locked} onChange={(md) => (setLatest(md), queue({ body: md }))} onReady={onReady} />
         )}
       </article>
     </div>
-    {history && <History nodeId={node.id} current={latest ?? body ?? ''} onRestore={restore} onClose={() => setHistory(false)} />}
+    {history && <History nodeId={node.id} current={latest ?? body ?? ''} onRestore={(v) => replace(v.body).then((ok) => ok && setHistory(false))} onClose={() => setHistory(false)} />}
     </div>
   )
 }

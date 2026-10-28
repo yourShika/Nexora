@@ -5,6 +5,7 @@ import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { X } from '@phosphor-icons/react'
 import * as db from './db.js'
+import { CANVAS } from './free.js'
 import Sidebar from './Sidebar.jsx'
 import Page from './Page.jsx'
 import DatabaseView from './Database.jsx'
@@ -441,6 +442,7 @@ export default function App() {
         const config = kind === 'database' ? (template === 'lop' ? lopConfig() : emptyConfig()) : null
         const title = template === 'lop' ? 'Offene Punkte' : DEFAULT_TITLE[kind]
         const node = await db.create(kind, parentId, title, { config })
+        if (template === 'frei') await db.update(node.id, { body: CANVAS })
         setNodes((ns) => [...ns, node])
         if (parentId) setExpanded((s) => new Set([...s, parentId]))
         if (kind === 'page') {

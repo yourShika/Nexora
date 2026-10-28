@@ -3,7 +3,7 @@
 Eine schlanke Desktop-App: Notion + Notepad + Code + OneNote, ohne Ballast.
 Name: Nexora.
 
-Stand: 2026-10-27.
+Stand: 2026-10-28.
 
 ## Rahmen
 
@@ -77,10 +77,10 @@ Die neuen Nummern 52–71 werden beim Bau der passenden Stufe eingeordnet.
 - **0.8.1:** zusätzlich MSI-Installer (GPO/Intune), getrennte Update-Kanäle für exe und msi
 - **0.9.0 (Stufe 2 fertig):** Anhänge per Ziehen, Einfügen oder `/` „Datei anhängen“ (`[[datei:uuid/Name|Bytes]]`, ausführbare Dateien nur „im Ordner zeigen“) (28); .txt/.md/.log importieren per Rechtsklick oder Ziehen auf den Baum, alte ANSI-Dateien werden erkannt (26); Markdown-Export eines Zweigs oder von allem, mit Bildern, Anhängen und relativen Links (46); Sicherung nimmt Anhänge mit
 - **0.10.0 (Stufe 3, Teil Planung):** Kalender als Ansicht jeder Liste und über alle Listen (Seitenleiste), Ziehen verschiebt Termine, „+“ legt am Tag an; Zeitleiste (Gantt) mit Beginn bis Fällig, Ziehen und Ränder ziehen, Zoom Tage/Wochen/Monate; Abhängigkeiten (54) mit Pfeilen, rot bei Konflikt; wiederkehrende Punkte (13) mit `*monatlich` usw., beim Abhaken entsteht der nächste Termin
-- Rest von Stufe 3: Freie Seite (31), Zeichnen (30), Texterkennung (29), eigene Fenster (21)
+- **0.11.0 (Stufe 3, Teil freie Seite):** Freie Seite wie OneNote (31): Klick auf leere Fläche legt einen Kasten an, jeder Kasten ist ein vollwertiger Editor (Code ausführen, Bilder, Anhänge, Links, LOP), Kästen verschieben und Breite ziehen, Fläche wächst nach rechts und unten mit, leere Kästen verschwinden; „Neue freie Seite“ im Rechtsklick-Menü, Umwandeln in beide Richtungen im „…“-Menü (vorher wird eine Version gesichert). Gespeichert als Markdown mit unsichtbaren Positionszeilen (`<!-- box x= y= w= -->`), daher laufen Suche, Verlauf, Links, Vorlagen und Export unverändert
+- Rest von Stufe 3: Zeichnen (30, mit Zoom), Texterkennung (29), eigene Fenster (21)
 
 ## Offen
 
 - Outlook über installiertes Outlook (COM) oder Microsoft 365 (Graph)?
 - Bestand außer OneNote (Textdateien, Word, Notion, Wiki)?
-- GitHub-Konto/Repo-Name für das öffentliche Repo

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import {
-  ArrowCircleUp, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
+  ArrowCircleUp, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
   Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
@@ -139,6 +139,7 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
           <MenuItem icon={Plus} onClick={run(() => actions.add(CHILD[m.kind], m.id))}>{NEW_LABEL[m.kind]}</MenuItem>
           {['section', 'page'].includes(m.kind) && (
             <>
+              <MenuItem icon={FrameCorners} onClick={run(() => actions.add('page', m.id, 'frei'))}>Neue freie Seite</MenuItem>
               <MenuItem icon={ListChecks} onClick={run(() => actions.add('database', m.id, 'lop'))}>Neue LOP-Liste</MenuItem>
               <MenuItem icon={Table} onClick={run(() => actions.add('database', m.id))}>Neue leere Liste</MenuItem>
               {templates.length > 0 && (
