@@ -1,0 +1,377 @@
+import { useEffect, useState } from 'react'
+import { ArrowSquareOut, Kanban, ListBullets, Plus, SlidersHorizontal, SortAscending, SortDescending, Table, X } from '@phosphor-icons/react'
+import { Chip, FieldEditor, FieldValue } from './Props.jsx'
+import { QuickAdd, RowItem } from './Rows.jsx'
+import { ConfirmButton } from './Overview.jsx'
+import { CHIP_COLORS, TYPES, isDone, newId, statusField } from './fields.js'
+
+const TITLE = { id: 'title', name: 'Titel', type: 'title' }
+const COL_WIDTH = { title: 'min-w-60', nr: 'w-20', status: 'w-28', select: 'w-28', date: 'w-32', person: 'w-28', checkbox: 'w-16', multi: 'min-w-36' }
+const VIEWS = [
+  { id: 'table', label: 'Tabelle', icon: Table },
+  { id: 'list', label: 'Liste', icon: ListBullets },
+  { id: 'kanban', label: 'Kanban', icon: Kanban },
+]
+
+function sortRows(rows, fields, sort) {
+  if (!sort) return rows
+  const f = sort.field === 'title' ? TITLE : fields.find((x) => x.id === sort.field)
+  if (!f) return rows
+  const key = (r) => {
+    const v = f.type === 'title' ? r.title : r.props?.[f.id]
+    if (['select', 'status'].includes(f.type)) return f.options.findIndex((o) => o.id === v)
+    return v ?? null
+  }
+  const dir = sort.dir === 'desc' ? -1 : 1
+  return [...rows].sort((a, b) => {
+    const [x, y] = [key(a), key(b)]
+    if (x === y) return 0
+    if (x == null || x === -1) return 1 // Leere immer nach unten
+    if (y == null || y === -1) return -1
+    return (typeof x === 'string' ? x.localeCompare(y, 'de') : x - y) * dir
+  })
+}
+
+export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig, onTitle }) {
+  const config = db.config
+  const fields = config.fields
+  const [panel, setPanel] = useState(false)
+  const [title, setTitle] = useState(db.title)
+  useEffect(() => setTitle(db.title), [db.title])
+
+  const setConfig = (patch) => onConfig({ ...config, ...patch })
+  const addOption = (fieldId, name) =>
+    setConfig({ fields: fields.map((f) => (f.id === fieldId && !f.options.some((o) => o.id === name) ? { ...f, options: [...f.options, { id: name, name, color: 'grau' }] } : f)) })
+  const toggle = (row) => {
+    const sf = statusField(fields)
+    if (!sf) return
+    const target = isDone(row, fields) ? sf.options.find((o) => !o.done) : sf.options.find((o) => o.done)
+    onRow(row.id, { props: { ...row.props, [sf.id]: target?.id ?? null } })
+  }
+
+  const visible = sortRows(config.hideDone && config.view !== 'kanban' ? rows.filter((r) => !isDone(r, fields)) : rows, fields, config.sort)
+  const hasStatus = !!statusField(fields)
+
+  return (
+    <div className="flex h-full">
+      <div className="min-w-0 flex-1 overflow-y-auto">
+        <div className="px-6 pb-24 pt-14 md:px-12">
+          <input
+            value={title}
+            aria-label="Name der Liste"
+            placeholder="Ohne Titel"
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => title !== db.title && onTitle(title)}
+            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+            className="mb-5 w-full bg-transparent text-[32px] font-semibold leading-tight tracking-tight outline-none placeholder:text-faint"
+          />
+
+          <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-line pb-3">
+            <div role="tablist" aria-label="Ansicht" className="flex gap-1">
+              {VIEWS.map((v) => (
+                <button
+                  key={v.id}
+                  role="tab"
+                  aria-selected={config.view === v.id}
+                  onClick={() => setConfig({ view: v.id })}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 ${config.view === v.id ? 'bg-accent-soft text-text' : 'text-muted hover:bg-hover hover:text-text'}`}
+                >
+                  <v.icon size={16} /> {v.label}
+                </button>
+              ))}
+            </div>
+            <span className="flex-1" />
+            {hasStatus && config.view !== 'kanban' && (
+              <label className="flex cursor-pointer items-center gap-2 text-muted">
+                <input type="checkbox" checked={config.hideDone} onChange={(e) => setConfig({ hideDone: e.target.checked })} className="accent-[var(--accent)]" />
+                Erledigte ausblenden
+              </label>
+            )}
+            <button onClick={() => setPanel(!panel)} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 ${panel ? 'bg-accent-soft' : 'text-muted hover:bg-hover hover:text-text'}`}>
+              <SlidersHorizontal size={16} /> Felder
+            </button>
+          </div>
+
+          <QuickAdd onAdd={onAdd} />
+
+          {config.view === 'table' && (
+            <TableView db={db} rows={visible} fields={fields} sort={config.sort} onSort={(sort) => setConfig({ sort })} onOpen={onOpen} onRow={onRow} addOption={addOption} />
+          )}
+          {config.view === 'list' && <ListView db={db} rows={visible} fields={fields} onOpen={onOpen} onToggle={toggle} />}
+          {config.view === 'kanban' && (
+            hasStatus
+              ? <KanbanView db={db} rows={visible} fields={fields} onOpen={onOpen} onRow={onRow} />
+              : <p className="text-muted">Kanban braucht ein Feld vom Typ Status. Lege es unter „Felder“ an.</p>
+          )}
+          {!rows.length && <p className="mt-2 text-muted">Noch keine Punkte. Tippe oben einen ein und drücke Enter.</p>}
+        </div>
+      </div>
+      {panel && <FieldsPanel config={config} onConfig={onConfig} onClose={() => setPanel(false)} />}
+    </div>
+  )
+}
+
+function TableView({ db, rows, fields, sort, onSort, onOpen, onRow, addOption }) {
+  const cols = [...fields.filter((f) => f.type === 'nr'), TITLE, ...fields.filter((f) => f.type !== 'nr')]
+  const clickSort = (id) =>
+    onSort(sort?.field !== id ? { field: id, dir: 'asc' } : sort.dir === 'asc' ? { field: id, dir: 'desc' } : null)
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b border-line text-left text-xs text-muted">
+            {cols.map((c) => (
+              <th key={c.id} className={`whitespace-nowrap px-1.5 py-1.5 font-medium ${COL_WIDTH[c.type] ?? 'min-w-32'}`}>
+                <button onClick={() => clickSort(c.id)} className="flex items-center gap-1 hover:text-text">
+                  {c.name}
+                  {sort?.field === c.id && (sort.dir === 'asc' ? <SortAscending size={13} /> : <SortDescending size={13} />)}
+                </button>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className={`group border-b border-line ${isDone(r, fields) ? 'opacity-60' : ''}`}>
+              {cols.map((c) => (
+                <td key={c.id} className="px-0 py-0.5 align-middle">
+                  {c.type === 'title' ? (
+                    <TitleCell row={r} onOpen={onOpen} onTitle={(title) => onRow(r.id, { title })} />
+                  ) : (
+                    <FieldEditor
+                      field={c}
+                      value={r.props?.[c.id]}
+                      db={db}
+                      onChange={(v) => onRow(r.id, { props: { ...r.props, [c.id]: v } })}
+                      onAddOption={(name) => addOption(c.id, name)}
+                    />
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TitleCell({ row, onOpen, onTitle }) {
+  const [text, setText] = useState(row.title)
+  useEffect(() => setText(row.title), [row.title])
+  return (
+    <span className="flex items-center">
+      <input
+        value={text}
+        aria-label="Titel"
+        placeholder="Ohne Titel"
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => text !== row.title && onTitle(text)}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+        className="w-full min-w-0 rounded bg-transparent px-1.5 py-1 font-medium outline-none placeholder:text-faint hover:bg-hover focus:bg-raised focus:ring-1 focus:ring-accent"
+      />
+      <button
+        aria-label="Als Seite öffnen"
+        title="Als Seite öffnen"
+        onClick={() => onOpen(row.id)}
+        className="invisible ml-1 shrink-0 rounded p-1 text-muted hover:bg-hover hover:text-text group-hover:visible focus:visible"
+      >
+        <ArrowSquareOut size={15} />
+      </button>
+    </span>
+  )
+}
+
+function ListView({ db, rows, fields, onOpen, onToggle }) {
+  const sf = statusField(fields)
+  const groups = sf
+    ? [...sf.options.map((o) => ({ key: o.id, label: o, items: rows.filter((r) => r.props?.[sf.id] === o.id) })),
+       { key: 'none', label: null, items: rows.filter((r) => !sf.options.some((o) => o.id === r.props?.[sf.id])) }]
+    : [{ key: 'all', label: null, items: rows }]
+  return groups.filter((g) => g.items.length).map((g) => (
+    <section key={g.key} className="mb-6">
+      {sf && (
+        <h2 className="mb-1.5 flex items-center gap-2 px-2">
+          {g.label ? <Chip color={g.label.color}>{g.label.name}</Chip> : <span className="text-muted">Ohne Status</span>}
+          <span className="text-xs text-faint">{g.items.length}</span>
+        </h2>
+      )}
+      <ul className="divide-y divide-line border-y border-line">
+        {g.items.map((r) => <RowItem key={r.id} row={r} db={db} onOpen={onOpen} onToggle={onToggle} />)}
+      </ul>
+    </section>
+  ))
+}
+
+function KanbanView({ db, rows, fields, onOpen, onRow }) {
+  const sf = statusField(fields)
+  const [over, setOver] = useState(null)
+  const cards = fields.filter((f) => ['date', 'select', 'person', 'multi'].includes(f.type) && f.id !== 'followup')
+  const columns = sf.options.map((o, i) => ({ o, items: rows.filter((r) => (r.props?.[sf.id] ?? (i === 0 ? o.id : null)) === o.id) }))
+
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-4">
+      {columns.map(({ o, items }) => (
+        <section
+          key={o.id}
+          aria-label={o.name}
+          onDragOver={(e) => (e.preventDefault(), setOver(o.id))}
+          onDragLeave={() => setOver(null)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setOver(null)
+            const row = rows.find((r) => r.id === e.dataTransfer.getData('text/plain'))
+            if (row && row.props?.[sf.id] !== o.id) onRow(row.id, { props: { ...row.props, [sf.id]: o.id } })
+          }}
+          className={`flex w-64 shrink-0 flex-col gap-2 rounded-lg p-2 ${over === o.id ? 'bg-accent-soft' : 'bg-side'}`}
+        >
+          <h2 className="flex items-center gap-2 px-1 py-0.5">
+            <Chip color={o.color}>{o.name}</Chip>
+            <span className="text-xs text-faint">{items.length}</span>
+          </h2>
+          {items.map((r) => (
+            <article
+              key={r.id}
+              draggable
+              onDragStart={(e) => e.dataTransfer.setData('text/plain', r.id)}
+              onClick={() => onOpen(r.id)}
+              className="cursor-grab rounded-md border border-line bg-raised p-2.5 shadow-sm active:cursor-grabbing"
+            >
+              <p className={`mb-1.5 font-medium ${o.done ? 'text-muted line-through' : ''}`}>{r.title || 'Ohne Titel'}</p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {r.props?.nr && <FieldValue field={{ type: 'nr' }} value={r.props.nr} db={db} />}
+                {cards.map((f) => <FieldValue key={f.id} field={f} value={r.props?.[f.id]} db={db} done={o.done} />)}
+              </div>
+            </article>
+          ))}
+        </section>
+      ))}
+    </div>
+  )
+}
+
+// Felder anlegen, umbenennen, löschen; Auswahl-Optionen pflegen
+function FieldsPanel({ config, onConfig, onClose }) {
+  const [name, setName] = useState('')
+  const [type, setType] = useState('text')
+  const fields = config.fields
+  const setFields = (next) => onConfig({ ...config, fields: next })
+  const setField = (id, patch) => setFields(fields.map((f) => (f.id === id ? { ...f, ...patch } : f)))
+  const hasType = (t) => fields.some((f) => f.type === t)
+
+  function add() {
+    if (!name.trim()) return
+    const f = { id: newId(), name: name.trim(), type }
+    if (['select', 'multi', 'status'].includes(type)) {
+      f.options = type === 'status'
+        ? [{ id: newId(), name: 'Offen', color: 'grau' }, { id: newId(), name: 'Erledigt', color: 'gruen', done: true }]
+        : []
+    }
+    setFields([...fields, f])
+    setName('')
+  }
+
+  return (
+    <aside aria-label="Felder" className="flex w-80 shrink-0 flex-col border-l border-line bg-side">
+      <div className="flex h-12 items-center justify-between px-4">
+        <h2 className="font-semibold">Felder</h2>
+        <button aria-label="Schließen" onClick={onClose} className="rounded p-1 text-muted hover:bg-hover hover:text-text"><X size={16} /></button>
+      </div>
+      <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-6">
+        {fields.map((f) => (
+          <div key={f.id} className="rounded-lg border border-line bg-raised p-3">
+            <div className="flex items-center gap-2">
+              <BlurInput value={f.name} label="Feldname" onCommit={(v) => v && setField(f.id, { name: v })} className="font-medium" />
+              <span className="shrink-0 text-xs text-faint">{TYPES[f.type]}</span>
+              <ConfirmButton compact onConfirm={() => setFields(fields.filter((x) => x.id !== f.id))} />
+            </div>
+            {f.type === 'nr' && (
+              <label className="mt-2 flex items-center gap-2 text-muted">
+                Präfix
+                <BlurInput value={config.prefix} label="Präfix" onCommit={(v) => onConfig({ ...config, prefix: v })} className="w-24" />
+                <span className="text-xs text-faint">nächste: {config.nextNr}</span>
+              </label>
+            )}
+            {f.options && <OptionsEditor field={f} onChange={(options) => setField(f.id, { options })} />}
+          </div>
+        ))}
+
+        <div className="rounded-lg border border-dashed border-line p-3">
+          <p className="mb-2 font-medium">Neues Feld</p>
+          <input
+            value={name}
+            placeholder="Name"
+            aria-label="Name des neuen Felds"
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+            className="mb-2 w-full rounded-md border border-line bg-bg px-2 py-1 outline-none focus:border-accent"
+          />
+          <div className="flex gap-2">
+            <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Typ" className="flex-1 rounded-md border border-line bg-bg px-2 py-1">
+              {Object.entries(TYPES)
+                .filter(([t]) => !(['nr', 'status'].includes(t) && hasType(t)))
+                .map(([t, label]) => <option key={t} value={t}>{label}</option>)}
+            </select>
+            <button onClick={add} className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 font-medium text-white dark:text-bg">
+              <Plus size={14} weight="bold" /> Hinzufügen
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+function OptionsEditor({ field, onChange }) {
+  const colors = Object.keys(CHIP_COLORS)
+  const set = (id, patch) => onChange(field.options.map((o) => (o.id === id ? { ...o, ...patch } : o)))
+  return (
+    <ul className="mt-2 space-y-1">
+      {field.options.map((o) => (
+        <li key={o.id} className="flex items-center gap-2">
+          <button
+            aria-label={`Farbe von ${o.name} wechseln`}
+            title="Farbe wechseln"
+            onClick={() => set(o.id, { color: colors[(colors.indexOf(o.color) + 1) % colors.length] })}
+            style={{ background: CHIP_COLORS[o.color] ?? CHIP_COLORS.grau }}
+            className="size-3.5 shrink-0 rounded-full"
+          />
+          <BlurInput value={o.name} label="Option" onCommit={(v) => v && set(o.id, { name: v })} />
+          {field.type === 'status' && (
+            <label className="flex shrink-0 items-center gap-1 text-xs text-muted" title="Zählt als erledigt">
+              <input type="checkbox" checked={!!o.done} onChange={(e) => set(o.id, { done: e.target.checked })} className="accent-[var(--accent)]" />
+              erledigt
+            </label>
+          )}
+          <button aria-label={`${o.name} entfernen`} onClick={() => onChange(field.options.filter((x) => x.id !== o.id))} className="shrink-0 rounded p-0.5 text-faint hover:text-danger">
+            <X size={13} />
+          </button>
+        </li>
+      ))}
+      <li>
+        <button
+          onClick={() => onChange([...field.options, { id: newId(), name: 'Neu', color: 'grau' }])}
+          className="flex items-center gap-1 rounded px-1 py-0.5 text-xs text-muted hover:bg-hover hover:text-text"
+        >
+          <Plus size={12} /> Option
+        </button>
+      </li>
+    </ul>
+  )
+}
+
+function BlurInput({ value, label, onCommit, className = '' }) {
+  const [text, setText] = useState(value ?? '')
+  useEffect(() => setText(value ?? ''), [value])
+  return (
+    <input
+      value={text}
+      aria-label={label}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => text !== (value ?? '') && onCommit(text.trim())}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      className={`min-w-0 flex-1 rounded bg-transparent px-1 py-0.5 outline-none hover:bg-hover focus:bg-bg focus:ring-1 focus:ring-accent ${className}`}
+    />
+  )
+}

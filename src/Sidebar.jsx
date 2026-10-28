@@ -1,0 +1,261 @@
+import { useRef, useState } from 'react'
+import {
+  ArrowCircleUp, CaretRight, CheckSquare, DotsThree, FileText, FolderSimple, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
+  Star, Table, Trash, Tray, Warning,
+} from '@phosphor-icons/react'
+import Menu, { MenuItem } from './Menu.jsx'
+import logo from '../src-tauri/icons/icon.svg'
+
+export const COLORS = {
+  petrol: '#1b8a94', blau: '#3a6fc4', gruen: '#3f8f4f', gelb: '#c49a1d',
+  orange: '#d06a2a', rot: '#c8434b', rosa: '#c4508f', grau: '#7b8487',
+}
+
+const CHILD = { notebook: 'section', section: 'page', page: 'page', database: 'row' }
+const NEW_LABEL = { notebook: 'Neuer Abschnitt', section: 'Neue Seite', page: 'Neue Unterseite', database: 'Neuer Punkt' }
+
+export function NodeIcon({ node, size = 16 }) {
+  if (node.icon) return <span className="w-4 text-center leading-none">{node.icon}</span>
+  if (node.kind === 'notebook') return <Notebook size={size} weight="duotone" color={COLORS[node.color] ?? COLORS.petrol} />
+  if (node.kind === 'section') return <FolderSimple size={size} className="text-muted" />
+  if (node.kind === 'database') return <ListChecks size={size} className="text-muted" />
+  if (node.kind === 'row') return <CheckSquare size={size} className="text-muted" />
+  return <FileText size={size} className="text-muted" />
+}
+
+export default function Sidebar({ tree, favorites, counts, current, expanded, renaming, actions, warning, onSearch, updates }) {
+  const [menu, setMenu] = useState(null)
+
+  const openMenu = (e, node) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setMenu({ x: e.clientX, y: e.clientY, node })
+  }
+  const run = (fn) => () => (setMenu(null), fn())
+  const ctx = { tree, expanded, current, renaming, actions, openMenu }
+
+  const m = menu?.node
+  return (
+    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-line bg-side">
+      <div className="flex h-12 items-center gap-2 px-4">
+        <img src={logo} alt="" className="size-5" />
+        <span className="font-semibold tracking-tight">Nexora</span>
+        <span className="flex-1" />
+        <IconButton label="Einstellungen" onClick={() => actions.open('settings')}>
+          <GearSix size={16} />
+        </IconButton>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto px-2 pb-4">
+        <button onClick={onSearch} className="mb-1 flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-muted hover:bg-hover hover:text-text">
+          <MagnifyingGlass size={16} />
+          <span className="flex-1">Suchen</span>
+          <kbd className="rounded border border-line px-1 font-sans text-[11px] text-faint">Strg K</kbd>
+        </button>
+        <ul className="mb-3">
+          {[
+            { id: 'today', label: 'Heute', icon: Lightning, count: counts.today },
+            { id: 'inbox', label: 'Eingang', icon: Tray, count: counts.inbox },
+          ].map((v) => (
+            <li key={v.id}>
+              <button
+                onClick={() => actions.open(v.id)}
+                className={`flex h-7 w-full items-center gap-2 rounded-md px-2 text-left ${current === v.id ? 'bg-accent-soft' : 'hover:bg-hover'}`}
+              >
+                <v.icon size={16} className="text-accent" />
+                <span className="flex-1">{v.label}</span>
+                {v.count > 0 && <span className="text-xs tabular-nums text-muted">{v.count}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        {favorites.length > 0 && (
+          <>
+            <Heading>Favoriten</Heading>
+            <ul className="mb-3">
+              {favorites.map((n) => (
+                <li key={n.id}>
+                  <button
+                    onClick={() => actions.open(n.id)}
+                    className={`flex h-7 w-full items-center gap-2 rounded-md px-2 text-left ${current === n.id ? 'bg-accent-soft' : 'hover:bg-hover'}`}
+                  >
+                    <NodeIcon node={n} />
+                    <span className="truncate">{n.title || 'Ohne Titel'}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        <Heading action={<IconButton label="Neues Notizbuch" onClick={() => actions.add('notebook', null)}><Plus size={14} /></IconButton>}>
+          Notizbücher
+        </Heading>
+        {tree.roots.length ? (
+          <ul role="tree" aria-label="Notizbücher">
+            {tree.roots.map((n) => <Row key={n.id} node={n} depth={0} ctx={ctx} />)}
+          </ul>
+        ) : (
+          <button onClick={() => actions.add('notebook', null)} className="w-full rounded-md px-2 py-2 text-left text-muted hover:bg-hover">
+            Erstes Notizbuch anlegen
+          </button>
+        )}
+      </nav>
+
+      <div className="border-t border-line p-2">
+        {updates.found && (
+          <button
+            onClick={updates.install}
+            disabled={updates.busy}
+            className="mb-1 flex w-full items-center gap-2 rounded-md bg-accent-soft px-2 py-1.5 text-left text-xs hover:bg-hover disabled:opacity-60"
+          >
+            <ArrowCircleUp size={16} className="shrink-0 text-accent" />
+            {updates.busy ? 'Wird installiert …' : `Version ${updates.found.version} installieren`}
+          </button>
+        )}
+        {warning && (
+          <button onClick={() => actions.open('settings')} className="mb-1 flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger hover:bg-hover">
+            <Warning size={16} className="mt-px shrink-0" /> {warning}
+          </button>
+        )}
+        <button
+          onClick={() => actions.open('trash')}
+          className={`flex h-7 w-full items-center gap-2 rounded-md px-2 text-muted ${current === 'trash' ? 'bg-accent-soft text-text' : 'hover:bg-hover hover:text-text'}`}
+        >
+          <Trash size={16} />
+          Papierkorb
+        </button>
+      </div>
+
+      {menu && (
+        <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+          <MenuItem icon={Plus} onClick={run(() => actions.add(CHILD[m.kind], m.id))}>{NEW_LABEL[m.kind]}</MenuItem>
+          {['section', 'page'].includes(m.kind) && (
+            <>
+              <MenuItem icon={ListChecks} onClick={run(() => actions.add('database', m.id, 'lop'))}>Neue LOP-Liste</MenuItem>
+              <MenuItem icon={Table} onClick={run(() => actions.add('database', m.id))}>Neue leere Liste</MenuItem>
+            </>
+          )}
+          <MenuItem icon={PencilSimple} onClick={run(() => actions.startRename(m.id))}>Umbenennen</MenuItem>
+          <MenuItem icon={Star} onClick={run(() => actions.save(m.id, { favorite: m.favorite ? 0 : 1 }))}>
+            {m.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
+          </MenuItem>
+          {m.kind === 'notebook' && (
+            <div className="flex gap-1.5 px-2 py-2" role="group" aria-label="Farbe">
+              {Object.entries(COLORS).map(([name, hex]) => (
+                <button
+                  key={name}
+                  aria-label={`Farbe ${name}`}
+                  onClick={run(() => actions.save(m.id, { color: name }))}
+                  style={{ background: hex }}
+                  className={`size-4 rounded-full ${(m.color ?? 'petrol') === name ? 'ring-2 ring-text ring-offset-1 ring-offset-raised' : ''}`}
+                />
+              ))}
+            </div>
+          )}
+          <div className="my-1 border-t border-line" />
+          <MenuItem icon={Trash} danger onClick={run(() => actions.remove(m.id))}>In den Papierkorb</MenuItem>
+        </Menu>
+      )}
+    </aside>
+  )
+}
+
+function Row({ node, depth, ctx }) {
+  const { tree, expanded, current, renaming, actions, openMenu } = ctx
+  const kids = tree.children(node.id)
+  const open = expanded.has(node.id)
+  const foldable = kids.length > 0 || node.kind === 'notebook' || node.kind === 'section'
+  const active = current === node.id
+
+  return (
+    <li role="treeitem" aria-expanded={foldable ? open : undefined} aria-selected={active}>
+      <div
+        onContextMenu={(e) => openMenu(e, node)}
+        style={{ paddingLeft: 6 + depth * 14 }}
+        className={`group flex h-7 items-center gap-1 rounded-md pr-1 ${active ? 'bg-accent-soft text-text' : 'hover:bg-hover'}`}
+      >
+        <button
+          tabIndex={-1}
+          aria-label={open ? 'Zuklappen' : 'Aufklappen'}
+          onClick={() => actions.toggle(node.id)}
+          className={`grid size-4 shrink-0 place-items-center rounded text-faint hover:text-text ${foldable ? '' : 'invisible'}`}
+        >
+          <CaretRight size={11} weight="bold" className={`transition-transform ${open ? 'rotate-90' : ''}`} />
+        </button>
+        {renaming === node.id ? (
+          <RenameInput node={node} onDone={(title) => actions.rename(node.id, title)} />
+        ) : (
+          <button
+            onClick={() => actions.open(node.id)}
+            onDoubleClick={() => actions.startRename(node.id)}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            <NodeIcon node={node} />
+            <span className={`truncate ${node.kind === 'notebook' ? 'font-medium' : ''} ${node.title ? '' : 'text-faint'}`}>
+              {node.title || 'Ohne Titel'}
+            </span>
+          </button>
+        )}
+        <span className="hidden shrink-0 items-center group-focus-within:flex group-hover:flex">
+          <IconButton label={NEW_LABEL[node.kind]} onClick={() => actions.add(CHILD[node.kind], node.id)}>
+            <Plus size={14} />
+          </IconButton>
+          <IconButton label="Mehr" onClick={(e) => openMenu(e, node)}>
+            <DotsThree size={16} weight="bold" />
+          </IconButton>
+        </span>
+      </div>
+      {open && kids.length > 0 && (
+        <ul role="group">
+          {kids.map((k) => <Row key={k.id} node={k} depth={depth + 1} ctx={ctx} />)}
+        </ul>
+      )}
+    </li>
+  )
+}
+
+function Heading({ children, action }) {
+  return (
+    <div className="flex h-8 items-center justify-between px-2 pt-2 text-xs font-medium text-faint">
+      {children}
+      {action}
+    </div>
+  )
+}
+
+export function IconButton({ label, onClick, children }) {
+  return (
+    <button
+      aria-label={label}
+      title={label}
+      onClick={(e) => (e.stopPropagation(), onClick(e))}
+      className="grid size-6 place-items-center rounded-md text-muted hover:bg-hover hover:text-text"
+    >
+      {children}
+    </button>
+  )
+}
+
+function RenameInput({ node, onDone }) {
+  const [value, setValue] = useState(node.title)
+  const done = useRef(false)
+  // Enter/Escape lösen beim Entfernen noch ein blur aus; nur das erste zählt
+  const finish = (title) => !done.current && ((done.current = true), onDone(title))
+  return (
+    <input
+      autoFocus
+      value={value}
+      onFocus={(e) => e.target.select()}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => finish(value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') finish(value)
+        if (e.key === 'Escape') finish(node.title)
+      }}
+      aria-label="Name"
+      className="min-w-0 flex-1 rounded border border-accent bg-raised px-1.5 py-0.5 outline-none"
+    />
+  )
+}
