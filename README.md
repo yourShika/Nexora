@@ -32,7 +32,13 @@ npm run tauri build
 npm run release -- --publish "Was neu ist"
 ```
 
-Das Skript baut den Installer, signiert ihn mit `%USERPROFILE%\.nexora\updater.key` und legt ihn zusammen mit `latest.json` als GitHub-Release ab. Eine Kopie des aktuellen Installers liegt danach im Projekt unter `installer\` (nicht im Repo). Laufende Installationen finden das Update innerhalb von 6 Stunden oder sofort über „Nach Updates suchen“.
+Das Skript baut den Installer, signiert ihn mit `%USERPROFILE%\.nexora\updater.key` und legt ihn zusammen mit `latest.json` als GitHub-Release ab. Eine Kopie der aktuellen Installer liegt danach im Projekt unter `installer\` (nicht im Repo).
+
+Es gibt zwei Installer:
+- `Nexora_<Version>_x64-setup.exe`: für den eigenen PC, ohne Adminrechte, nur für den angemeldeten Benutzer.
+- `Nexora_<Version>_x64_de-DE.msi`: für die Verteilung per GPO oder Intune, für alle Benutzer unter „Programme“. Installation und Updates brauchen Adminrechte.
+
+Jede Installation holt ihre Updates im eigenen Format. Beide nutzen denselben Datenordner pro Benutzer, sollten aber nicht gleichzeitig auf einem PC installiert sein. Laufende Installationen finden das Update innerhalb von 6 Stunden oder sofort über „Nach Updates suchen“.
 
 **Den Schlüssel `updater.key` sicher aufbewahren** (zum Beispiel im Passworttresor). Ohne ihn lassen sich keine Updates mehr signieren, und vorhandene Installationen müssten von Hand neu installiert werden.
 

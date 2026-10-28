@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Nexora",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "identifier": "de.nexora.notizen",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -44,7 +44,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["nsis", "msi"],
     "createUpdaterArtifacts": true,
     "publisher": "Nexora",
     "shortDescription": "Notizen, LOP und Runbooks",
@@ -58,6 +58,10 @@
       "nsis": {
         "installMode": "currentUser",
         "languages": ["German"]
+      },
+      "wix": {
+        "language": "de-DE",
+        "upgradeCode": "8B87B2D9-705D-5833-921B-E0CCF8B75664"
       }
     }
   },

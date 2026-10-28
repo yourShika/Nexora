@@ -31,33 +31,45 @@ run('npm', ['run', 'tauri', 'build'], {
   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: '',
 })
 
-const dir = path.join(root, 'src-tauri/target/release/bundle/nsis')
-const exe = `${conf.productName}_${version}_x64-setup.exe`
-const sigFile = path.join(dir, `${exe}.sig`)
-if (!fs.existsSync(sigFile)) fail(`Signatur fehlt: ${sigFile}`)
+// Zwei Installer: .exe (NSIS, ohne Admin) und .msi (WiX, für GPO/Intune)
+const bundle = path.join(root, 'src-tauri/target/release/bundle')
+const files = {
+  nsis: path.join(bundle, 'nsis', `${conf.productName}_${version}_x64-setup.exe`),
+  msi: path.join(bundle, 'msi', `${conf.productName}_${version}_x64_${conf.bundle.windows.wix.language}.msi`),
+}
+const entry = (file) => {
+  if (!fs.existsSync(`${file}.sig`)) fail(`Signatur fehlt: ${file}.sig`)
+  return {
+    signature: fs.readFileSync(`${file}.sig`, 'utf8').trim(),
+    url: `https://github.com/${repo}/releases/download/v${version}/${path.basename(file)}`,
+  }
+}
 
+// Jede Installation holt Updates im eigenen Format; "windows-x86_64" ohne Zusatz
+// ist für Versionen bis 0.8.0, die nur die .exe kannten
 const latest = {
   version,
   notes: process.argv[3] ?? '',
   pub_date: new Date().toISOString(),
   platforms: {
-    'windows-x86_64': {
-      signature: fs.readFileSync(sigFile, 'utf8').trim(),
-      url: `https://github.com/${repo}/releases/download/v${version}/${exe}`,
-    },
+    'windows-x86_64': entry(files.nsis),
+    'windows-x86_64-nsis': entry(files.nsis),
+    'windows-x86_64-msi': entry(files.msi),
   },
 }
-fs.writeFileSync(path.join(dir, 'latest.json'), JSON.stringify(latest, null, 2))
+const latestFile = path.join(bundle, 'latest.json')
+fs.writeFileSync(latestFile, JSON.stringify(latest, null, 2))
 
-// Aktuellen Installer zusätzlich in <Projekt>\installer ablegen (nicht im Repo), ältere entfernen
+// Aktuelle Installer zusätzlich in <Projekt>\installer ablegen (nicht im Repo), ältere entfernen
 const local = path.join(root, 'installer')
 fs.mkdirSync(local, { recursive: true })
-for (const f of fs.readdirSync(local)) if (/^.+_x64-setup\.exe$/.test(f) && f !== exe) fs.rmSync(path.join(local, f))
-fs.copyFileSync(path.join(dir, exe), path.join(local, exe))
-console.log(`\nFertig: ${path.join(local, exe)}\n        ${path.join(dir, 'latest.json')}`)
+const keep = Object.values(files).map((f) => path.basename(f))
+for (const f of fs.readdirSync(local)) if (/\.(exe|msi)$/.test(f) && !keep.includes(f)) fs.rmSync(path.join(local, f))
+for (const f of Object.values(files)) fs.copyFileSync(f, path.join(local, path.basename(f)))
+console.log(`\nFertig: ${keep.map((f) => path.join(local, f)).join('\n        ')}\n        ${latestFile}`)
 
 if (process.argv[2] === '--publish') {
-  run('gh', ['release', 'create', `v${version}`, `"${path.join(dir, exe)}"`, `"${path.join(dir, 'latest.json')}"`,
+  run('gh', ['release', 'create', `v${version}`, ...Object.values(files).map((f) => `"${f}"`), `"${latestFile}"`,
     '--repo', repo, '--title', `"Nexora ${version}"`, '--notes', JSON.stringify(latest.notes || `Nexora ${version}`)])
   console.log(`Veröffentlicht: https://github.com/${repo}/releases/tag/v${version}`)
 }
