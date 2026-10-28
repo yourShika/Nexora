@@ -7,6 +7,7 @@ mod attach;
 mod files;
 mod ocr;
 mod onenote;
+mod outlook;
 mod vault;
 mod run;
 
@@ -116,6 +117,9 @@ pub fn run() {
             files::delete_images,
             ocr::ocr_image,
             onenote::onenote,
+            outlook::outlook_events,
+            outlook::outlook_push,
+            outlook::outlook_drop_test,
             vault::vault_status,
             vault::vault_unlock,
             vault::vault_lock,

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ArrowBendUpRight, Lightning, Tray } from '@phosphor-icons/react'
+import { ArrowBendUpRight, CalendarBlank, Lightning, Tray } from '@phosphor-icons/react'
+import { eventDays, eventTime } from './outlook.js'
 import Menu, { MenuItem } from './Menu.jsx'
 import { Chip, DateText, FieldValue } from './Props.jsx'
 import { LOP_FIELDS, dayOf, fieldsOf, formatNr, isDone, isLate, isToday, option, statusField, today } from './fields.js'
@@ -116,7 +117,7 @@ export function Inbox({ rows, databases, onOpen, onToggle, onAdd, onAssign, hotk
   )
 }
 
-export function Today({ rows, dbOf, onOpen, onToggle }) {
+export function Today({ rows, dbOf, events = [], onOpen, onToggle }) {
   const t = today()
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString()
   const open = rows.filter((r) => !isDone(r, fieldsOf(dbOf(r))))
@@ -127,9 +128,27 @@ export function Today({ rows, dbOf, onOpen, onToggle }) {
     { title: 'Wiedervorlage', items: open.filter((r) => r.props?.followup && dayOf(r.props.followup) <= t) },
     { title: 'Wartet seit über 7 Tagen', items: open.filter((r) => r.props?.status === 'wartet' && r.updated_at < weekAgo) },
   ].filter((g) => g.items.length)
+  const meetings = events.filter((e) => eventDays(e).includes(t))
 
   return (
     <View title="Heute" icon={Lightning} sub={new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}>
+      {meetings.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-2 flex items-center gap-2 font-semibold">
+            Termine aus Outlook <span className="text-sm font-normal text-faint">{meetings.length}</span>
+          </h2>
+          <ul className="divide-y divide-line border-y border-line">
+            {meetings.map((e) => (
+              <li key={e.id} className="flex items-center gap-3 py-2">
+                <CalendarBlank size={16} className="shrink-0 text-faint" />
+                <span className="w-24 shrink-0 text-sm tabular-nums text-muted">{eventTime(e)}</span>
+                <span className="min-w-0 flex-1 truncate">{e.subject}</span>
+                {e.location && <span className="truncate text-sm text-faint">{e.location}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {groups.length ? groups.map((g) => (
         <section key={g.title} className="mb-8">
           <h2 className="mb-2 flex items-center gap-2 font-semibold">
@@ -139,7 +158,7 @@ export function Today({ rows, dbOf, onOpen, onToggle }) {
             {g.items.map((r) => <RowItem key={r.id} row={r} db={dbOf(r)} onOpen={onOpen} onToggle={onToggle} showDb />)}
           </ul>
         </section>
-      )) : (
+      )) : !meetings.length && (
         <p className="text-muted">Für heute steht nichts an. Nichts überfällig, keine Wiedervorlage.</p>
       )}
     </View>

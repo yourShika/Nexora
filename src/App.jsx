@@ -19,7 +19,8 @@ import Search from './Search.jsx'
 import { DEFAULT_HOTKEY, bindHotkey, hotkeyLabel } from './hotkey.js'
 import { checkReminders } from './notify.js'
 import { initImages, saveImageBytes } from './images.js'
-import { describeReport, link as oneNoteLink, syncNotebook } from './onenote.js'
+import { describeReport, hash, link as oneNoteLink, syncNotebook } from './onenote.js'
+import { desiredEvents, pushDue, readEvents } from './outlook.js'
 import OneNoteConnect from './OneNote.jsx'
 import { VaultPicker, VaultUnlock, setVaultPicker, vault } from './Vault.jsx'
 import { htmlToMarkdown } from './Editor.jsx'
@@ -79,6 +80,12 @@ export default function App() {
   const [vaultAsk, setVaultAsk] = useState(null) // Entsperren offen: { status, resolve }
   const [vaultPick, setVaultPick] = useState(null) // Auswahl offen: { resolve }
   const [vaultOpen, setVaultOpen] = useState(false)
+  // Outlook: was eingeschaltet ist, letzter Abgleich; Termine nur im Speicher
+  const [outlook, setOutlook] = useState({ push: false, read: false, busy: false, last: '', error: '' })
+  const [events, setEvents] = useState([])
+  const outlookOpts = useRef(outlook)
+  outlookOpts.current = outlook
+  const outlookRunning = useRef(false)
 
   // Entsperrt? Sonst nach dem Master-Passwort fragen. false bei Abbruch oder wenn bw fehlt bzw. nicht angemeldet ist
   async function unlockVault() {
@@ -370,6 +377,59 @@ export default function App() {
   }, [tree])
 
   const dbOf = (row) => tree.alive.get(row.parent_id) ?? null
+
+  // Outlook abgleichen: Fälligkeiten in den eigenen Kalender, Termine lesen. Nur das Hauptfenster
+  const outlookSync = useCallback(async () => {
+    const { push, read } = outlookOpts.current
+    if (windowPage || outlookRunning.current || !(push || read) || !live.current) return
+    outlookRunning.current = true
+    setOutlook((o) => ({ ...o, busy: true, error: '' }))
+    try {
+      const parts = []
+      if (push) {
+        const r = await pushDue(live.current.rows, live.current.dbOf)
+        parts.push(`${r.neu} neu, ${r.geaendert} geändert, ${r.entfernt} entfernt`)
+        if (r.fehler?.length) throw new Error(r.fehler.join('; '))
+      }
+      if (read) {
+        const list = await readEvents()
+        setEvents(list)
+        parts.push(`${list.length} Termine gelesen`)
+      }
+      const at = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+      setOutlook((o) => ({ ...o, busy: false, last: `${at} Uhr: ${parts.join(', ')}` }))
+    } catch (e) {
+      setOutlook((o) => ({ ...o, busy: false, error: String(e.message ?? e) }))
+    } finally {
+      outlookRunning.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (windowPage) return
+    Promise.all([db.getSetting('outlook-push'), db.getSetting('outlook-read')])
+      .then(([push, read]) => setOutlook((o) => ({ ...o, push: push === '1', read: read === '1' })))
+      .catch(() => {})
+  }, [])
+  // Alle 15 Minuten, und 10 s nachdem sich eine Fälligkeit geändert hat (oder nach dem Einschalten)
+  const dueSignature = useMemo(
+    () => (outlook.push ? hash(JSON.stringify([...desiredEvents([...tree.alive.values()].filter((n) => n.kind === 'row'), (r) => tree.alive.get(r.parent_id) ?? null)])) : ''),
+    [tree, outlook.push],
+  )
+  useEffect(() => {
+    if (!outlook.push && !outlook.read) return setEvents([])
+    const soon = setTimeout(outlookSync, 10_000)
+    return () => clearTimeout(soon)
+  }, [dueSignature, outlook.push, outlook.read, outlookSync])
+  useEffect(() => {
+    if (!outlook.push && !outlook.read) return
+    const every = setInterval(outlookSync, 15 * 60e3)
+    return () => clearInterval(every)
+  }, [outlook.push, outlook.read, outlookSync])
+  function setOutlookOption(key, on) {
+    setOutlook((o) => ({ ...o, [key]: on }))
+    db.setSetting(`outlook-${key}`, on ? '1' : '0').catch(fail)
+  }
 
   function save(id, fields) {
     const node = tree.alive.get(id)
@@ -754,6 +814,9 @@ export default function App() {
         onBackupNow={() => doBackup(true)}
         updates={updates}
         windowMode={windowMode}
+        outlook={outlook}
+        onOutlook={setOutlookOption}
+        onOutlookSync={outlookSync}
         onWindowMode={(m) => (setWindowMode(m), db.setSetting('window-mode', m).catch(fail))}
       />
     )
@@ -763,13 +826,13 @@ export default function App() {
         <h1 className="mb-6 flex items-center gap-3 text-[32px] font-semibold leading-tight tracking-tight">
           <CalendarBlank size={28} className="text-accent" /> Kalender
         </h1>
-        <CalendarView rows={liveRows} dbOf={dbOf} field="due" hideDone onOpen={actions.open} onRow={save} onAdd={(title, props) => addRow(null, title, props)} />
+        <CalendarView rows={liveRows} dbOf={dbOf} events={events} field="due" hideDone onOpen={actions.open} onRow={save} onAdd={(title, props) => addRow(null, title, props)} />
       </div>
     )
   } else if (current === 'snippets') {
     view = <Snippets alive={tree.alive} pathOf={pathOf} onOpen={actions.open} />
   } else if (current === 'today') {
-    view = <Today rows={liveRows} dbOf={dbOf} onOpen={actions.open} onToggle={toggleRow} />
+    view = <Today rows={liveRows} dbOf={dbOf} events={events} onOpen={actions.open} onToggle={toggleRow} />
   } else if (current === 'inbox') {
     view = (
       <Inbox

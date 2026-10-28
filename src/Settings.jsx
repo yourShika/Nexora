@@ -9,6 +9,7 @@ import { deleteImages, unusedImages } from './images.js'
 import { shells } from './runner.js'
 import { useApp } from './ctx.js'
 import { vault } from './Vault.jsx'
+import { FOLDER as OUTLOOK_FOLDER } from './outlook.js'
 import { ConfirmButton } from './Overview.jsx'
 import { View } from './Rows.jsx'
 import { accelFromEvent, bindHotkey, hotkeyLabel } from './hotkey.js'
@@ -163,6 +164,35 @@ function RunbookSection() {
   )
 }
 
+// Über das installierte (klassische) Outlook; Nexora schreibt nur in den eigenen Kalender
+function OutlookSection({ state, onChange, onSync }) {
+  if (!state) return null
+  const box = (key, label) => (
+    <label className="mb-1.5 flex items-center gap-3">
+      <input type="checkbox" checked={state[key]} onChange={(e) => onChange(key, e.target.checked)} className="size-4 accent-[var(--accent)]" />
+      {label}
+    </label>
+  )
+  return (
+    <section className="mb-10">
+      <h2 className="mb-1 font-semibold">Outlook</h2>
+      <p className="mb-3 text-muted">
+        Über das installierte Outlook. Offene Punkte mit Fälligkeit kommen in einen eigenen Kalender „{OUTLOOK_FOLDER}“ in deinem Postfach
+        (ohne Erinnerung, als „frei“); erledigte verschwinden dort wieder, andere Kalender fasst Nexora nicht an. Outlook-Termine erscheinen in Heute und im Kalender,
+        nur angezeigt, nicht gespeichert. Abgleich alle 15 Minuten und kurz nach Änderungen.
+      </p>
+      {box('push', `Fälligkeiten in den Outlook-Kalender „${OUTLOOK_FOLDER}“`)}
+      {box('read', import.meta.env.DEV ? 'Termine anzeigen (Testversion: nur aus „Nexora-Test“)' : 'Outlook-Termine in Nexora anzeigen')}
+      <div className="mt-3 flex items-center gap-3">
+        <button disabled={state.busy || !(state.push || state.read)} onClick={onSync} className="rounded-md border border-line px-3 py-1.5 hover:bg-hover disabled:opacity-50">
+          {state.busy ? 'Gleicht ab …' : 'Jetzt abgleichen'}
+        </button>
+        {state.error ? <span className="text-sm text-danger">{state.error}</span> : <span className="text-sm text-muted">{state.last}</span>}
+      </div>
+    </section>
+  )
+}
+
 const VAULT_MINUTES = [['5', '5 Minuten'], ['15', '15 Minuten'], ['60', '1 Stunde'], ['0', 'Erst beim Beenden']]
 
 // Tresor über die Bitwarden-CLI: Anmelden einmal im Terminal, Nexora entsperrt nur
@@ -247,7 +277,7 @@ function UpdateSection({ updates }) {
 
 const WINDOW_MODES = [['never', 'Nie'], ['ctrl', 'Mit Strg+Klick'], ['always', 'Immer']]
 
-export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBackupNow, updates, windowMode, onWindowMode }) {
+export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBackupNow, updates, windowMode, onWindowMode, outlook, onOutlook, onOutlookSync }) {
   const [recording, setRecording] = useState(false)
   const [message, setMessage] = useState('')
   const [theme, setTheme] = useState(getTheme)
@@ -376,6 +406,8 @@ export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBack
           ))}
         </div>
       </section>
+
+      <OutlookSection state={outlook} onChange={onOutlook} onSync={onOutlookSync} />
 
       <VaultSection />
 

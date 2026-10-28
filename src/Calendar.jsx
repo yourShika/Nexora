@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react'
 import { CaretLeft, CaretRight, Plus } from '@phosphor-icons/react'
 import { CHIP_COLORS, addDays, dayOf, fieldsOf, isDone, iso, option, statusField, timeOf, today } from './fields.js'
 import { parseQuick } from './quick.js'
+import { eventDays, eventTime } from './outlook.js'
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
 // Monatsansicht: Punkte nach einem Datumsfeld, Ziehen verschiebt den Termin, "+" legt am Tag an
-export default function CalendarView({ rows, dbOf, field = 'due', onOpen, onRow, onAdd, hideDone, header }) {
+export default function CalendarView({ rows, dbOf, events = [], field = 'due', onOpen, onRow, onAdd, hideDone, header }) {
   const [month, setMonth] = useState(() => today().slice(0, 7))
   const [adding, setAdding] = useState(null)
   const [open, setOpen] = useState(null)
@@ -31,6 +32,13 @@ export default function CalendarView({ rows, dbOf, field = 'due', onOpen, onRow,
     for (const list of map.values()) list.sort((a, b) => at(a).localeCompare(at(b)))
     return map
   }, [rows, field, hideDone, dbOf])
+
+  // Outlook-Termine je Tag (nur Anzeige)
+  const eventsByDay = useMemo(() => {
+    const map = new Map()
+    for (const e of events) for (const d of eventDays(e)) map.set(d, [...(map.get(d) ?? []), e])
+    return map
+  }, [events])
 
   const shift = (n) => {
     const d = new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 1 + n, 1)
@@ -61,9 +69,12 @@ export default function CalendarView({ rows, dbOf, field = 'due', onOpen, onRow,
       <div className="grid grid-cols-7 overflow-hidden rounded-lg border border-line">
         {WEEKDAYS.map((d) => <div key={d} className="border-b border-line bg-side px-2 py-1 text-xs font-medium text-muted">{d}</div>)}
         {days.map((day, i) => {
+          const meetings = eventsByDay.get(day) ?? []
           const items = byDay.get(day) ?? []
           const expanded = open === day
-          const shown = expanded ? items : items.slice(0, 3)
+          // Termine zählen bei "weitere" mit
+          const room = Math.max(0, 3 - meetings.length)
+          const shown = expanded ? items : items.slice(0, room)
           return (
             <div
               key={day}
@@ -83,6 +94,12 @@ export default function CalendarView({ rows, dbOf, field = 'due', onOpen, onRow,
                 )}
               </div>
               <ul className="space-y-0.5">
+                {(expanded ? meetings : meetings.slice(0, 3)).map((e) => (
+                  <li key={e.id} title={`${eventTime(e)} ${e.subject}${e.location ? ` (${e.location})` : ''} · Outlook`} className="truncate rounded bg-hover px-1.5 py-0.5 text-xs text-muted">
+                    {!e.allDay && <span className="mr-1 text-faint">{e.start.slice(11, 16)}</span>}
+                    {e.subject}
+                  </li>
+                ))}
                 {shown.map((r) => {
                   const db = dbOf(r)
                   const o = option(statusField(fieldsOf(db)), r.props?.status)
@@ -104,9 +121,9 @@ export default function CalendarView({ rows, dbOf, field = 'due', onOpen, onRow,
                   )
                 })}
               </ul>
-              {items.length > 3 && (
+              {items.length + meetings.length > 3 && (
                 <button onClick={() => setOpen(expanded ? null : day)} className="mt-0.5 px-1 text-xs text-muted hover:text-text">
-                  {expanded ? 'weniger' : `+${items.length - 3} weitere`}
+                  {expanded ? 'weniger' : `+${items.length + meetings.length - 3} weitere`}
                 </button>
               )}
               {adding === day && (
