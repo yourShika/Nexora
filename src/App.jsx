@@ -19,7 +19,9 @@ import { initImages } from './images.js'
 import { loadBackupSettings, maybeBackup, runBackup } from './backup.js'
 import { findUpdate, installUpdate } from './updates.js'
 import { applyTheme } from './theme.js'
-import { dayOf, describe, emptyConfig, fieldsOf, isDone, lopConfig, statusField, today, toggleDone } from './fields.js'
+import { dayOf, daysBetween, describe, emptyConfig, fieldsOf, formatDate, isDone, lopConfig, nextDate, shiftDate, statusField, today, toggleDone } from './fields.js'
+import CalendarView from './Calendar.jsx'
+import { CalendarBlank } from '@phosphor-icons/react'
 import { parseQuick } from './quick.js'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { buildExport, decodeText, importedPage } from './io.js'
@@ -228,9 +230,32 @@ export default function App() {
 
   function save(id, fields) {
     const node = tree.alive.get(id)
-    if (node?.kind === 'row' && fields.props) logChanges(node, fields.props)
+    if (node?.kind === 'row' && fields.props) {
+      logChanges(node, fields.props)
+      repeatIfDone(node, fields.props)
+    }
     patch(id, { ...fields, updated_at: new Date().toISOString() })
     db.update(id, fields).catch(fail)
+  }
+
+  // Wiederkehrender Punkt wird erledigt: nächsten Termin als neuen Punkt anlegen.
+  // Fällig, Beginn und Wiedervorlage rücken um denselben Abstand weiter, der Inhalt wird übernommen.
+  async function repeatIfDone(row, props) {
+    const fs = fieldsOf(dbOf(row))
+    if (!props.repeat || isDone(row, fs) || !isDone({ props }, fs)) return
+    const base = dayOf(props.due) ?? today()
+    const next = nextDate(base, props.repeat)
+    const delta = daysBetween(base, next)
+    const copy = { ...props, due: props.due ? shiftDate(props.due, delta) : next }
+    for (const k of ['start', 'followup']) if (copy[k]) copy[k] = shiftDate(copy[k], delta)
+    const sf = statusField(fs)
+    if (sf) copy[sf.id] = sf.options.find((o) => !o.done)?.id ?? null
+    delete copy.nr
+    const created = await addRow(row.parent_id, row.title, copy)
+    if (!created) return
+    await db.update(created.id, { body: await db.loadBody(row.id) }).catch(() => {})
+    db.addActivity(row.id, 'change', `Wiederholung: nächster Termin ${formatDate(copy.due)} angelegt`).catch(() => {})
+    setNotice(`Nächster Termin angelegt: ${formatDate(copy.due)}`)
   }
 
   // Verlauf je Punkt: jede geänderte Eigenschaft als "Status: Offen → Wartet"
@@ -270,6 +295,7 @@ export default function App() {
       const node = await db.create('row', parentId, title, { props: full })
       setNodes((ns) => [...ns, node])
       if (open) actions.open(node.id), setFresh(node.id)
+      return node
     } catch (e) {
       fail(e)
     }
@@ -396,7 +422,7 @@ export default function App() {
     open(id) {
       setCurrent(id)
       setFresh(null)
-      if (!['trash', 'today', 'inbox', 'settings', 'snippets'].includes(id)) {
+      if (!['trash', 'today', 'inbox', 'settings', 'snippets', 'calendar'].includes(id)) {
         db.touch(id).catch(() => {})
         const node = tree.alive.get(id)
         setExpanded((s) => new Set([...s, ...pathOf(id).slice(0, -1).map((n) => n.id), ...(['notebook', 'section'].includes(node?.kind) ? [id] : [])]))
@@ -480,6 +506,7 @@ export default function App() {
   const commands = [
     { label: 'Heute', run: () => actions.open('today') },
     { label: 'Eingang', run: () => actions.open('inbox') },
+    { label: 'Kalender', run: () => actions.open('calendar') },
     { label: 'Snippets', run: () => actions.open('snippets') },
     { label: 'Schnellerfassung', run: () => invoke('toggle_capture') },
     { label: 'Neues Notizbuch', run: () => actions.add('notebook', null) },
@@ -525,6 +552,15 @@ export default function App() {
         onBackupNow={() => doBackup(true)}
         updates={updates}
       />
+    )
+  } else if (current === 'calendar') {
+    view = (
+      <div className="h-full overflow-y-auto px-6 pb-24 pt-14 md:px-12">
+        <h1 className="mb-6 flex items-center gap-3 text-[32px] font-semibold leading-tight tracking-tight">
+          <CalendarBlank size={28} className="text-accent" /> Kalender
+        </h1>
+        <CalendarView rows={liveRows} dbOf={dbOf} field="due" hideDone onOpen={actions.open} onRow={save} onAdd={(title, props) => addRow(null, title, props)} />
+      </div>
     )
   } else if (current === 'snippets') {
     view = <Snippets alive={tree.alive} pathOf={pathOf} onOpen={actions.open} />

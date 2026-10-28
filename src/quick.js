@@ -8,6 +8,8 @@ const WEEKDAYS = {
   mo: 1, di: 2, mi: 3, do: 4, fr: 5, sa: 6,
 }
 const PRIO = { hoch: 'hoch', h: 'hoch', 1: 'hoch', mittel: 'mittel', m: 'mittel', 2: 'mittel', niedrig: 'niedrig', n: 'niedrig', 3: 'niedrig' }
+// *monatlich usw. -> Wiederholung (Kürzel wie in REPEATS)
+const REPEAT = { täglich: 'd1', woechentlich: 'w1', wöchentlich: 'w1', '14tägig': 'w2', zweiwöchentlich: 'w2', monatlich: 'm1', quartal: 'm3', vierteljährlich: 'm3', jährlich: 'y1' }
 
 const addDays = (now, n) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + n)
 
@@ -53,6 +55,7 @@ export function parseQuick(text, now = new Date()) {
     if (/^#[\p{L}\p{N}_-]+$/u.test(t)) { tags.push(t.slice(1)); continue }
     if (/^@[\p{L}\p{N}._-]+$/u.test(t)) { props.person = t.slice(1); continue }
     if (/^!/.test(t) && PRIO[t.slice(1).toLowerCase()]) { props.prio = PRIO[t.slice(1).toLowerCase()]; continue }
+    if (t.startsWith('*') && REPEAT[t.slice(1).toLowerCase()]) { props.repeat = REPEAT[t.slice(1).toLowerCase()]; continue }
     if (/^nächste$/i.test(t) && /^woche$/i.test(tokens[i + 1] ?? '')) {
       props.due = iso(addDays(now, ((1 - now.getDay() + 7) % 7) || 7))
       i++

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowSquareOut, Check, X } from '@phosphor-icons/react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import Menu, { MenuItem } from './Menu.jsx'
-import { CHIP_COLORS, dayOf, formatDate, formatNr, isLate, isToday, option, timeOf } from './fields.js'
+import { CHIP_COLORS, REPEATS, dayOf, formatDate, formatNr, isLate, isToday, option, timeOf } from './fields.js'
+import { useApp } from './ctx.js'
 
 export function Chip({ color = 'grau', children }) {
   const hex = CHIP_COLORS[color] ?? CHIP_COLORS.grau
@@ -24,9 +25,26 @@ export function DateText({ value, done, size = 'text-xs' }) {
 }
 
 // Kompakte Anzeige (Listen, Karten)
+const REPEAT_OPTIONS = Object.entries(REPEATS).map(([id, name]) => ({ id, name, color: 'petrol' }))
+
+// Andere Punkte derselben Liste als Auswahl für "Abhängig von"
+function depOptions(app, db, rowId) {
+  return (db ? app?.rowsOf(db.id) ?? [] : [])
+    .filter((r) => r.id !== rowId)
+    .map((r) => ({ id: r.id, name: `${formatNr(db, r.props?.nr)} ${r.title || 'Ohne Titel'}`.trim(), color: 'grau' }))
+}
+
 export function FieldValue({ field, value, db, done }) {
+  const app = useApp()
   if (value == null || value === '' || (Array.isArray(value) && !value.length)) return null
   switch (field.type) {
+    case 'repeat':
+      return <Chip color="petrol">↻ {REPEATS[value] ?? value}</Chip>
+    case 'deps':
+      return value.map((id) => {
+        const r = app?.alive.get(id)
+        return r ? <Chip key={id}>nach {formatNr(db, r.props?.nr) || r.title}</Chip> : null
+      })
     case 'status':
     case 'select': {
       const o = option(field, value)
@@ -53,9 +71,14 @@ export function FieldValue({ field, value, db, done }) {
 const inputCls = 'w-full min-w-0 rounded bg-transparent px-1.5 py-1 outline-none hover:bg-hover focus:bg-raised focus:ring-1 focus:ring-accent'
 
 // Bearbeiten in Tabelle und Eigenschaftenfeld; onChange(wert) speichert sofort
-export function FieldEditor({ field, value, db, onChange, onAddOption, withTime }) {
+export function FieldEditor({ field, value, db, onChange, onAddOption, withTime, rowId }) {
   const [menu, setMenu] = useState(null)
+  const app = useApp()
   const open = (e) => setMenu({ x: e.currentTarget.getBoundingClientRect().left, y: e.currentTarget.getBoundingClientRect().bottom + 4 })
+
+  // Wiederholung und Abhängigkeit nutzen die Auswahl-Bedienung mit eigenen Optionen
+  if (field.type === 'repeat') return <FieldEditor field={{ ...field, type: 'select', options: REPEAT_OPTIONS }} value={value} db={db} onChange={onChange} />
+  if (field.type === 'deps') return <FieldEditor field={{ ...field, type: 'multi', plain: true, options: depOptions(app, db, rowId) }} value={value} db={db} onChange={onChange} />
 
   switch (field.type) {
     case 'nr':
@@ -82,7 +105,7 @@ export function FieldEditor({ field, value, db, onChange, onAddOption, withTime 
           <button onClick={open} aria-label={field.name} className="flex min-h-7 w-full flex-wrap items-center gap-1 rounded px-1.5 py-1 text-left hover:bg-hover">
             {values.length ? values.map((v) => {
               const o = option(field, v)
-              return <Chip key={v} color={o.color}>{multi ? `#${o.name}` : o.name}</Chip>
+              return <Chip key={v} color={o.color}>{multi && !field.plain ? `#${o.name}` : o.name}</Chip>
             }) : <span className="text-faint">–</span>}
           </button>
           {menu && (
@@ -90,7 +113,7 @@ export function FieldEditor({ field, value, db, onChange, onAddOption, withTime 
               {(field.options ?? []).map((o) => (
                 <MenuItem key={o.id} onClick={() => pick(o.id)}>
                   <span className="flex flex-1 items-center justify-between gap-3">
-                    <Chip color={o.color}>{multi ? `#${o.name}` : o.name}</Chip>
+                    <Chip color={o.color}>{multi && !field.plain ? `#${o.name}` : o.name}</Chip>
                     {values.includes(o.id) && <Check size={14} />}
                   </span>
                 </MenuItem>
@@ -213,6 +236,7 @@ export function PropsPanel({ fields, row, db, onProps, onAddOption }) {
               db={db}
               onChange={(v) => onProps({ ...row.props, [f.id]: v })}
               onAddOption={onAddOption && ((name) => onAddOption(f.id, name))}
+              rowId={row.id}
               withTime
             />
           </dd>

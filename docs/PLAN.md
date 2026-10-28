@@ -76,7 +76,8 @@ Die neuen Nummern 52–71 werden beim Bau der passenden Stufe eingeordnet.
 - **0.8.0 (Stufe 2, Teil Verzahnung):** Seitenlinks mit `[[` (`[[Titel|id]]`, zeigt immer den aktuellen Titel) und Rückverweise unter dem Titel (19); LOP-Liste in Seite einbetten `[[lop:id]]` mit Anlegen und Abhaken (10, deckt 9 ab); Verlauf je Punkt mit Feldänderungen und Kommentaren (11); Vorlagen mit `{{Datum}}` (20); Checkliste als LOP-Punkte mit Stichtag und `-3`/`+2` (53); flüssigere Animationen
 - **0.8.1:** zusätzlich MSI-Installer (GPO/Intune), getrennte Update-Kanäle für exe und msi
 - **0.9.0 (Stufe 2 fertig):** Anhänge per Ziehen, Einfügen oder `/` „Datei anhängen“ (`[[datei:uuid/Name|Bytes]]`, ausführbare Dateien nur „im Ordner zeigen“) (28); .txt/.md/.log importieren per Rechtsklick oder Ziehen auf den Baum, alte ANSI-Dateien werden erkannt (26); Markdown-Export eines Zweigs oder von allem, mit Bildern, Anhängen und relativen Links (46); Sicherung nimmt Anhänge mit
-- Als Nächstes Stufe 3 (Freie Seiten und Planung)
+- **0.10.0 (Stufe 3, Teil Planung):** Kalender als Ansicht jeder Liste und über alle Listen (Seitenleiste), Ziehen verschiebt Termine, „+“ legt am Tag an; Zeitleiste (Gantt) mit Beginn bis Fällig, Ziehen und Ränder ziehen, Zoom Tage/Wochen/Monate; Abhängigkeiten (54) mit Pfeilen, rot bei Konflikt; wiederkehrende Punkte (13) mit `*monatlich` usw., beim Abhaken entsteht der nächste Termin
+- Rest von Stufe 3: Freie Seite (31), Zeichnen (30), Texterkennung (29), eigene Fenster (21)
 
 ## Offen
 

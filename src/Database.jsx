@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { ArrowSquareOut, Kanban, ListBullets, Plus, SlidersHorizontal, SortAscending, SortDescending, Table, X } from '@phosphor-icons/react'
+import { ArrowSquareOut, CalendarBlank, ChartBarHorizontal, Kanban, ListBullets, Plus, SlidersHorizontal, SortAscending, SortDescending, Table, X } from '@phosphor-icons/react'
 import { Chip, FieldEditor, FieldValue } from './Props.jsx'
 import { QuickAdd, RowItem } from './Rows.jsx'
 import { ConfirmButton } from './Overview.jsx'
 import { Cover, IconRow } from './PageHead.jsx'
+import CalendarView from './Calendar.jsx'
+import TimelineView from './Timeline.jsx'
 import { CHIP_COLORS, TYPES, isDone, newId, statusField } from './fields.js'
 
 const TITLE = { id: 'title', name: 'Titel', type: 'title' }
@@ -12,6 +14,8 @@ const VIEWS = [
   { id: 'table', label: 'Tabelle', icon: Table },
   { id: 'list', label: 'Liste', icon: ListBullets },
   { id: 'kanban', label: 'Kanban', icon: Kanban },
+  { id: 'calendar', label: 'Kalender', icon: CalendarBlank },
+  { id: 'timeline', label: 'Zeitleiste', icon: ChartBarHorizontal },
 ]
 
 function sortRows(rows, fields, sort) {
@@ -52,6 +56,7 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
 
   const visible = sortRows(config.hideDone && config.view !== 'kanban' ? rows.filter((r) => !isDone(r, fields)) : rows, fields, config.sort)
   const hasStatus = !!statusField(fields)
+  const dateFields = fields.filter((f) => f.type === 'date')
 
   return (
     <div className="flex h-full">
@@ -106,6 +111,23 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
               ? <KanbanView db={db} rows={visible} fields={fields} onOpen={onOpen} onRow={onRow} />
               : <p className="text-muted">Kanban braucht ein Feld vom Typ Status. Lege es unter „Felder“ an.</p>
           )}
+          {config.view === 'calendar' && (
+            <CalendarView
+              rows={rows}
+              dbOf={() => db}
+              field={dateFields.some((f) => f.id === config.calendarField) ? config.calendarField : dateFields[0]?.id ?? 'due'}
+              hideDone={config.hideDone}
+              onOpen={onOpen}
+              onRow={onRow}
+              onAdd={onAdd}
+              header={dateFields.length > 1 && (
+                <select value={config.calendarField ?? dateFields[0].id} onChange={(e) => setConfig({ calendarField: e.target.value })} aria-label="Datumsfeld" className="rounded-md border border-line bg-raised px-2 py-1">
+                  {dateFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              )}
+            />
+          )}
+          {config.view === 'timeline' && <TimelineView db={db} rows={visible} fields={fields} config={config} onConfig={onConfig} onRow={onRow} onOpen={onOpen} />}
           {!rows.length && <p className="mt-2 text-muted">Noch keine Punkte. Tippe oben einen ein und drücke Enter.</p>}
         </div>
       </div>
@@ -148,6 +170,7 @@ function TableView({ db, rows, fields, sort, onSort, onOpen, onRow, addOption })
                       db={db}
                       onChange={(v) => onRow(r.id, { props: { ...r.props, [c.id]: v } })}
                       onAddOption={(name) => addOption(c.id, name)}
+                      rowId={r.id}
                     />
                   )}
                 </td>
@@ -265,7 +288,8 @@ function FieldsPanel({ config, onConfig, onClose }) {
 
   function add() {
     if (!name.trim()) return
-    const f = { id: newId(), name: name.trim(), type }
+    // feste IDs, weil Wiederholung und Zeitleiste genau diese Felder lesen
+    const f = { id: { repeat: 'repeat', deps: 'after' }[type] ?? newId(), name: name.trim(), type }
     if (['select', 'multi', 'status'].includes(type)) {
       f.options = type === 'status'
         ? [{ id: newId(), name: 'Offen', color: 'grau' }, { id: newId(), name: 'Erledigt', color: 'gruen', done: true }]
@@ -313,7 +337,7 @@ function FieldsPanel({ config, onConfig, onClose }) {
           <div className="flex gap-2">
             <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Typ" className="flex-1 rounded-md border border-line bg-bg px-2 py-1">
               {Object.entries(TYPES)
-                .filter(([t]) => !(['nr', 'status'].includes(t) && hasType(t)))
+                .filter(([t]) => !(['nr', 'status', 'repeat', 'deps'].includes(t) && hasType(t)))
                 .map(([t, label]) => <option key={t} value={t}>{label}</option>)}
             </select>
             <button onClick={add} className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 font-medium text-white dark:text-bg">
