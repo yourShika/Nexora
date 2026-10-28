@@ -189,7 +189,9 @@ function UpdateSection({ updates }) {
   )
 }
 
-export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBackupNow, updates }) {
+const WINDOW_MODES = [['never', 'Nie'], ['ctrl', 'Mit Strg+Klick'], ['always', 'Immer']]
+
+export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBackupNow, updates, windowMode, onWindowMode }) {
   const [recording, setRecording] = useState(false)
   const [message, setMessage] = useState('')
   const [theme, setTheme] = useState(getTheme)
@@ -293,6 +295,27 @@ export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBack
               className={`flex items-center gap-2 rounded-md border px-3 py-2 ${theme === t.id ? 'border-accent bg-accent-soft' : 'border-line bg-raised hover:border-faint'}`}
             >
               <t.icon size={16} /> {t.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="mb-1 font-semibold">Fenster</h2>
+        <p className="mb-3 text-muted">
+          Wann ein Klick auf eine Seite oder einen Punkt ein eigenes Fenster öffnet. Über Rechtsklick und das „…“-Menü geht es immer.
+          Offene Fenster kommen beim nächsten Start an derselben Stelle wieder.
+        </p>
+        <div role="radiogroup" aria-label="Seite in eigenem Fenster öffnen" className="flex flex-wrap gap-2">
+          {WINDOW_MODES.map(([id, name]) => (
+            <button
+              key={id}
+              role="radio"
+              aria-checked={windowMode === id}
+              onClick={() => onWindowMode(id)}
+              className={`rounded-md border px-3 py-2 ${windowMode === id ? 'border-accent bg-accent-soft' : 'border-line bg-raised hover:border-faint'}`}
+            >
+              {name}
             </button>
           ))}
         </div>

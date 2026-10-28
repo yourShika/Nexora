@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Article, ArrowBendDownRight, ClockCounterClockwise, DotsThree, FrameCorners, ListChecks, LockSimple, LockSimpleOpen, Stamp, Star, Trash, WarningCircle } from '@phosphor-icons/react'
+import { AppWindow, Article, ArrowBendDownRight, ArrowSquareIn, ClockCounterClockwise, DotsThree, FrameCorners, ListChecks, LockSimple, LockSimpleOpen, PushPin, Stamp, Star, Trash, WarningCircle } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { NodeIcon } from './Sidebar.jsx'
 import { useApp } from './ctx.js'
@@ -13,7 +13,7 @@ import { hasInk, isFree, toFlow, toFree } from './free.js'
 import { IconButton } from './Sidebar.jsx'
 import { PropsPanel } from './Props.jsx'
 
-export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove, fields, db: parentDb, onAddOption }) {
+export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove, fields, db: parentDb, onAddOption, flushRef, onWindow, windowed }) {
   const [body, setBody] = useState(null)
   const [loadError, setLoadError] = useState(false)
   const [title, setTitle] = useState(node.title)
@@ -62,6 +62,8 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
   }, [node.id, flush])
 
   const onReady = useCallback((e) => (editor.current = e), [])
+  // Seitenfenster speichert vor dem Schließen
+  if (flushRef) flushRef.current = flush
 
   // Inhalt ersetzen (alte Fassung, Umwandeln): jetzigen Stand vorher sichern, dann Editor neu aufbauen
   async function replace(next) {
@@ -103,6 +105,11 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
         </IconButton>
         {node.locked ? <LockSimple size={16} weight="fill" className="text-accent" aria-label="Gesperrt" /> : null}
         {node.template ? <span className="rounded bg-accent-soft px-1.5 py-0.5 text-xs text-accent">Vorlage</span> : null}
+        {windowed && (
+          <IconButton label={windowed.pinned ? 'Nicht mehr im Vordergrund' : 'Immer im Vordergrund'} onClick={windowed.onPin}>
+            <PushPin size={16} weight={windowed.pinned ? 'fill' : 'regular'} className={windowed.pinned ? 'text-accent' : ''} />
+          </IconButton>
+        )}
         <IconButton label="Verlauf" onClick={() => (flush(), setHistory(!history))}>
           <ClockCounterClockwise size={16} className={history ? 'text-accent' : ''} />
         </IconButton>
@@ -111,6 +118,8 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
         </IconButton>
         {menu && (
           <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+            {onWindow && <MenuItem icon={AppWindow} onClick={() => (flush(), setMenu(null), onWindow())}>In eigenem Fenster öffnen</MenuItem>}
+            {windowed && <MenuItem icon={ArrowSquareIn} onClick={() => (setMenu(null), windowed.onMain())}>Im Hauptfenster öffnen</MenuItem>}
             <MenuItem icon={node.locked ? LockSimpleOpen : LockSimple} onClick={() => (flush(), setMenu(null), onSave(node.id, { locked: node.locked ? 0 : 1 }))}>
               {node.locked ? 'Seite entsperren' : 'Seite sperren'}
             </MenuItem>

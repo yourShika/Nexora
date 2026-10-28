@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import {
-  ArrowCircleUp, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
+  AppWindow, ArrowCircleUp, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
   Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
@@ -136,6 +136,7 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
 
       {menu && (
         <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+          {m.kind === 'page' && <MenuItem icon={AppWindow} onClick={run(() => actions.openWindow(m.id))}>In eigenem Fenster öffnen</MenuItem>}
           <MenuItem icon={Plus} onClick={run(() => actions.add(CHILD[m.kind], m.id))}>{NEW_LABEL[m.kind]}</MenuItem>
           {['section', 'page'].includes(m.kind) && (
             <>

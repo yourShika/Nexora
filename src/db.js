@@ -1,8 +1,13 @@
 import Database from '@tauri-apps/plugin-sql'
+import { emit } from '@tauri-apps/api/event'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 
 let conn
 const db = async () => (conn ??= await Database.load('sqlite:nexora.db'))
 const now = () => new Date().toISOString()
+// Andere Fenster laden den Baum neu; reiner Seiteninhalt betrifft nur das Fenster, das ihn bearbeitet
+const from = getCurrentWindow().label
+const changed = () => emit('nodes-changed', { from }).catch(() => {})
 
 // Nur diese Spalten dürfen über update() geschrieben werden
 const FIELDS = new Set(['title', 'icon', 'color', 'cover', 'locked', 'template', 'body', 'props', 'config', 'favorite', 'parent_id', 'sort', 'deleted_at'])
@@ -42,6 +47,7 @@ export async function create(kind, parentId, title = '', extra = {}) {
     'INSERT INTO nodes (id, parent_id, kind, title, props, config, sort, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)',
     [node.id, node.parent_id, node.kind, node.title, encode('props', node.props), encode('config', node.config), node.sort, stamp],
   )
+  changed()
   return node
 }
 
@@ -53,6 +59,7 @@ export async function update(id, fields) {
     `UPDATE nodes SET ${sets}, updated_at = $${keys.length + 1} WHERE id = $${keys.length + 2}`,
     [...keys.map((k) => encode(k, fields[k])), now(), id],
   )
+  if (keys.some((k) => k !== 'body')) changed()
 }
 
 // Öffnen zählt nicht als Änderung, darum ohne updated_at
@@ -133,6 +140,14 @@ export async function pagesWithCode() {
 export async function getSetting(key) {
   const [row] = await (await db()).select('SELECT value FROM settings WHERE key = $1', [key])
   return row?.value ?? null
+}
+
+export async function settingsLike(prefix) {
+  return (await db()).select('SELECT key, value FROM settings WHERE substr(key, 1, length($1)) = $1', [prefix])
+}
+
+export async function deleteSetting(key) {
+  await (await db()).execute('DELETE FROM settings WHERE key = $1', [key])
 }
 
 export async function setSetting(key, value) {

@@ -154,9 +154,12 @@ pub fn run() {
                 .build(app)?;
             Ok(())
         })
-        // Schließen versteckt nur ins Tray, beenden geht über das Tray-Menü
+        // Haupt- und Schnellerfassungsfenster verstecken sich beim Schließen nur (Beenden über das Tray); Seitenfenster schließen wirklich
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
+                if !matches!(window.label(), "main" | "capture") {
+                    return;
+                }
                 api.prevent_close();
                 let _ = window.hide();
             }

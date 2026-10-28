@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { enable as enableAutostart } from '@tauri-apps/plugin-autostart'
-import { listen } from '@tauri-apps/api/event'
+import { emitTo, listen } from '@tauri-apps/api/event'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
-import { X } from '@phosphor-icons/react'
+import { AppWindow, X } from '@phosphor-icons/react'
+import { closeWindow, label, openWindow as openPageWindow, restoreWindows, windowKey, windowPage } from './windows.js'
 import * as db from './db.js'
 import { CANVAS } from './free.js'
 import Sidebar from './Sidebar.jsx'
@@ -79,10 +81,89 @@ export default function App() {
   const [backup, setBackup] = useState({ busy: false, error: '', dest: '' })
   const [update, setUpdate] = useState({ found: null, busy: false, error: '' })
   const live = useRef(null)
+  // Seiten, die gerade in eigenen Fenstern offen sind (nur im Hauptfenster gepflegt)
+  const [windows, setWindows] = useState(() => new Set())
+  const [windowMode, setWindowMode] = useState('ctrl')
+  const [pinned, setPinned] = useState(false)
+  const pinnedRef = useRef(false)
+  const storeWindow = useRef(() => {})
+  const flushRef = useRef(null)
+  const modifier = useRef(false)
+  const openHereRef = useRef(null)
+
+  // Strg beim letzten Klick oder Tastendruck: entscheidet bei "Strg+Klick", ob eine Seite ein eigenes Fenster bekommt
+  useEffect(() => {
+    const note = (e) => (modifier.current = e.ctrlKey || e.metaKey)
+    for (const t of ['pointerdown', 'keydown', 'keyup']) document.addEventListener(t, note, true)
+    return () => {
+      for (const t of ['pointerdown', 'keydown', 'keyup']) document.removeEventListener(t, note, true)
+    }
+  }, [])
+
+  // Hauptfenster: Seitenfenster melden sich beim Schließen ab und schicken Links hierher
+  useEffect(() => {
+    if (windowPage) return
+    db.getSetting('window-mode').then((m) => m && setWindowMode(m)).catch(() => {})
+    const offs = [
+      listen('window-closed', (e) => setWindows((s) => new Set([...s].filter((id) => id !== e.payload)))),
+      listen('open-page', (e) => {
+        openHereRef.current?.(e.payload)
+        const w = getCurrentWindow()
+        w.unminimize().then(() => w.show()).then(() => w.setFocus()).catch(() => {})
+      }),
+    ]
+    return () => offs.forEach((p) => p.then((off) => off()))
+  }, [])
+
+  // Seitenfenster: Position, Größe und Pin merken; beim Schließen erst speichern, dann abmelden
+  useEffect(() => {
+    if (!windowPage) return
+    const win = getCurrentWindow()
+    const key = windowKey(windowPage)
+    let timer
+    let closing = false
+    const store = async () => {
+      if (closing || (await win.isMinimized()) || (await win.isMaximized())) return
+      const f = await win.scaleFactor()
+      const pos = (await win.outerPosition()).toLogical(f)
+      const size = (await win.innerSize()).toLogical(f)
+      const geo = { x: Math.round(pos.x), y: Math.round(pos.y), w: Math.round(size.width), h: Math.round(size.height), pin: pinnedRef.current }
+      if (!closing) await db.setSetting(key, JSON.stringify(geo))
+    }
+    storeWindow.current = () => store().catch(() => {})
+    db.getSetting(key)
+      .then((saved) => {
+        pinnedRef.current = !!JSON.parse(saved ?? '{}').pin
+        setPinned(pinnedRef.current)
+      })
+      .catch(() => {})
+      .then(storeWindow.current)
+    const later = () => (clearTimeout(timer), (timer = setTimeout(storeWindow.current, 400)))
+    const offs = [
+      win.onMoved(later),
+      win.onResized(later),
+      win.onCloseRequested(async () => {
+        closing = true
+        clearTimeout(timer)
+        await flushRef.current?.()
+        await db.deleteSetting(key).catch(() => {})
+        await emitTo('main', 'window-closed', windowPage).catch(() => {})
+      }),
+    ]
+    return () => (clearTimeout(timer), offs.forEach((p) => p.then((off) => off())))
+  }, [])
+
+  async function togglePin() {
+    const next = !pinnedRef.current
+    await getCurrentWindow().setAlwaysOnTop(next)
+    pinnedRef.current = next
+    setPinned(next)
+    storeWindow.current()
+  }
 
   // Im fertigen Programm kurz nach dem Start und dann alle 6 Stunden nach Updates sehen; Fehler (offline) still
   useEffect(() => {
-    if (!import.meta.env.PROD) return
+    if (!import.meta.env.PROD || windowPage) return
     const look = () => findUpdate().then((found) => found && setUpdate((u) => ({ ...u, found }))).catch(() => {})
     const first = setTimeout(look, 10_000)
     const timer = setInterval(look, 6 * 3600e3)
@@ -138,7 +219,7 @@ export default function App() {
   // Erinnerungen prüfen: gleich nach dem Laden, dann alle 30 s (live hält den aktuellen Stand)
   const loaded = nodes !== null
   useEffect(() => {
-    if (!loaded) return
+    if (!loaded || windowPage) return
     const run = () => {
       if (live.current) checkReminders(live.current.rows, live.current.dbOf).catch(() => {})
       doBackup(false)
@@ -150,7 +231,7 @@ export default function App() {
 
   // Im fertigen Programm beim ersten Start Autostart einschalten (so gewünscht); im Testmodus nie
   useEffect(() => {
-    if (!import.meta.env.PROD) return
+    if (!import.meta.env.PROD || windowPage) return
     db.getSetting('autostart-init')
       .then((done) => !done && enableAutostart().then(() => db.setSetting('autostart-init', '1')))
       .catch(() => {})
@@ -158,6 +239,7 @@ export default function App() {
 
   // Gespeicherte Tastenkombination binden; belegt ein anderes Programm sie, Hinweis statt Absturz
   useEffect(() => {
+    if (windowPage) return
     db.getSetting('hotkey')
       .catch(() => null)
       .then(async (saved) => {
@@ -174,6 +256,16 @@ export default function App() {
   const reload = useCallback(() => db.allNodes().then(setNodes).catch((e) => setError(`Datenbank nicht erreichbar: ${e}`)), [])
 
   useEffect(() => {
+    // Seitenfenster: nur Daten laden; Aufräumen, Beispieldaten und Wiederherstellen macht das Hauptfenster
+    const off = listen('nodes-changed', (e) => e.payload?.from !== label && reload())
+    if (windowPage) {
+      initImages()
+        .catch(() => {})
+        .then(db.allNodes)
+        .then((all) => (setNodes(all), setCurrent(windowPage)))
+        .catch((e) => setError(`Datenbank nicht erreichbar: ${e}`))
+      return () => off.then((f) => f())
+    }
     initImages()
       .then(db.purgeOld)
       .catch(() => {})
@@ -190,14 +282,19 @@ export default function App() {
         const up = []
         for (let n = byId.get(start?.parent_id); n; n = byId.get(n.parent_id)) up.push(n.id)
         setExpanded((s) => new Set([...s, ...up]))
+        return restoreWindows((id) => all.some((n) => n.id === id && !n.deleted_at)).then((ids) => setWindows(new Set(ids)))
       })
       .catch((e) => setError(`Datenbank nicht erreichbar: ${e}`))
-    // Schnellerfassung speichert im anderen Fenster und meldet sich
-    const off = listen('nodes-changed', reload)
     return () => {
       off.then((f) => f())
     }
   }, [reload])
+
+  // Fenstertitel folgt dem Seitentitel
+  const windowTitle = windowPage && nodes ? (nodes.find((n) => n.id === windowPage)?.title ?? null) : null
+  useEffect(() => {
+    if (windowTitle !== null) getCurrentWindow().setTitle(`${windowTitle || 'Ohne Titel'} – Nexora`).catch(() => {})
+  }, [windowTitle])
 
   // Links nie im App-Fenster öffnen, sondern im Standardbrowser; im Editor nur mit Strg+Klick
   useEffect(() => {
@@ -420,7 +517,24 @@ export default function App() {
       save(id, to)
       if (to.parent_id) setExpanded((s) => new Set([...s, to.parent_id]))
     },
+    // Im Seitenfenster geht alles ins Hauptfenster; dort je nach Einstellung in ein eigenes Fenster
     open(id) {
+      if (windowPage) {
+        if (id !== windowPage) emitTo('main', 'open-page', id).catch(() => {})
+        return
+      }
+      const kind = tree.alive.get(id)?.kind
+      if ((kind === 'page' || kind === 'row') && (windowMode === 'always' || (windowMode === 'ctrl' && modifier.current))) return actions.openWindow(id)
+      actions.openHere(id)
+    },
+    openWindow(id) {
+      setWindows((s) => new Set([...s, id]))
+      openPageWindow(id).catch((e) => {
+        setError(`Fenster nicht geöffnet: ${e}`)
+        setWindows((s) => new Set([...s].filter((x) => x !== id)))
+      })
+    },
+    openHere(id) {
       setCurrent(id)
       setFresh(null)
       if (!['trash', 'today', 'inbox', 'settings', 'snippets', 'calendar'].includes(id)) {
@@ -467,9 +581,11 @@ export default function App() {
     remove(id) {
       patch(id, { deleted_at: new Date().toISOString() })
       db.trash(id).catch(fail)
-      if (current && pathOf(current).some((n) => n.id === id)) setCurrent(tree.alive.get(id)?.parent_id ?? 'today')
+      if (windowPage === id) getCurrentWindow().close().catch(() => {})
+      else if (current && pathOf(current).some((n) => n.id === id)) setCurrent(tree.alive.get(id)?.parent_id ?? 'today')
     },
   }
+  openHereRef.current = actions.openHere
 
   const toggleRow = (row) => save(row.id, { props: toggleDone(row, fieldsOf(dbOf(row))) })
 
@@ -553,6 +669,8 @@ export default function App() {
         backup={backup}
         onBackupNow={() => doBackup(true)}
         updates={updates}
+        windowMode={windowMode}
+        onWindowMode={(m) => (setWindowMode(m), db.setSetting('window-mode', m).catch(fail))}
       />
     )
   } else if (current === 'calendar') {
@@ -580,6 +698,29 @@ export default function App() {
         hotkey={hotkeyLabel(hotkey)}
       />
     )
+  } else if (windowPage && !node) {
+    view = (
+      <div className="grid h-full place-items-center text-center text-muted">
+        <div>
+          <p className="mb-3">Diese Seite liegt im Papierkorb oder wurde gelöscht.</p>
+          <button onClick={() => getCurrentWindow().close()} className="rounded-md border border-line px-3 py-1.5 hover:bg-hover hover:text-text">Fenster schließen</button>
+        </div>
+      </div>
+    )
+  } else if (!windowPage && windows.has(node?.id)) {
+    // Dieselbe Seite nie an zwei Stellen bearbeiten, sonst überschreibt ein Fenster das andere
+    view = (
+      <div className="grid h-full place-items-center px-6 text-center">
+        <div className="anim-pop max-w-sm">
+          <AppWindow size={32} className="mx-auto mb-3 text-faint" />
+          <p className="mb-4 text-muted">„{node.title || 'Ohne Titel'}“ ist in einem eigenen Fenster geöffnet.</p>
+          <div className="flex justify-center gap-2">
+            <button onClick={() => openPageWindow(node.id)} className="rounded-md bg-accent px-3 py-1.5 font-medium text-white dark:text-bg">Fenster zeigen</button>
+            <button onClick={() => closeWindow(node.id)} className="rounded-md border border-line px-3 py-1.5 text-muted hover:bg-hover hover:text-text">Hierher holen</button>
+          </div>
+        </div>
+      </div>
+    )
   } else if (node?.kind === 'page' || node?.kind === 'row') {
     const list = node.kind === 'row' ? dbOf(node) : null
     const path = node.kind === 'row' && !list ? [{ id: 'inbox', title: 'Eingang' }, node] : pathOf(node.id)
@@ -595,6 +736,15 @@ export default function App() {
         fields={fieldsOf(list)}
         db={list}
         onAddOption={list && ((fieldId, name) => save(list.id, { config: withTags(list, [name]) }))}
+        flushRef={windowPage ? flushRef : undefined}
+        onWindow={windowPage ? undefined : () => actions.openWindow(node.id)}
+        windowed={
+          windowPage && {
+            pinned,
+            onPin: () => togglePin().catch((e) => setError(String(e))),
+            onMain: () => emitTo('main', 'open-page', node.id).then(() => getCurrentWindow().close()).catch(() => {}),
+          }
+        }
       />
     )
   } else if (node?.kind === 'database') {
@@ -620,7 +770,7 @@ export default function App() {
   return (
     <AppContext.Provider value={app}>
     <div className="flex h-full">
-      <Sidebar
+      {!windowPage && <Sidebar
         tree={tree}
         favorites={favorites}
         counts={counts}
@@ -631,7 +781,7 @@ export default function App() {
         warning={backup.error ? 'Sicherung fehlgeschlagen, Einstellungen öffnen' : hotkeyError}
         onSearch={() => setSearching(true)}
         updates={updates}
-      />
+      />}
       {/* key: bei jedem Seitenwechsel neu einblenden */}
       <main key={current} className="anim-page min-w-0 flex-1">{view}</main>
 
