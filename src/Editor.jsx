@@ -21,6 +21,7 @@ import BlockHandle from './BlockHandle.jsx'
 import { LopEmbed, PageLink, PageLinkSuggest } from './Links.jsx'
 import { assetUrl, isImage, relativeSrc, saveImage } from './images.js'
 import { Attachment, saveAttachment } from './Attachment.jsx'
+import { VaultRef } from './Vault.jsx'
 import Menu, { MenuItem } from './Menu.jsx'
 import { useApp } from './ctx.js'
 import { imageText } from './ocr.js'
@@ -97,6 +98,7 @@ const extensions = [
   PageLink,
   PageLinkSuggest,
   LopEmbed,
+  VaultRef,
   Markdown,
   SlashCommand,
 ]

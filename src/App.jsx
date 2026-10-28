@@ -21,6 +21,7 @@ import { checkReminders } from './notify.js'
 import { initImages, saveImageBytes } from './images.js'
 import { describeReport, link as oneNoteLink, syncNotebook } from './onenote.js'
 import OneNoteConnect from './OneNote.jsx'
+import { VaultPicker, VaultUnlock, setVaultPicker, vault } from './Vault.jsx'
 import { htmlToMarkdown } from './Editor.jsx'
 import { indexImages } from './ocr.js'
 import { loadBackupSettings, maybeBackup, runBackup } from './backup.js'
@@ -75,6 +76,42 @@ export default function App() {
   const [notice, setNotice] = useState('')
   const [oneNote, setOneNote] = useState(null) // offen: { busy: Fortschrittstext }
   const syncing = useRef(false)
+  const [vaultAsk, setVaultAsk] = useState(null) // Entsperren offen: { status, resolve }
+  const [vaultPick, setVaultPick] = useState(null) // Auswahl offen: { resolve }
+  const [vaultOpen, setVaultOpen] = useState(false)
+
+  // Entsperrt? Sonst nach dem Master-Passwort fragen. false bei Abbruch oder wenn bw fehlt bzw. nicht angemeldet ist
+  async function unlockVault() {
+    let status
+    try {
+      status = await vault.status()
+    } catch (e) {
+      setError(`Tresor: ${e}`)
+      return false
+    }
+    if (status.status === 'unlocked') return setVaultOpen(true), true
+    if (status.status === 'missing') return setError('Die Bitwarden-CLI (bw) ist nicht installiert, siehe Einstellungen → Tresor.'), false
+    if (status.status === 'unauthenticated') return setError('bw ist noch nicht angemeldet, siehe Einstellungen → Tresor.'), false
+    return new Promise((resolve) => setVaultAsk({ status, resolve }))
+  }
+  async function vaultCopy(id, what) {
+    if (!(await unlockVault())) return
+    try {
+      await vault.copy(id, what)
+      setNotice(what === 'passwort' ? 'Passwort kopiert. Die Zwischenablage wird in 30 Sekunden geleert.' : 'Benutzername kopiert.')
+    } catch (e) {
+      setError(`Tresor: ${e}`)
+    }
+  }
+  const lockVault = () => vault.lock().catch(() => {}).then(() => setVaultOpen(false))
+  setVaultPicker(async () => ((await unlockVault()) ? new Promise((resolve) => setVaultPick({ resolve })) : null))
+
+  // Anzeige "Tresor offen" folgt dem Stand in vault.rs (sperrt sich dort nach Ablauf selbst)
+  useEffect(() => {
+    if (!vaultOpen) return
+    const t = setInterval(() => vault.status().then((s) => s.status !== 'unlocked' && setVaultOpen(false), () => {}), 30_000)
+    return () => clearInterval(t)
+  }, [vaultOpen])
   // Hinweise verschwinden nach ein paar Sekunden von selbst
   useEffect(() => {
     if (!notice) return
@@ -657,6 +694,10 @@ export default function App() {
     databases,
     open: actions.open,
     notice: setNotice,
+    unlockVault,
+    vaultCopy,
+    lockVault,
+    vaultOpen,
     rowsOf: tree.rows,
     addRow,
     toggleRow,
@@ -824,10 +865,30 @@ export default function App() {
         warning={backup.error ? 'Sicherung fehlgeschlagen, Einstellungen öffnen' : hotkeyError}
         onSearch={() => setSearching(true)}
         updates={updates}
+        vaultOpen={vaultOpen}
+        onLockVault={lockVault}
       />}
       {/* key: bei jedem Seitenwechsel neu einblenden */}
       <main key={current} className="anim-page min-w-0 flex-1">{view}</main>
 
+      {vaultAsk && (
+        <VaultUnlock
+          status={vaultAsk.status}
+          onDone={(ok) => {
+            vaultAsk.resolve(ok)
+            setVaultAsk(null)
+            if (ok) setVaultOpen(true)
+          }}
+        />
+      )}
+      {vaultPick && (
+        <VaultPicker
+          onDone={(item) => {
+            vaultPick.resolve(item)
+            setVaultPick(null)
+          }}
+        />
+      )}
       {oneNote && (
         <OneNoteConnect
           connected={new Set(nodes.filter((n) => n.kind === 'notebook' && !n.deleted_at && oneNoteLink(n)?.id).map((n) => oneNoteLink(n).id))}

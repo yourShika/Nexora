@@ -8,6 +8,7 @@ import { BACKUP_DEFAULTS, loadBackupSettings } from './backup.js'
 import { deleteImages, unusedImages } from './images.js'
 import { shells } from './runner.js'
 import { useApp } from './ctx.js'
+import { vault } from './Vault.jsx'
 import { ConfirmButton } from './Overview.jsx'
 import { View } from './Rows.jsx'
 import { accelFromEvent, bindHotkey, hotkeyLabel } from './hotkey.js'
@@ -157,6 +158,61 @@ function RunbookSection() {
         />
         PowerShell-Blöcke mit PowerShell 7 ausführen
         {!list.includes('pwsh') && <span className="text-xs text-faint">nicht installiert</span>}
+      </label>
+    </section>
+  )
+}
+
+const VAULT_MINUTES = [['5', '5 Minuten'], ['15', '15 Minuten'], ['60', '1 Stunde'], ['0', 'Erst beim Beenden']]
+
+// Tresor über die Bitwarden-CLI: Anmelden einmal im Terminal, Nexora entsperrt nur
+function VaultSection() {
+  const app = useApp()
+  const [s, setS] = useState(null)
+  const [minutes, setMinutes] = useState('15')
+  const load = () => vault.status().then(setS, (e) => setS({ error: String(e) }))
+  useEffect(() => {
+    load()
+    db.getSetting('vault-minutes').then((m) => m && setMinutes(m)).catch(() => {})
+  }, [app?.vaultOpen])
+  const line = !s
+    ? 'Fragt bw …'
+    : s.error
+      ? `bw meldet einen Fehler: ${s.error}`
+      : s.status === 'missing'
+        ? 'Die Bitwarden-CLI ist nicht installiert (winget install Bitwarden.CLI).'
+        : s.status === 'unauthenticated'
+          ? 'bw ist noch nicht angemeldet. Einmal im Terminal:'
+          : `${s.email ?? 'Angemeldet'} bei ${s.server ?? 'Bitwarden'}: ${s.status === 'unlocked' ? (s.minutes != null ? `entsperrt, sperrt sich in ${s.minutes} Min.` : 'entsperrt bis zum Beenden') : 'gesperrt'}`
+  return (
+    <section className="mb-10">
+      <h2 className="mb-1 font-semibold">Tresor (Vaultwarden)</h2>
+      <p className="mb-3 text-muted">
+        Verweise auf Tresor-Einträge mit „/Tresor-Eintrag“, Passwort kopieren per Klick (nach 30 s gelöscht, nicht im Windows-Verlauf),
+        in Runbooks <code>{'{{vault:Name}}'}</code> für das Passwort und <code>{'{{vault:Name:benutzer}}'}</code> für den Benutzer; in Ausgabe und Protokoll steht stattdessen ••••••.
+        Nexora speichert keine Passwörter.
+      </p>
+      <p className="mb-2">{line}</p>
+      {s?.status === 'unauthenticated' && (
+        <pre className="mb-3 rounded-md bg-[var(--code-bg)] px-3 py-2 text-sm">bw config server https://dein-vaultwarden{'\n'}bw login</pre>
+      )}
+      {s?.status === 'locked' && (
+        <button onClick={() => app?.unlockVault().then(load)} className="mb-3 rounded-md border border-line px-3 py-1.5 hover:bg-hover">Entsperren</button>
+      )}
+      {s?.status === 'unlocked' && (
+        <button onClick={() => app?.lockVault().then(load)} className="mb-3 rounded-md border border-line px-3 py-1.5 hover:bg-hover">Jetzt sperren</button>
+      )}
+      <label className="flex items-center gap-3">
+        Automatisch sperren nach
+        <select
+          value={minutes}
+          onChange={(e) => (setMinutes(e.target.value), db.setSetting('vault-minutes', e.target.value).catch(() => {}))}
+          className="rounded-md border border-line bg-raised px-2 py-1"
+        >
+          {VAULT_MINUTES.map(([v, label]) => (
+            <option key={v} value={v}>{label}</option>
+          ))}
+        </select>
       </label>
     </section>
   )
@@ -320,6 +376,8 @@ export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBack
           ))}
         </div>
       </section>
+
+      <VaultSection />
 
       <BackupSection status={backup} onBackupNow={onBackupNow} />
 

@@ -10,6 +10,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::time::Instant;
+use crate::vault::{mask, Vault};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 const NO_WINDOW: u32 = 0x0800_0000;
@@ -91,10 +92,14 @@ fn ps_quote(p: &Path) -> String {
 }
 
 #[tauri::command]
-pub fn run_script(app: AppHandle, runs: State<Runs>, id: String, shell: String, code: String, admin: bool) -> Result<(), String> {
+pub async fn run_script(app: AppHandle, runs: State<'_, Runs>, vault: State<'_, Vault>, id: String, shell: String, code: String, admin: bool) -> Result<(), String> {
     if !id.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
         return Err("Ungültige Lauf-ID".into());
     }
+    // {{vault:…}} einsetzen; bw braucht etwas, darum nicht im UI-Thread. Die Werte werden in der Ausgabe maskiert
+    let v = vault.inner().clone();
+    let (code, secrets) = tauri::async_runtime::spawn_blocking(move || crate::vault::fill(&v, &code)).await.map_err(|e| e.to_string())??;
+    let secrets = std::sync::Arc::new(secrets);
     let dir = std::env::temp_dir().join("nexora-runs");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let ext = match shell.as_str() { "cmd" => "cmd", "python" => "py", _ => "ps1" };
@@ -134,10 +139,10 @@ pub fn run_script(app: AppHandle, runs: State<Runs>, id: String, shell: String, 
         .into_iter()
         .filter_map(|(stream, err)| stream.map(|s| (s, err)))
         .map(|(stream, err)| {
-            let (app, id) = (app.clone(), id.clone());
+            let (app, id, secrets) = (app.clone(), id.clone(), secrets.clone());
             std::thread::spawn(move || {
                 for line in BufReader::new(stream).split(b'\n').map_while(Result::ok) {
-                    let text = String::from_utf8_lossy(&line).trim_end_matches('\r').to_string();
+                    let text = mask(String::from_utf8_lossy(&line).trim_end_matches('\r'), &secrets);
                     let _ = app.emit("run-line", Line { id: id.clone(), err, text });
                 }
             })
@@ -152,7 +157,7 @@ pub fn run_script(app: AppHandle, runs: State<Runs>, id: String, shell: String, 
         if let Some(l) = &log {
             if let Ok(text) = fs::read_to_string(l) {
                 for line in text.trim_start_matches('\u{FEFF}').lines() {
-                    let _ = app.emit("run-line", Line { id: id.clone(), err: false, text: line.to_string() });
+                    let _ = app.emit("run-line", Line { id: id.clone(), err: false, text: mask(line, &secrets) });
                 }
             }
             let _ = fs::remove_file(l);

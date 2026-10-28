@@ -1,12 +1,13 @@
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, WindowEvent};
+use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod attach;
 mod files;
 mod ocr;
 mod onenote;
+mod vault;
 mod run;
 
 fn show(app: &AppHandle) {
@@ -115,6 +116,11 @@ pub fn run() {
             files::delete_images,
             ocr::ocr_image,
             onenote::onenote,
+            vault::vault_status,
+            vault::vault_unlock,
+            vault::vault_lock,
+            vault::vault_search,
+            vault::vault_copy,
             files::finish_backup,
             run::shells,
             run::run_script,
@@ -127,6 +133,7 @@ pub fn run() {
             attach::export_files
         ])
         .manage(run::Runs::default())
+        .manage(vault::Vault::default())
         .setup(|app| {
             if !std::env::args().any(|a| a == "--hidden") {
                 show(app.handle());
@@ -174,6 +181,12 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("Nexora konnte nicht starten");
+        .build(tauri::generate_context!())
+        .expect("Nexora konnte nicht starten")
+        // Beim Beenden auch die bw-Sitzung sperren
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                app.state::<vault::Vault>().lock_now();
+            }
+        });
 }

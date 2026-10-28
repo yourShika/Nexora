@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import {
-  AppWindow, ArrowCircleUp, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
+  AppWindow, ArrowCircleUp, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
   Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
@@ -24,7 +24,7 @@ export function NodeIcon({ node, size = 16 }) {
   return <FileText size={size} className="text-muted" />
 }
 
-export default function Sidebar({ tree, favorites, counts, current, expanded, renaming, actions, warning, onSearch, updates }) {
+export default function Sidebar({ tree, favorites, counts, current, expanded, renaming, actions, warning, onSearch, updates, vaultOpen, onLockVault }) {
   const [menu, setMenu] = useState(null)
   const templates = useApp()?.templates ?? []
 
@@ -130,6 +130,11 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
         {warning && (
           <button onClick={() => actions.open('settings')} className="mb-1 flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger hover:bg-hover">
             <Warning size={16} className="mt-px shrink-0" /> {warning}
+          </button>
+        )}
+        {vaultOpen && (
+          <button onClick={onLockVault} title="Tresor jetzt sperren" className="mb-1 flex h-7 w-full items-center gap-2 rounded-md px-2 text-accent hover:bg-hover">
+            <LockSimpleOpen size={16} /> Tresor offen, sperren
           </button>
         )}
         <button

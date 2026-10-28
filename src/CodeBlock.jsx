@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { NodeViewContent, NodeViewWrapper } from '@tiptap/react'
 import { Check, Copy, NotePencil, Play, ShieldCheck, Stop, Table, TextAlignLeft, X } from '@phosphor-icons/react'
 import * as db from './db.js'
+import { useApp } from './ctx.js'
 import { RUNNABLE, fill, parseTable, placeholders, runCode } from './runner.js'
 
 // Auswahl statt aller ~40 lowlight-Sprachen: das, was im IT-Alltag vorkommt
@@ -28,6 +29,7 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos }) {
   const [copied, setCopied] = useState(false)
   const [run, setRun] = useState(null)
   const [ask, setAsk] = useState(null)
+  const app = useApp()
   const lang = node.attrs.language || 'plaintext'
   const runnable = lang in RUNNABLE
 
@@ -39,6 +41,8 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos }) {
 
   // Platzhalter zuerst abfragen; zuletzt benutzte Werte vorbelegen
   async function start(admin) {
+    // {{vault:Name}} setzt vault.rs ein; dafür muss der Tresor offen sein
+    if (node.textContent.includes('{{vault:') && !(await app?.unlockVault())) return
     const names = placeholders(node.textContent)
     if (!names.length) return go(node.textContent, admin)
     let last = {}
