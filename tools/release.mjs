@@ -48,7 +48,13 @@ const latest = {
   },
 }
 fs.writeFileSync(path.join(dir, 'latest.json'), JSON.stringify(latest, null, 2))
-console.log(`\nFertig: ${path.join(dir, exe)}\n        ${path.join(dir, 'latest.json')}`)
+
+// Aktuellen Installer zusätzlich in <Projekt>\installer ablegen (nicht im Repo), ältere entfernen
+const local = path.join(root, 'installer')
+fs.mkdirSync(local, { recursive: true })
+for (const f of fs.readdirSync(local)) if (/^.+_x64-setup\.exe$/.test(f) && f !== exe) fs.rmSync(path.join(local, f))
+fs.copyFileSync(path.join(dir, exe), path.join(local, exe))
+console.log(`\nFertig: ${path.join(local, exe)}\n        ${path.join(dir, 'latest.json')}`)
 
 if (process.argv[2] === '--publish') {
   run('gh', ['release', 'create', `v${version}`, `"${path.join(dir, exe)}"`, `"${path.join(dir, 'latest.json')}"`,
