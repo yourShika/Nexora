@@ -6,6 +6,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 mod attach;
 mod files;
 mod ocr;
+mod onenote;
 mod run;
 
 fn show(app: &AppHandle) {
@@ -113,6 +114,7 @@ pub fn run() {
             files::list_images,
             files::delete_images,
             ocr::ocr_image,
+            onenote::onenote,
             files::finish_backup,
             run::shells,
             run::run_script,

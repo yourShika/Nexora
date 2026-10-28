@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLineDown, Copy } from '@phosphor-icons/react'
 import { EditorContent, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
+import { generateJSON, resolveExtensions } from '@tiptap/core'
+import { MarkdownManager } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from '@tiptap/markdown'
 import { Placeholder } from '@tiptap/extensions'
@@ -98,6 +100,13 @@ const extensions = [
   Markdown,
   SlashCommand,
 ]
+
+// HTML (z. B. aus OneNote) in genau das Markdown, das der Editor auch schreibt
+let manager
+export function htmlToMarkdown(html) {
+  manager ??= new MarkdownManager({ extensions: resolveExtensions(extensions) })
+  return manager.serialize(generateJSON(html, extensions))
+}
 
 // Inhalt kommt und geht als Markdown; ein Editor je Seite (key im Aufrufer)
 export default function Editor({ markdown, onChange, onReady, editable = true }) {

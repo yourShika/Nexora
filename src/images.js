@@ -41,9 +41,11 @@ export async function unusedImages(references) {
 export const deleteImages = (names) => invoke('delete_images', { names })
 
 // Speichert eine Bilddatei im Datenordner und gibt den Markdown-Pfad zurück
-export async function saveImage(file) {
-  const name = `${crypto.randomUUID()}.${EXT[file.type]}`
-  await invoke('save_image', new Uint8Array(await file.arrayBuffer()), { headers: { 'x-name': name } })
+export const saveImage = async (file) => saveImageBytes(new Uint8Array(await file.arrayBuffer()), EXT[file.type])
+
+export async function saveImageBytes(bytes, ext) {
+  const name = `${crypto.randomUUID()}.${ext}`
+  await invoke('save_image', bytes, { headers: { 'x-name': name } })
   indexImages()
   return `bilder/${name}`
 }

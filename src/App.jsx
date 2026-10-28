@@ -18,7 +18,10 @@ import Settings from './Settings.jsx'
 import Search from './Search.jsx'
 import { DEFAULT_HOTKEY, bindHotkey, hotkeyLabel } from './hotkey.js'
 import { checkReminders } from './notify.js'
-import { initImages } from './images.js'
+import { initImages, saveImageBytes } from './images.js'
+import { describeReport, link as oneNoteLink, syncNotebook } from './onenote.js'
+import OneNoteConnect from './OneNote.jsx'
+import { htmlToMarkdown } from './Editor.jsx'
 import { indexImages } from './ocr.js'
 import { loadBackupSettings, maybeBackup, runBackup } from './backup.js'
 import { findUpdate, installUpdate } from './updates.js'
@@ -70,6 +73,8 @@ export default function App() {
   const [expanded, setExpanded] = useState(loadExpanded)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [oneNote, setOneNote] = useState(null) // offen: { busy: Fortschrittstext }
+  const syncing = useRef(false)
   // Hinweise verschwinden nach ein paar Sekunden von selbst
   useEffect(() => {
     if (!notice) return
@@ -546,6 +551,40 @@ export default function App() {
         setExpanded((s) => new Set([...s, ...pathOf(id).slice(0, -1).map((n) => n.id), ...(['notebook', 'section'].includes(node?.kind) ? [id] : [])]))
       }
     },
+    oneNoteDialog: () => setOneNote({ busy: '' }),
+    async oneNoteConnect(book) {
+      setOneNote({ busy: 'Notizbuch wird angelegt …' })
+      try {
+        const nb = await db.create('notebook', null, book.name, { config: { onenote: { id: book.id } } })
+        await actions.oneNoteSync(nb.id, (text) => setOneNote({ busy: text }))
+        actions.openHere(nb.id)
+      } catch (e) {
+        setError(`OneNote: ${e}`)
+      } finally {
+        setOneNote(null)
+      }
+    },
+    async oneNoteSync(id, progress = setNotice) {
+      if (syncing.current) return
+      syncing.current = true
+      progress('OneNote wird gefragt …')
+      try {
+        const all = await db.allNodes()
+        const api = { create: db.create, update: db.update, loadBody: db.loadBody, snapshot: db.snapshot, saveImage: saveImageBytes, toMarkdown: htmlToMarkdown, progress }
+        const report = await syncNotebook(all.find((n) => n.id === id), all, api)
+        await reload()
+        setNotice(describeReport(report))
+      } catch (e) {
+        await reload()
+        setError(`OneNote-Abgleich fehlgeschlagen: ${e}`)
+      } finally {
+        syncing.current = false
+      }
+    },
+    oneNoteUnlink(id) {
+      save(id, { config: null })
+      setNotice('Verbindung zu OneNote gelöst. Die Seiten bleiben in Nexora und sind weiter gesperrt.')
+    },
     toggle(id) {
       setExpanded((s) => {
         const next = new Set(s)
@@ -789,6 +828,14 @@ export default function App() {
       {/* key: bei jedem Seitenwechsel neu einblenden */}
       <main key={current} className="anim-page min-w-0 flex-1">{view}</main>
 
+      {oneNote && (
+        <OneNoteConnect
+          connected={new Set(nodes.filter((n) => n.kind === 'notebook' && !n.deleted_at && oneNoteLink(n)?.id).map((n) => oneNoteLink(n).id))}
+          busy={oneNote.busy}
+          onConnect={actions.oneNoteConnect}
+          onClose={() => setOneNote(null)}
+        />
+      )}
       {searching && <Search tree={tree} pathOf={pathOf} commands={commands} onOpen={actions.open} onClose={() => setSearching(false)} />}
 
       {notice && !error && (

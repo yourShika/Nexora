@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import {
-  AppWindow, ArrowCircleUp, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
+  AppWindow, ArrowCircleUp, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
   Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
@@ -95,7 +95,14 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
           </>
         )}
 
-        <Heading action={<IconButton label="Neues Notizbuch" onClick={() => actions.add('notebook', null)}><Plus size={14} /></IconButton>}>
+        <Heading
+          action={
+            <span className="flex gap-0.5">
+              <IconButton label="OneNote-Notizbuch verbinden" onClick={actions.oneNoteDialog}><PlugsConnected size={14} /></IconButton>
+              <IconButton label="Neues Notizbuch" onClick={() => actions.add('notebook', null)}><Plus size={14} /></IconButton>
+            </span>
+          }
+        >
           Notizbücher
         </Heading>
         {tree.roots.length ? (
@@ -163,6 +170,12 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
           <MenuItem icon={Star} onClick={run(() => actions.save(m.id, { favorite: m.favorite ? 0 : 1 }))}>
             {m.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
           </MenuItem>
+          {m.kind === 'notebook' && m.config?.onenote && (
+            <>
+              <MenuItem icon={ArrowsClockwise} onClick={run(() => actions.oneNoteSync(m.id))}>Mit OneNote abgleichen</MenuItem>
+              <MenuItem icon={LinkBreak} onClick={run(() => actions.oneNoteUnlink(m.id))}>OneNote-Verbindung lösen</MenuItem>
+            </>
+          )}
           {m.kind === 'notebook' && (
             <div className="flex gap-1.5 px-2 py-2" role="group" aria-label="Farbe">
               {Object.entries(COLORS).map(([name, hex]) => (

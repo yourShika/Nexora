@@ -1,6 +1,6 @@
 {
   "name": "nexora",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Notizen, LOP und Runbooks in einer schlanken Desktop-App",
   "private": true,
   "type": "module",
@@ -28,6 +28,7 @@
     "@tauri-apps/plugin-process": "^2.4.0",
     "@tauri-apps/plugin-sql": "^2.6.0",
     "@tauri-apps/plugin-updater": "^2.14.0",
+    "@tiptap/core": "^3.32.0",
     "@tiptap/extension-code-block-lowlight": "^3.32.0",
     "@tiptap/extension-image": "^3.32.0",
     "@tiptap/extension-list": "^3.32.0",
