@@ -100,7 +100,9 @@ function WeekChart({ title, weeks, series, kind }) {
           </div>
         )}
       </div>
-      <table className="sr-only">
+      {/* sr-only am <table> wirkt nicht (Tabellen ignorieren Höhe und Überlauf) und ergab leeren Platz unter der Seite */}
+      <div className="sr-only">
+      <table>
         <caption>{title}</caption>
         <thead>
           <tr><th>Woche</th>{series.map((s) => <th key={s.key}>{s.label}</th>)}</tr>
@@ -111,6 +113,7 @@ function WeekChart({ title, weeks, series, kind }) {
           ))}
         </tbody>
       </table>
+      </div>
     </figure>
   )
 }

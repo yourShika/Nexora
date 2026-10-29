@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import {
   AppWindow, ArrowCircleUp, ArrowsLeftRight, FileArrowDown, FileArrowUp, FolderSimplePlus, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
-  SidebarSimple, Stamp, Star, Table, Trash, Tray, Warning,
+  PushPin, SidebarSimple, Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { useApp } from './ctx.js'
@@ -226,6 +226,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
           <MenuItem icon={Star} onClick={run(() => actions.save(m.id, { favorite: m.favorite ? 0 : 1 }))}>
             {m.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
           </MenuItem>
+          <MenuItem icon={PushPin} onClick={run(() => actions.toggleTab(m.id))}>{actions.tabs.includes(m.id) ? 'Reiter lösen' : 'Als Reiter oben anpinnen'}</MenuItem>
           {m.kind === 'notebook' && (
             <MenuItem icon={ArrowsLeftRight} onClick={run(() => actions.moveArea(m.id))}>{m.area === 'privat' ? 'In den Bereich Arbeit' : 'In den Bereich Privat'}</MenuItem>
           )}

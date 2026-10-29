@@ -33,6 +33,7 @@ import { htmlToMarkdown } from './Editor.jsx'
 import { indexText } from './ocr.js'
 import { loadBackupSettings, maybeBackup, runBackup } from './backup.js'
 import { findUpdate, installUpdate } from './updates.js'
+import Tabs from './Tabs.jsx'
 import { getLook, loadLook, setLook, useLook } from './theme.js'
 import { dayOf, daysBetween, describe, emptyConfig, fieldsOf, formatDate, isDone, lopConfig, nextDate, shiftDate, statusField, today, toggleDone } from './fields.js'
 import CalendarView from './Calendar.jsx'
@@ -93,6 +94,7 @@ export default function App() {
   const look = useLook()
   const [settingsTab, setSettingsTab] = useState('allgemein')
   const [area, setArea] = useState('arbeit') // aktiver Bereich: 'arbeit' | 'privat'
+  const [tabs, setTabs] = useState([]) // angepinnte Seiten (IDs in Reiter-Reihenfolge)
   const areaValue = area === 'privat' ? 'privat' : null // so steht er am obersten Knoten
   const [notice, setNotice] = useState('')
   const [oneNote, setOneNote] = useState(null) // offen: { busy: Fortschrittstext }
@@ -177,6 +179,15 @@ export default function App() {
   useEffect(() => {
     if (windowPage) return
     db.getSetting('window-mode').then((m) => m && setWindowMode(m)).catch(() => {})
+    db.getSetting('reiter').then((t) => t && setTabs(JSON.parse(t))).catch(() => {})
+    // Nach einem Update: war das Fenster vorher offen, wieder zeigen (auch wenn der Neustart mit --hidden kam)
+    const after = JSON.parse(localStorage.getItem('nach-update') || 'null')
+    localStorage.removeItem('nach-update')
+    if (after?.show) {
+      const w = getCurrentWindow()
+      w.unminimize().then(() => w.show()).then(() => w.setFocus()).catch(() => {})
+      setNotice(`Nexora wurde auf ${after.version} aktualisiert.`)
+    }
     const offs = [
       listen('window-closed', (e) => setWindows((s) => new Set([...s].filter((id) => id !== e.payload)))),
       listen('open-page', (e) => {
@@ -411,6 +422,13 @@ export default function App() {
     return () => {
       off.then((f) => f())
     }
+  }, [reload])
+
+  // Zurück im Fenster: Änderungen von außen (Skripte, zweites Nexora) übernehmen, bevor Altes zurückgeschrieben wird.
+  // Eigenes ist da schon gespeichert (Page.jsx sichert bei "blur")
+  useEffect(() => {
+    addEventListener('focus', reload)
+    return () => removeEventListener('focus', reload)
   }, [reload])
 
   // Fenstertitel folgt dem Seitentitel
@@ -799,8 +817,16 @@ export default function App() {
     return { parent_id: parent?.id ?? null, sort }
   }
 
+  const saveTabs = (next) => (setTabs(next), db.setSetting('reiter', JSON.stringify(next)).catch(fail))
   const actions = {
     fromTemplate,
+    tabs,
+    toggleTab: (id) => saveTabs(tabs.includes(id) ? tabs.filter((t) => t !== id) : [...tabs, id]),
+    moveTab(id, targetId, side) {
+      const list = tabs.filter((t) => t !== id)
+      list.splice(list.indexOf(targetId) + (side === 'after' ? 1 : 0), 0, id)
+      saveTabs(list)
+    },
     importFiles,
     exportTree,
     exportNexora,
@@ -943,6 +969,8 @@ export default function App() {
 
   const node = tree.alive.get(current)
   const favorites = nodes.filter((n) => n.favorite && tree.alive.has(n.id) && tree.areaOf(n.id) === area)
+  // Reiter wie Favoriten nur im aktiven Bereich; gelöschte Seiten bleiben gemerkt und kommen mit dem Wiederherstellen zurück
+  const tabNodes = windowPage || focusMode ? [] : tabs.map((id) => tree.alive.get(id)).filter((n) => n && tree.areaOf(n.id) === area)
   const trashed = nodes.filter((n) => n.deleted_at)
   const allRows = [...tree.alive.values()].filter((n) => n.kind === 'row')
   // Heute, Eingang, Kalender, Suche, Tagebuch, Statistik zeigen nur den aktiven Bereich; Erinnerungen kommen aus beiden
@@ -963,6 +991,8 @@ export default function App() {
     databases,
     open: actions.open,
     notice: setNotice,
+    tabs: windowPage ? null : tabs,
+    toggleTab: actions.toggleTab,
     unlockVault,
     vaultCopy,
     lockVault,
@@ -1182,7 +1212,10 @@ export default function App() {
         onLockVault={lockVault}
       />}
       {/* key: bei jedem Seitenwechsel neu einblenden */}
-      <main key={current} className="anim-page min-w-0 flex-1 bg-bg">{view}</main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {tabNodes.length > 0 && <Tabs nodes={tabNodes} current={current} onOpen={actions.open} onClose={actions.toggleTab} onMove={actions.moveTab} />}
+        <main key={current} className="anim-page min-h-0 flex-1 bg-bg">{view}</main>
+      </div>
 
       {printing?.ask && <PrintAsk node={printing.ask} count={printing.count} onChoose={(kids) => (kids === null ? setPrinting(null) : printPage(printing.ask, kids))} />}
       {printing?.pages && <Print pages={printing.pages} onDone={(err) => (setPrinting(null), err && setError(err))} />}

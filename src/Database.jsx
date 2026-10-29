@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowSquareOut, CalendarBlank, ChartBarHorizontal, DotsSixVertical, Kanban, ListBullets, Plus, SlidersHorizontal, SortAscending, SortDescending, Table, X } from '@phosphor-icons/react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowSquareOut, ArrowsDownUp, CalendarBlank, ChartBarHorizontal, DotsSixVertical, Kanban, ListBullets, Plus, SlidersHorizontal, SortAscending, SortDescending, Table, X } from '@phosphor-icons/react'
 import { Chip, FieldEditor, FieldValue } from './Props.jsx'
 import { Progress, QuickAdd, RowItem } from './Rows.jsx'
 import { ConfirmButton } from './Overview.jsx'
 import { Cover, IconRow } from './PageHead.jsx'
 import CalendarView from './Calendar.jsx'
 import TimelineView from './Timeline.jsx'
-import { CHIP_COLORS, TYPES, between, isDone, newId, statusField } from './fields.js'
+import { CHIP_COLORS, TYPES, between, isDone, newId, sortRows, sortsOf, statusField } from './fields.js'
+import Menu, { MenuItem } from './Menu.jsx'
 
 const TITLE = { id: 'title', name: 'Titel', type: 'title' }
 // Startbreiten in Pixeln; gezogene Breiten stehen je Liste in config.widths
@@ -69,29 +70,14 @@ const VIEWS = [
   { id: 'timeline', label: 'Zeitleiste', icon: ChartBarHorizontal },
 ]
 
-function sortRows(rows, fields, sort) {
-  if (!sort) return rows
-  const f = sort.field === 'title' ? TITLE : fields.find((x) => x.id === sort.field)
-  if (!f) return rows
-  const key = (r) => {
-    const v = f.type === 'title' ? r.title : r.props?.[f.id]
-    if (['select', 'status'].includes(f.type)) return f.options.findIndex((o) => o.id === v)
-    return v ?? null
-  }
-  const dir = sort.dir === 'desc' ? -1 : 1
-  return [...rows].sort((a, b) => {
-    const [x, y] = [key(a), key(b)]
-    if (x === y) return 0
-    if (x == null || x === -1) return 1 // Leere immer nach unten
-    if (y == null || y === -1) return -1
-    return (typeof x === 'string' ? x.localeCompare(y, 'de') : x - y) * dir
-  })
-}
+const SORTED = ['table', 'list', 'kanban'] // Kalender und Zeitleiste ordnen nach Datum
 
 export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig, onTitle, onSave }) {
   const config = db.config
   const fields = config.fields
   const [panel, setPanel] = useState(false)
+  const [sortMenu, setSortMenu] = useState(null)
+  const closeSort = useCallback(() => setSortMenu(null), [])
   const [title, setTitle] = useState(db.title)
   useEffect(() => setTitle(db.title), [db.title])
 
@@ -105,7 +91,9 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
     onRow(row.id, { props: { ...row.props, [sf.id]: target?.id ?? null } })
   }
 
-  const visible = sortRows(config.hideDone && config.view !== 'kanban' ? rows.filter((r) => !isDone(r, fields)) : rows, fields, config.sort)
+  const sorts = sortsOf(config, config.view)
+  const setSorts = (list) => setConfig({ sorts: { ...config.sorts, [config.view]: list } })
+  const visible = sortRows(config.hideDone && config.view !== 'kanban' ? rows.filter((r) => !isDone(r, fields)) : rows, fields, sorts)
   const hasStatus = !!statusField(fields)
   const dateFields = fields.filter((f) => f.type === 'date')
 
@@ -146,6 +134,20 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
                 Erledigte ausblenden
               </label>
             )}
+            {SORTED.includes(config.view) && (
+              <button
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect()
+                  setSortMenu(sortMenu ? null : { x: r.right - 336, y: r.bottom + 4 })
+                }}
+                onMouseDown={(e) => sortMenu && e.stopPropagation()} // sonst schließt das Menü beim Drücken und öffnet beim Klick wieder
+                aria-expanded={!!sortMenu}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 ${sorts.length || sortMenu ? 'bg-accent-soft text-text' : 'text-muted hover:bg-hover hover:text-text'}`}
+              >
+                <ArrowsDownUp size={16} /> Sortieren{sorts.length ? ` (${sorts.length})` : ''}
+              </button>
+            )}
+            {sortMenu && <SortMenu x={sortMenu.x} y={sortMenu.y} fields={fields} sorts={sorts} onSorts={setSorts} onClose={closeSort} />}
             <button onClick={() => setPanel(!panel)} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 ${panel ? 'bg-accent-soft' : 'text-muted hover:bg-hover hover:text-text'}`}>
               <SlidersHorizontal size={16} /> Felder
             </button>
@@ -158,8 +160,8 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
               db={db}
               rows={visible}
               fields={fields}
-              sort={config.sort}
-              onSort={(sort) => setConfig({ sort })}
+              sorts={sorts}
+              onSorts={setSorts}
               widths={config.widths ?? {}}
               onWidths={(widths) => setConfig({ widths })}
               onOpen={onOpen}
@@ -167,7 +169,7 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
               addOption={addOption}
             />
           )}
-          {config.view === 'list' && <ListView db={db} rows={visible} fields={fields} onOpen={onOpen} onToggle={toggle} drag={!config.sort} onRow={onRow} />}
+          {config.view === 'list' && <ListView db={db} rows={visible} fields={fields} onOpen={onOpen} onToggle={toggle} drag={!sorts.length} onRow={onRow} />}
           {config.view === 'kanban' && (
             hasStatus
               ? <KanbanView db={db} rows={visible} fields={fields} onOpen={onOpen} onRow={onRow} />
@@ -198,11 +200,44 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
   )
 }
 
-function TableView({ db, rows, fields, sort, onSort, widths, onWidths, onOpen, onRow, addOption }) {
+// Sortieren nach mehreren Ebenen für die aktuelle Ansicht
+function SortMenu({ x, y, fields, sorts, onSorts, onClose }) {
   const cols = [...fields.filter((f) => f.type === 'nr'), TITLE, ...fields.filter((f) => f.type !== 'nr')]
+  const free = cols.filter((c) => !sorts.some((s) => s.field === c.id))
+  const change = (i, patch) => onSorts(sorts.map((s, j) => (j === i ? { ...s, ...patch } : s)))
+  const select = 'rounded-md border border-line bg-raised px-2 py-1'
+  return (
+    <Menu x={x} y={y} onClose={onClose} role="dialog" label="Sortieren">
+      <div className="w-80 p-1.5">
+        {sorts.map((s, i) => (
+          <div key={i} className="mb-1.5 flex items-center gap-1.5">
+            <span className="w-10 shrink-0 text-xs text-faint">{i ? 'dann' : 'Nach'}</span>
+            <select value={s.field} onChange={(e) => change(i, { field: e.target.value })} aria-label={`Feld der ${i + 1}. Ebene`} className={`min-w-0 flex-1 ${select}`}>
+              {cols.filter((c) => c.id === s.field || free.includes(c)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <select value={s.dir} onChange={(e) => change(i, { dir: e.target.value })} aria-label={`Richtung der ${i + 1}. Ebene`} className={select}>
+              <option value="asc">Aufsteigend</option>
+              <option value="desc">Absteigend</option>
+            </select>
+            <button aria-label={`${i + 1}. Ebene entfernen`} onClick={() => onSorts(sorts.filter((_, j) => j !== i))} className="rounded p-1 text-faint hover:bg-hover hover:text-text">
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+        {!sorts.length && <p className="px-1 pb-1.5 text-xs text-muted">Ohne Sortierung gilt die eigene Reihenfolge (Zeilen ziehen).</p>}
+        {free.length > 0 && <MenuItem icon={Plus} onClick={() => onSorts([...sorts, { field: free[0].id, dir: 'asc' }])}>{sorts.length ? 'Weitere Ebene' : 'Sortierung hinzufügen'}</MenuItem>}
+        {sorts.length > 0 && <MenuItem icon={X} onClick={() => onSorts([])}>Sortierung entfernen</MenuItem>}
+      </div>
+    </Menu>
+  )
+}
+
+function TableView({ db, rows, fields, sorts, onSorts, widths, onWidths, onOpen, onRow, addOption }) {
+  const cols = [...fields.filter((f) => f.type === 'nr'), TITLE, ...fields.filter((f) => f.type !== 'nr')]
+  // Klick auf den Kopf: nur nach dieser Spalte, auf, ab, aus; mehrere Ebenen über "Sortieren"
   const clickSort = (id) =>
-    onSort(sort?.field !== id ? { field: id, dir: 'asc' } : sort.dir === 'asc' ? { field: id, dir: 'desc' } : null)
-  const drag = useRowDrag(rows, onRow, !sort)
+    onSorts(sorts[0]?.field !== id ? [{ field: id, dir: 'asc' }] : sorts[0].dir === 'asc' ? [{ field: id, dir: 'desc' }] : [])
+  const drag = useRowDrag(rows, onRow, !sorts.length)
   const [live, setLive] = useState(null) // Breiten während des Ziehens
   const width = (c) => (live ?? widths)[c.id] ?? COL_WIDTH[c.type] ?? 128
   const total = 24 + cols.reduce((s, c) => s + width(c), 0)
@@ -239,11 +274,12 @@ function TableView({ db, rows, fields, sort, onSort, widths, onWidths, onOpen, o
         <thead>
           <tr className="border-b border-line text-left text-xs text-muted">
             <th aria-label="Reihenfolge" />
-            {cols.map((c) => (
+            {cols.map((c) => { const level = sorts.findIndex((s) => s.field === c.id); return (
               <th key={c.id} className="relative whitespace-nowrap px-1.5 py-1.5 font-medium">
                 <button onClick={() => clickSort(c.id)} className="flex max-w-full items-center gap-1 overflow-hidden hover:text-text">
                   <span className="truncate">{c.name}</span>
-                  {sort?.field === c.id && (sort.dir === 'asc' ? <SortAscending size={13} /> : <SortDescending size={13} />)}
+                  {level >= 0 && (sorts[level].dir === 'asc' ? <SortAscending size={13} /> : <SortDescending size={13} />)}
+                  {level >= 0 && sorts.length > 1 && <span className="text-[10px] text-faint">{level + 1}</span>}
                 </button>
                 <span
                   role="separator"
@@ -254,7 +290,7 @@ function TableView({ db, rows, fields, sort, onSort, widths, onWidths, onOpen, o
                   className="absolute -right-1 top-1 bottom-1 z-10 w-2 cursor-col-resize rounded hover:bg-accent/40"
                 />
               </th>
-            ))}
+            )})}
           </tr>
         </thead>
         <tbody>

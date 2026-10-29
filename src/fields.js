@@ -152,3 +152,34 @@ export function taskCount(md) {
 
 // Sortierwert zwischen zwei Nachbarn (eigene Reihenfolge per Ziehen); fehlt einer, mit Abstand davor/dahinter
 export const between = (prev, next) => (prev != null && next != null ? (prev + next) / 2 : prev != null ? prev + 1000 : next != null ? next - 1000 : 0)
+
+// Sortieren nach Ebenen [{ field, dir }]: bei Gleichstand entscheidet die nächste, dann die eigene Reihenfolge.
+// Leere immer nach unten; Auswahl und Status in der Reihenfolge ihrer Optionen
+export function sortRows(rows, fields, levels) {
+  const keys = levels.flatMap((s) => {
+    const f = s.field === 'title' ? { type: 'title' } : fields.find((x) => x.id === s.field)
+    if (!f) return []
+    const key = (r) => {
+      const v = f.type === 'title' ? r.title : r.props?.[f.id]
+      if (['select', 'status'].includes(f.type)) return f.options.findIndex((o) => o.id === v) + 1 || null
+      if (Array.isArray(v)) return v.length ? v.join(', ') : null
+      return v === '' ? null : v ?? null
+    }
+    return [{ key, dir: s.dir === 'desc' ? -1 : 1 }]
+  })
+  if (!keys.length) return rows
+  return [...rows].sort((a, b) => {
+    for (const { key, dir } of keys) {
+      const [x, y] = [key(a), key(b)]
+      if (x === y) continue
+      if (x == null) return 1
+      if (y == null) return -1
+      const c = typeof x === 'string' || typeof y === 'string' ? String(x).localeCompare(String(y), 'de', { numeric: true }) : x - y
+      if (c) return c * dir
+    }
+    return 0
+  })
+}
+
+// Sortierung je Ansicht; ältere Listen hatten eine einzige für alle Ansichten (config.sort)
+export const sortsOf = (config, view) => config.sorts?.[view] ?? (config.sort ? [config.sort] : [])

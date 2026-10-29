@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { addDays, between, taskCount, daysBetween, nextDate } from './fields.js'
+import { addDays, between, taskCount, daysBetween, nextDate, sortRows, sortsOf } from './fields.js'
 import { parseQuick } from './quick.js'
 
 test('nächster Termin einer Wiederholung', () => {
@@ -34,4 +34,26 @@ test('Sortierwert zwischen Nachbarn', () => {
   assert.equal(between(10, undefined), 1010)
   assert.equal(between(undefined, 10), -990)
   assert.equal(between(undefined, undefined), 0)
+})
+
+test('Sortieren nach mehreren Ebenen', () => {
+  const fields = [
+    { id: 'status', type: 'status', options: [{ id: 'offen' }, { id: 'arbeit' }, { id: 'erledigt' }] },
+    { id: 'due', type: 'date' },
+    { id: 'tags', type: 'multi' },
+  ]
+  const rows = [
+    { id: 'a', title: 'LOP-10', props: { status: 'arbeit', due: '2026-11-02' } },
+    { id: 'b', title: 'LOP-2', props: { status: 'offen', due: '2026-11-05' } },
+    { id: 'c', title: 'LOP-3', props: { status: 'arbeit' } },
+    { id: 'd', title: '', props: { status: 'offen', due: '2026-11-01', tags: ['x'] } },
+  ]
+  const ids = (levels) => sortRows(rows, fields, levels).map((r) => r.id).join('')
+  assert.equal(ids([{ field: 'status', dir: 'asc' }, { field: 'due', dir: 'asc' }]), 'dbac')
+  assert.equal(ids([{ field: 'status', dir: 'desc' }, { field: 'due', dir: 'desc' }]), 'acbd') // Leere bleiben unten
+  assert.equal(ids([{ field: 'title', dir: 'asc' }]), 'bcad') // LOP-2 vor LOP-10, ohne Titel ans Ende
+  assert.equal(ids([{ field: 'tags', dir: 'asc' }]), 'dabc') // sonst stabile eigene Reihenfolge
+  assert.equal(ids([{ field: 'weg', dir: 'asc' }]), 'abcd')
+  assert.deepEqual(sortsOf({ sort: { field: 'due', dir: 'asc' } }, 'list'), [{ field: 'due', dir: 'asc' }])
+  assert.deepEqual(sortsOf({ sort: { field: 'due', dir: 'asc' }, sorts: { list: [] } }, 'list'), [])
 })

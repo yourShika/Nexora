@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
-// Kontextmenü an fester Position; schließt bei Klick daneben oder Escape
-export default function Menu({ x, y, onClose, children }) {
+// Kontextmenü an fester Position; schließt bei Klick daneben oder Escape.
+// Direkt am <body>: in Elementen mit backdrop-filter (Kopfzeile der Seite) rechnete "fixed" sonst vom Element statt vom Fenster
+export default function Menu({ x, y, onClose, children, role = 'menu', label }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -19,10 +21,11 @@ export default function Menu({ x, y, onClose, children }) {
     }
   }, [x, y, onClose])
 
-  return (
-    <div ref={ref} role="menu" className="anim-pop fixed z-40 min-w-48 rounded-lg border border-line bg-raised p-1 shadow-[var(--shadow)]">
+  return createPortal(
+    <div ref={ref} role={role} aria-label={label} className="anim-pop fixed z-40 min-w-48 rounded-lg border border-line bg-raised p-1 shadow-[var(--shadow)]">
       {children}
-    </div>
+    </div>,
+    document.body,
   )
 }
 
