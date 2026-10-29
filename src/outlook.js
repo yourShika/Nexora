@@ -99,7 +99,7 @@ export function followUpMail(row, list) {
   const name = [formatNr(list, row.props?.nr), row.title || 'Ohne Titel'].filter(Boolean).join(' ')
   const since = row.created_at ? new Date(row.created_at).toLocaleDateString('de-DE') : null
   const due = row.props?.due ? formatDate(row.props.due) : null
-  const lines = [row.props?.person ? `Hallo ${row.props.person},` : 'Hallo,', '', `kurze Nachfrage zu: ${name}`]
+  const lines = [row.props?.person ? `Hallo ${[].concat(row.props.person).join(', ')},` : 'Hallo,', '', `kurze Nachfrage zu: ${name}`]
   if (since || due) lines.push([since && `offen seit ${since}`, due && `fällig ${due}`].filter(Boolean).join(', '))
   lines.push('', 'Gibt es dazu schon einen Stand?', '', 'Viele Grüße')
   return { subject: `Nachfrage: ${name}`, body: lines.join('\r\n') }

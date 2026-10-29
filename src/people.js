@@ -4,14 +4,19 @@ import { CHIP_COLORS } from './fields.js'
 // dazu kommt jeder Name, der schon in einem Punkt steht, damit nichts verloren geht. Im Punkt steht weiter der Name.
 const KEYS = Object.keys(CHIP_COLORS).filter((k) => k !== 'grau')
 
+// Zuständig ist ein Name (bis 0.29) oder eine Liste von Namen
+export const personsOf = (v) => (Array.isArray(v) ? v : v ? [v] : [])
+
 export function peopleList(saved, rows) {
   const list = [...saved]
   const known = new Set(saved.map((p) => p.name.toLowerCase()))
   for (const r of rows) {
-    const name = r.props?.person?.trim()
-    if (name && !known.has(name.toLowerCase())) {
-      known.add(name.toLowerCase())
-      list.push({ name })
+    for (const raw of personsOf(r.props?.person)) {
+      const name = raw.trim()
+      if (name && !known.has(name.toLowerCase())) {
+        known.add(name.toLowerCase())
+        list.push({ name })
+      }
     }
   }
   return list.sort((a, b) => a.name.localeCompare(b.name, 'de'))

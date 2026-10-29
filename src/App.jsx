@@ -37,7 +37,10 @@ import { findUpdate, installUpdate } from './updates.js'
 import Tabs, { VIEWS } from './Tabs.jsx'
 import * as T from './tabs.js'
 import TitleBar from './TitleBar.jsx'
-import { peopleList } from './people.js'
+import News from './News.jsx'
+import { getVersion } from '@tauri-apps/api/app'
+import { homeDir } from '@tauri-apps/api/path'
+import { peopleList, personsOf } from './people.js'
 import { getLook, loadLook, motionOn, setLook, useLook } from './theme.js'
 import { dayOf, daysBetween, describe, emptyConfig, fieldsOf, formatDate, isDone, lopConfig, nextDate, shiftDate, statusField, today, toggleDone } from './fields.js'
 import CalendarView from './Calendar.jsx'
@@ -51,7 +54,8 @@ import { AppContext } from './ctx.js'
 const DEFAULT_TITLE = { notebook: 'Neues Notizbuch', section: 'Neuer Abschnitt', page: '', database: 'Neue Liste', row: '' }
 // Wohin etwas im Baum darf (null = oberste Ebene)
 // Abschnitte dürfen in Abschnitten liegen (wie Abschnittsgruppen in OneNote)
-const PARENTS = { notebook: [null], section: ['notebook', 'section'], page: ['section', 'page'], database: ['section', 'page'] }
+// Seiten und Listen dürfen auch direkt im Notizbuch liegen (ohne Abschnitt)
+const PARENTS = { notebook: [null], section: ['notebook', 'section'], page: ['notebook', 'section', 'page'], database: ['notebook', 'section', 'page'] }
 const SEED_SECTION = '7d1f3c2a-0b6e-4c55-9a1e-3f0d2b8c4e02'
 
 function loadExpanded() {
@@ -92,6 +96,10 @@ export default function App() {
   const [tabState, setTabState] = useState({ tabs: [], active: null })
   const tabsRef = useRef(tabState)
   const tabKeys = useRef(null)
+  // Strg+Z außerhalb des Textes (siehe remember): Schritte zum Rückgängigmachen und Wiederholen
+  const history = useRef({ done: [], undone: [] })
+  const tick = useRef({ n: 0, armed: false })
+  const undoKeys = useRef(null)
   const current = windowPage ?? T.activeTab(tabState)?.view ?? null
   // Reiter ändern; wechselt dabei die sichtbare Seite, blendet sie weich über (View Transition, nur der Inhalt, index.css).
   // tabsRef gleich setzen, damit mehrere Änderungen hintereinander aufeinander aufbauen
@@ -116,6 +124,9 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState('allgemein')
   const [area, setArea] = useState('arbeit') // aktiver Bereich: 'arbeit' | 'privat'
   const [peopleSaved, setPeopleSaved] = useState([]) // Personenliste mit Farben (Einstellung "personen")
+  const [profile, setProfile] = useState({ name: '', color: 'petrol' }) // Benutzer-Anzeige unten links (Einstellung "profil")
+  const [news, setNews] = useState(null) // Version, deren Neuigkeiten gerade offen sind
+  const [appVersion, setAppVersion] = useState('')
   const areaValue = area === 'privat' ? 'privat' : null // so steht er am obersten Knoten
   const [notice, setNotice] = useState('')
   const [oneNote, setOneNote] = useState(null) // offen: { busy: Fortschrittstext }
@@ -206,8 +217,18 @@ export default function App() {
     if (after?.show) {
       const w = getCurrentWindow()
       w.unminimize().then(() => w.show()).then(() => w.setFocus()).catch(() => {})
-      setNotice(`Nexora wurde auf ${after.version} aktualisiert.`)
     }
+    // Neuigkeiten einmal nach jedem Update (auch nach einem stillen im Tray: dann beim nächsten Öffnen sichtbar)
+    getVersion().then(async (v) => {
+      setAppVersion(v)
+      const seen = await db.getSetting('neuigkeiten-gesehen').catch(() => null)
+      if (after || (seen && seen !== v)) setNews(v)
+      if (seen !== v) db.setSetting('neuigkeiten-gesehen', v).catch(() => {})
+    }).catch(() => {})
+    // Name unten links: gespeichert, sonst der Windows-Anmeldename
+    Promise.all([db.getSetting('profil').catch(() => null), homeDir().catch(() => '')]).then(([saved, home]) =>
+      setProfile(saved ? JSON.parse(saved) : { name: home.split(/[\\/]/).filter(Boolean).at(-1) ?? '', color: 'petrol' }),
+    )
     const offs = [
       listen('window-closed', (e) => setWindows((s) => new Set([...s].filter((id) => id !== e.payload)))),
       listen('open-page', (e) => {
@@ -289,6 +310,7 @@ export default function App() {
       try {
         const found = await findUpdate()
         setUpdate({ found, busy: false, error: '', checked: true })
+        return found
       } catch (e) {
         setUpdate({ found: null, busy: false, error: String(e) })
       }
@@ -356,6 +378,13 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setSearching((s) => !s)
+      }
+      // Strg+Z / Strg+Y (oder Strg+Umschalt+Z) außerhalb von Text: Änderungen an Seiten, Listen und Punkten
+      const key = e.key.toLowerCase()
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (key === 'z' || key === 'y') && !e.defaultPrevented && !e.target.closest?.('input, textarea, [contenteditable="true"], .tiptap')) {
+        e.preventDefault()
+        if (key === 'y' || e.shiftKey) undoKeys.current?.redo()
+        else undoKeys.current?.undo()
       }
       // Reiter wie im Browser: Strg+W schließt, Strg+T neu, Strg+Tab / Strg+Umschalt+Tab wechselt
       if (!windowPage && e.ctrlKey && !e.altKey) {
@@ -564,13 +593,18 @@ export default function App() {
     db.setSetting(`outlook-${key}`, on ? '1' : '0').catch(fail)
   }
 
-  function save(id, fields) {
-    const node = tree.alive.get(id)
+  // replay: Rückgängig/Wiederholen; dann kein neuer Schritt und keine Folgen (nächster Termin, Tagebuch)
+  function save(id, fields, { replay = false } = {}) {
+    const node = tree.alive.get(id) ?? nodes.find((n) => n.id === id) // auch Gelöschte (Wiederherstellen)
+    if (node) logNode(node, fields)
+    if (node && !replay) remember(node, fields)
     if (node?.kind === 'row' && fields.props) {
       logChanges(node, fields.props)
-      repeatIfDone(node, fields.props)
-      const fs = fieldsOf(dbOf(node))
-      if (!isDone(node, fs) && isDone({ props: fields.props }, fs)) db.journal('erledigt', id, node.title).catch(() => {})
+      if (!replay) {
+        repeatIfDone(node, fields.props)
+        const fs = fieldsOf(dbOf(node))
+        if (!isDone(node, fs) && isDone({ props: fields.props }, fs)) db.journal('erledigt', id, node.title).catch(() => {})
+      }
     }
     patch(id, { ...fields, updated_at: new Date().toISOString() })
     db.update(id, fields).catch(fail)
@@ -597,6 +631,69 @@ export default function App() {
   }
 
   // Verlauf je Punkt: jede geänderte Eigenschaft als "Status: Offen → Wartet"
+  // Rückgängig: jede Änderung über save() merkt sich den Stand davor. Was im selben Augenblick passiert (erledigt
+  // und nächster Termin, Wiederherstellen samt Eltern), ist ein Schritt; dasselbe Feld kurz hintereinander auch.
+  // Text gehört nicht dazu, der hat das Rückgängig des Editors
+  const UNDOABLE = ['title', 'icon', 'color', 'cover', 'locked', 'template', 'props', 'config', 'favorite', 'parent_id', 'sort', 'deleted_at', 'area']
+  function stepLabel(node, fields) {
+    const name = `„${node.title || 'Ohne Titel'}“`
+    if ('deleted_at' in fields) return fields.deleted_at ? `${name} gelöscht` : `${name} wiederhergestellt`
+    if ('title' in fields) return `Umbenannt in „${fields.title || 'Ohne Titel'}“`
+    if ('parent_id' in fields || 'sort' in fields) return `${name} verschoben`
+    if ('props' in fields) return `Felder von ${name}`
+    if ('config' in fields) return `Einstellungen von ${name}`
+    return `${name} geändert`
+  }
+  function remember(node, fields, { before, label } = {}) {
+    const keys = Object.keys(fields).filter((k) => UNDOABLE.includes(k))
+    if (!keys.length) return
+    const entry = { id: node.id, before: before ?? Object.fromEntries(keys.map((k) => [k, node[k] ?? null])), after: Object.fromEntries(keys.map((k) => [k, fields[k] ?? null])) }
+    const h = history.current
+    const t = tick.current
+    const last = h.done.at(-1)
+    const same = last?.entries.length === 1 && last.entries[0].id === entry.id && Object.keys(last.entries[0].after).join() === keys.join() && Date.now() - last.at < 2000
+    if (last && last.tick === t.n) last.entries.push(entry)
+    else if (same) (last.entries[0].after = entry.after), (last.at = Date.now())
+    else {
+      h.done.push({ entries: [entry], label: label ?? stepLabel(node, fields), at: Date.now(), tick: t.n })
+      if (h.done.length > 100) h.done.shift()
+    }
+    h.undone = []
+    if (!t.armed) (t.armed = true), setTimeout(() => ((t.n += 1), (t.armed = false)))
+  }
+  // neu angelegt: rückgängig = in den Papierkorb
+  const rememberNew = (node) => remember(node, { deleted_at: null }, { before: { deleted_at: new Date().toISOString() }, label: `„${node.title || 'Ohne Titel'}“ angelegt` })
+  function undo() {
+    const step = history.current.done.pop()
+    if (!step) return setNotice('Nichts mehr rückgängig zu machen.')
+    for (const e of [...step.entries].reverse()) save(e.id, e.before, { replay: true })
+    history.current.undone.push(step)
+    setNotice({ text: `Rückgängig: ${step.label}`, label: 'Wiederholen', run: () => undoKeys.current.redo() })
+  }
+  function redo() {
+    const step = history.current.undone.pop()
+    if (!step) return setNotice('Nichts zum Wiederholen.')
+    for (const e of step.entries) save(e.id, e.after, { replay: true })
+    history.current.done.push(step)
+    setNotice({ text: `Wiederholt: ${step.label}`, label: 'Rückgängig', run: () => undoKeys.current.undo() })
+  }
+  undoKeys.current = { undo, redo }
+
+  // Verlauf der Seite (Uhr-Knopf): was sich außer Text und Feldern ändert
+  const where = (id) => (id ? pathOf(id).map((p) => p.title || 'Ohne Titel').join(' / ') : 'Eingang')
+  function logNode(node, fields) {
+    const say = (text, merge) => db.addChange(node.id, text, merge).catch(() => {})
+    const changed = (k) => k in fields && (fields[k] ?? null) !== (node[k] ?? null)
+    if (changed('title')) db.renamed(node.id, node.title, fields.title).catch(() => {})
+    if (changed('parent_id')) say(`Verschoben: ${where(node.parent_id)} → ${where(fields.parent_id)}`)
+    if (changed('locked') && !!fields.locked !== !!node.locked) say(fields.locked ? 'Gesperrt' : 'Entsperrt')
+    if (changed('template') && !!fields.template !== !!node.template) say(fields.template ? 'Als Vorlage markiert' : 'Keine Vorlage mehr')
+    if (changed('icon')) say(fields.icon ? `Symbol: ${fields.icon}` : 'Symbol entfernt')
+    if (changed('cover')) say(fields.cover ? 'Titelbild gesetzt' : 'Titelbild entfernt')
+    if (changed('area')) say(`Bereich: ${node.area === 'privat' ? 'Privat' : 'Arbeit'} → ${fields.area === 'privat' ? 'Privat' : 'Arbeit'}`)
+    if (changed('deleted_at') && !!fields.deleted_at !== !!node.deleted_at) say(fields.deleted_at ? 'In den Papierkorb gelegt' : 'Wiederhergestellt')
+    if ('config' in fields && node.kind === 'database' && JSON.stringify(fields.config) !== JSON.stringify(node.config)) say('Listen-Einstellungen geändert', { key: 'Listen-Einstellungen', join: (last) => last })
+  }
   function logChanges(row, props) {
     for (const f of fieldsOf(dbOf(row))) {
       const [before, after] = [row.props?.[f.id] ?? null, props[f.id] ?? null]
@@ -632,6 +729,7 @@ export default function App() {
       const full = list ? numbered(list, props) : { status: 'offen', ...props }
       const node = await db.create('row', parentId, title, { props: full, area: parentId ? null : areaValue })
       setNodes((ns) => [...ns, node])
+      rememberNew(node)
       db.journal('angelegt', node.id, title).catch(() => {})
       if (open) actions.open(node.id), setFresh(node.id)
       return node
@@ -863,6 +961,13 @@ export default function App() {
 
   const actions = {
     fromTemplate,
+    showNews: () => setNews(appVersion),
+    // Benutzer-Anzeige → Nach Updates suchen
+    async checkUpdates() {
+      const found = await updates.check()
+      // check() gibt bei einem Fehler nichts zurück (undefined), ohne neue Version null
+      setNotice(found ? `Version ${found.version} ist da: unten links „jetzt installieren“, sonst kommt sie beim nächsten Start.` : found === undefined ? 'Keine Verbindung zum Update-Server.' : `Nexora ${appVersion} ist aktuell.`)
+    },
     // Seitenleiste, Seite: in neuem Reiter öffnen, als Reiter anpinnen oder lösen
     openTab: (id) => actions.openHere(id, true),
     isPinned: (id) => tabState.tabs.some((t) => t.view === id && t.pinned),
@@ -958,6 +1063,7 @@ export default function App() {
         const node = await db.create(kind, parentId, title, { config, area: parentId ? null : areaValue })
         if (template === 'frei') await db.update(node.id, { body: CANVAS })
         setNodes((ns) => [...ns, node])
+        rememberNew(node)
         if (kind === 'page') db.journal('angelegt', node.id, title).catch(() => {})
         if (parentId) setExpanded((s) => new Set([...s, parentId]))
         if (kind === 'page') {
@@ -997,8 +1103,9 @@ export default function App() {
     },
     save,
     remove(id) {
-      patch(id, { deleted_at: new Date().toISOString() })
-      db.trash(id).catch(fail)
+      const n = tree.alive.get(id)
+      save(id, { deleted_at: new Date().toISOString() })
+      setNotice({ text: `„${n?.title || 'Ohne Titel'}“ liegt im Papierkorb.`, label: 'Rückgängig', run: () => undoKeys.current.undo() }) // aktueller Stand, nicht der beim Löschen
       if (windowPage === id) getCurrentWindow().close().catch(() => {})
       else if (current && pathOf(current).some((n) => n.id === id)) setCurrent(tree.alive.get(id)?.parent_id ?? 'today')
     },
@@ -1018,7 +1125,6 @@ export default function App() {
 
   const node = tree.alive.get(current)
   const favorites = nodes.filter((n) => n.favorite && tree.alive.has(n.id) && tree.areaOf(n.id) === area)
-  // Reiter wie Favoriten nur im aktiven Bereich; gelöschte Seiten bleiben gemerkt und kommen mit dem Wiederherstellen zurück
   // Reiter wie Favoriten nur im aktiven Bereich; feste Ansichten (Heute, Eingang …) in beiden
   const shownTab = (t) => VIEWS[t.view] || (tree.alive.has(t.view) && tree.areaOf(t.view) === area)
   const tabItems = tabState.tabs.filter(shownTab).map((t) => ({ ...t, node: tree.alive.get(t.view) }))
@@ -1049,11 +1155,14 @@ export default function App() {
     name = name.trim()
     if (!name || name === old) return
     savePeople(people.filter((p) => p.name !== old && p.name.toLowerCase() !== name.toLowerCase()).concat({ ...people.find((p) => p.name === old), name }))
-    for (const r of allRows) if (r.props?.person === old) save(r.id, { props: { ...r.props, person: name } })
+    for (const r of allRows) if (personsOf(r.props?.person).includes(old)) save(r.id, { props: { ...r.props, person: personsOf(r.props.person).map((p) => (p === old ? name : p)) } })
   }
   function removePerson(name) {
     savePeople(people.filter((p) => p.name !== name))
-    for (const r of allRows) if (r.props?.person === name) save(r.id, { props: { ...r.props, person: null } })
+    for (const r of allRows) {
+      const rest = personsOf(r.props?.person).filter((p) => p !== name)
+      if (rest.length !== personsOf(r.props?.person).length) save(r.id, { props: { ...r.props, person: rest.length ? rest : null } })
+    }
   }
   // Heute, Eingang, Kalender, Suche, Tagebuch, Statistik zeigen nur den aktiven Bereich; Erinnerungen kommen aus beiden
   const inArea = (n) => tree.areaOf(n.id) === area
@@ -1078,6 +1187,8 @@ export default function App() {
     renamePerson,
     removePerson,
     pinPage: windowPage ? null : actions.pinPage,
+    profile,
+    saveProfile: (p) => (setProfile(p), db.setSetting('profil', JSON.stringify(p)).catch(fail)),
     isPinned: actions.isPinned,
     unlockVault,
     vaultCopy,
@@ -1133,9 +1244,7 @@ export default function App() {
           // gelöschte Eltern mit zurückholen, sonst bliebe die Seite unsichtbar
           const byId = new Map(nodes.map((n) => [n.id, n]))
           for (let n = byId.get(id); n; n = byId.get(n.parent_id)) {
-            if (!n.deleted_at) continue
-            patch(n.id, { deleted_at: null })
-            db.restore(n.id).catch(fail)
+            if (n.deleted_at) save(n.id, { deleted_at: null })
           }
         }}
         onPurge={(id) => {
@@ -1360,11 +1469,17 @@ export default function App() {
           onClose={() => setOneNote(null)}
         />
       )}
+      {news && <News version={news} onClose={() => setNews(null)} />}
       {searching && <Search tree={areaTree} pathOf={pathOf} commands={commands} onOpen={actions.open} onClose={() => setSearching(false)} />}
 
       {notice && !error && (
         <div role="status" className="anim-toast fixed bottom-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-line bg-raised p-3 shadow-[var(--shadow)]">
-          <span className="flex-1">{notice}</span>
+          <span className="flex-1">{typeof notice === 'string' ? notice : notice.text}</span>
+          {notice.run && (
+            <button onClick={() => (setNotice(''), notice.run())} className="shrink-0 rounded-md px-2 py-0.5 font-medium text-accent hover:bg-hover">
+              {notice.label}
+            </button>
+          )}
           <button aria-label="Schließen" onClick={() => setNotice('')} className="text-muted hover:text-text">
             <X size={16} />
           </button>

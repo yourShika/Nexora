@@ -20,7 +20,7 @@ import Select from './Select.jsx'
 import { ColorInput } from './ColorPicker.jsx'
 import { TimeInput } from './DatePicker.jsx'
 import { CHIP_COLORS } from './fields.js'
-import { colorOf, initials } from './people.js'
+import { colorOf, initials, personsOf } from './people.js'
 
 const INTERVALS = [
   { hours: 1, label: 'jede Stunde' },
@@ -374,7 +374,7 @@ function HotkeyRow({ item, accel, busy, onChange }) {
 
 // Kategorien links, Suche oben; keys: weitere Suchwörter
 const CATEGORIES = [
-  { id: 'allgemein', label: 'Allgemein', icon: SlidersHorizontal, keys: 'fenster autostart windows start tray eigenes fenster' },
+  { id: 'allgemein', label: 'Allgemein', icon: SlidersHorizontal, keys: 'profil name benutzer farbe fenster autostart windows start tray eigenes fenster' },
   { id: 'aussehen', label: 'Aussehen', icon: Palette, keys: 'farbe farbschema schema theme hell dunkel modus darstellung verlauf gradient akzent discord schrift schriftart schriftgröße größe zoom bewegung animation übergang dichte zeilenabstand kompakt breite seitenbreite ecken rund eckig seitenleiste' },
   { id: 'tasten', label: 'Tastenkürzel', icon: Keyboard, keys: 'hotkey kürzel tastatur schnellerfassung zwischenablage snippet picker' },
   { id: 'erinnerungen', label: 'Erinnerungen', icon: Bell, keys: 'meldung sammelmeldung benachrichtigung fällig uhrzeit morgen' },
@@ -417,6 +417,7 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
   const content = {
     allgemein: (
       <>
+        <ProfileSection />
         <section className="mb-10">
           <h2 className="mb-1 font-semibold">Fenster</h2>
           <p className="mb-3 text-muted">
@@ -602,11 +603,41 @@ function Swatch({ theme, active, dark, onClick }) {
   )
 }
 
+// Name und Farbe unten links in der Seitenleiste (später mit dem Team-Server das Microsoft-Konto)
+function ProfileSection() {
+  const app = useApp()
+  const p = app.profile
+  const [name, setName] = useState(p.name)
+  useEffect(() => setName(p.name), [p.name])
+  return (
+    <section className="mb-10">
+      <h2 className="mb-1 font-semibold">Profil</h2>
+      <p className="mb-3 text-muted">Steht unten in der Seitenleiste. Ein Klick darauf öffnet Neuigkeiten, Papierkorb, Einstellungen und die Update-Suche.</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <span aria-hidden className="grid size-8 place-items-center rounded-full text-xs font-semibold text-white" style={{ background: CHIP_COLORS[p.color] ?? CHIP_COLORS.petrol }}>{initials(name || '?')}</span>
+        <input
+          value={name}
+          aria-label="Dein Name"
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => name.trim() && name.trim() !== p.name && app.saveProfile({ ...p, name: name.trim() })}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          className="w-64 rounded-md border border-line bg-raised px-3 py-1.5 focus:border-accent focus:outline-none"
+        />
+        <span role="radiogroup" aria-label="Farbe" className="flex gap-1">
+          {Object.entries(CHIP_COLORS).map(([key, hex]) => (
+            <button key={key} role="radio" aria-checked={p.color === key} aria-label={key} title={key} onClick={() => app.saveProfile({ ...p, color: key })} style={{ background: hex }} className={`size-5 rounded-full ${p.color === key ? 'ring-2 ring-text ring-offset-1 ring-offset-bg' : ''}`} />
+          ))}
+        </span>
+      </div>
+    </section>
+  )
+}
+
 // Personenliste für "Zuständig" in allen LOP-Listen
 function PeopleSection() {
   const app = useApp()
   const [name, setName] = useState('')
-  const count = (n) => [...app.alive.values()].filter((r) => r.kind === 'row' && r.props?.person === n).length
+  const count = (n) => [...app.alive.values()].filter((r) => r.kind === 'row' && personsOf(r.props?.person).includes(n)).length
   const add = () => {
     const n = name.trim()
     if (n && !app.people.some((p) => p.name.toLowerCase() === n.toLowerCase())) app.savePeople([...app.people, { name: n }])

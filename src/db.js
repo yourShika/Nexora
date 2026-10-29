@@ -185,6 +185,29 @@ export async function activity(id) {
   return (await db()).select('SELECT id, kind, text, created_at FROM activity WHERE node_id = $1 ORDER BY created_at DESC, id DESC LIMIT 200', [id])
 }
 
+// Änderung für den Verlauf einer Seite. merge { key, join(alterText) }: Folgeänderungen derselben Art binnen
+// 10 Minuten werden ein Eintrag (Titel tippen, Spaltenbreite ziehen) statt vieler
+export async function addChange(id, text, merge) {
+  const c = await db()
+  if (merge) {
+    const [last] = await c.select("SELECT id, text, created_at FROM activity WHERE node_id = $1 AND kind = 'change' ORDER BY id DESC LIMIT 1", [id])
+    if (last?.text.startsWith(merge.key) && Date.now() - Date.parse(last.created_at) < 10 * 60e3) {
+      const text = merge.join(last.text)
+      // null: unterm Strich nichts geändert (z. B. umbenannt und wieder zurück), Eintrag fällt weg
+      if (text === null) await c.execute('DELETE FROM activity WHERE id = $1', [last.id])
+      else await c.execute('UPDATE activity SET text = $1, created_at = $2 WHERE id = $3', [text, now(), last.id])
+      return
+    }
+  }
+  await c.execute("INSERT INTO activity (node_id, kind, text) VALUES ($1, 'change', $2)", [id, text])
+}
+
+// Umbenennen als ein Eintrag „alt“ → „neu“, auch wenn in mehreren Schritten getippt
+export const renamed = (id, from, to) => {
+  const t = (x) => `„${x || 'Ohne Titel'}“`
+  return addChange(id, `Umbenannt: ${t(from)} → ${t(to)}`, { key: 'Umbenannt:', join: (last) => (last.startsWith(`Umbenannt: ${t(to)} →`) ? null : last.replace(/→ „[^]*“$/, `→ ${t(to)}`)) })
+}
+
 export async function addActivity(id, kind, text) {
   await (await db()).execute('INSERT INTO activity (node_id, kind, text) VALUES ($1, $2, $3)', [id, kind, text])
 }

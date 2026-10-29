@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, MagnifyingGlass } from '@phosphor-icons/react'
 import * as db from './db.js'
 import { hitLabel } from './ocr.js'
+import { personsOf } from './people.js'
 import { NodeIcon } from './Sidebar.jsx'
 import { fieldsOf, option, statusField } from './fields.js'
 
@@ -49,7 +50,7 @@ export default function Search({ tree, pathOf, commands, onOpen, onClose }) {
     const dbOf = (n) => (n.kind === 'row' ? tree.alive.get(n.parent_id) : null)
     const passes = (n) => {
       if (f.tags.length && !f.tags.every((t) => (n.props?.tags ?? []).some((x) => norm(x) === t))) return false
-      if (f.person && !norm(n.props?.person).includes(f.person)) return false
+      if (f.person && !personsOf(n.props?.person).some((p) => norm(p).includes(f.person))) return false
       if (f.status) {
         const o = option(statusField(fieldsOf(dbOf(n))), n.props?.status)
         if (n.kind !== 'row' || !o || !(norm(o.name).startsWith(f.status) || norm(o.id).startsWith(f.status))) return false

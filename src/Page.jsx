@@ -31,6 +31,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
   const editor = useRef(null)
 
   // Schreibt gesammelte Änderungen; bei Fehler bleiben sie für den nächsten Versuch liegen
+  const savedTitle = useRef(node.title) // Titel vor dem Tippen, für den Verlauf
   const flush = useCallback(async () => {
     clearTimeout(timer.current)
     const fields = pending.current
@@ -38,6 +39,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
     pending.current = {}
     try {
       await db.update(node.id, fields)
+      if ('title' in fields && fields.title !== savedTitle.current) db.renamed(node.id, savedTitle.current, (savedTitle.current = fields.title)).catch(() => {})
       if (!Object.keys(pending.current).length) setStatus('saved')
       if ('body' in fields || 'title' in fields) db.journal('bearbeitet', node.id, fields.title ?? node.title).catch(() => {})
     } catch {

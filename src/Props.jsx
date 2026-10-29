@@ -5,7 +5,7 @@ import Menu, { MenuItem } from './Menu.jsx'
 import { DatePicker, TimeInput } from './DatePicker.jsx'
 import { CHIP_COLORS, REPEATS, dayOf, formatDate, formatNr, isLate, isToday, option, timeOf } from './fields.js'
 import { useApp } from './ctx.js'
-import { colorOf, initials } from './people.js'
+import { colorOf, initials, personsOf } from './people.js'
 
 export function Chip({ color = 'grau', children }) {
   const hex = CHIP_COLORS[color] ?? CHIP_COLORS.grau
@@ -60,7 +60,7 @@ export function FieldValue({ field, value, db, done }) {
     case 'date':
       return <DateText value={value} done={done} />
     case 'person':
-      return <PersonChip name={value} />
+      return <span className="inline-flex min-w-0 flex-wrap gap-x-2 gap-y-0.5">{personsOf(value).map((p) => <PersonChip key={p} name={p} />)}</span>
     case 'checkbox':
       return value ? <Check size={14} className="text-muted" aria-label={field.name} /> : null
     case 'nr':
@@ -222,7 +222,7 @@ export function PersonChip({ name }) {
   )
 }
 
-// Zuständig wählen wie Tags: Liste aller Personen mit Suche; ein neuer Name legt die Person an
+// Zuständig wählen wie Tags: eine oder mehrere Personen aus der Liste, mit Suche; ein neuer Name legt die Person an
 function PersonEditor({ field, value, onChange }) {
   const app = useApp()
   const [at, setAt] = useState(null)
@@ -234,21 +234,27 @@ function PersonEditor({ field, value, onChange }) {
   const shown = (needle ? people.filter((p) => p.name.toLowerCase().includes(needle)) : people).map((p) => p.name)
   const fresh = needle && !people.some((p) => p.name.toLowerCase() === needle) ? q.trim() : null
   const items = fresh ? [...shown, fresh] : shown
-  const pick = (name) => (close(), name !== value && onChange(name || null))
+  const chosen = personsOf(value)
+  // an- und abwählen, das Fenster bleibt offen (mehrere Zuständige); gespeichert wird eine Liste oder nichts
+  const pick = (name) => {
+    const next = chosen.includes(name) ? chosen.filter((p) => p !== name) : [...chosen, name]
+    onChange(next.length ? next : null)
+    setQ('')
+  }
   const id = `person-${field.id}`
   return (
     <>
       <button
-        aria-label={`${field.name}: ${value || 'niemand'}`}
+        aria-label={`${field.name}: ${chosen.join(', ') || 'niemand'}`}
         aria-haspopup="dialog"
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect()
           setActive(0)
           setAt({ x: r.left, y: r.bottom + 4 })
         }}
-        className="flex min-h-7 w-full items-center rounded px-1.5 py-1 text-left hover:bg-hover"
+        className="flex min-h-7 w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded px-1.5 py-1 text-left hover:bg-hover"
       >
-        {value ? <PersonChip name={value} /> : <span className="text-faint">–</span>}
+        {chosen.length ? chosen.map((p) => <PersonChip key={p} name={p} />) : <span className="text-faint">–</span>}
       </button>
       {at && (
         <Menu x={at.x} y={at.y} onClose={close} role="dialog" label={`${field.name} wählen`}>
@@ -274,21 +280,21 @@ function PersonEditor({ field, value, onChange }) {
                 key={name}
                 id={`${id}-${i}`}
                 role="option"
-                aria-selected={name === value}
+                aria-selected={chosen.includes(name)}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => pick(name)}
                 className={`flex cursor-default items-center justify-between gap-3 rounded-md px-2 py-1.5 ${i === active ? 'bg-hover' : ''}`}
               >
                 {name === fresh ? <span className="flex items-center gap-2 text-sm"><Plus size={14} /> „{fresh}“ anlegen</span> : <PersonChip name={name} />}
-                {name === value && <Check size={14} />}
+                {chosen.includes(name) && <Check size={14} />}
               </li>
             ))}
             {!items.length && <li className="px-2 py-1.5 text-sm text-faint">Noch keine Personen. Namen tippen, Enter legt an.</li>}
           </ul>
-          {value && (
+          {chosen.length > 0 && (
             <>
               <div className="my-1 border-t border-line" />
-              <MenuItem onClick={() => pick(null)}>Niemand</MenuItem>
+              <MenuItem onClick={() => (onChange(null), close())}>Niemand</MenuItem>
             </>
           )}
         </Menu>

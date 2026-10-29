@@ -53,7 +53,8 @@ export function parseQuick(text, now = new Date()) {
     if (!m && new RegExp(`^${HOUR}$`).test(t) && /^uhr$/i.test(tokens[i + 1] ?? '')) m = [t, t], i++
     if (m) { time = `${pad(m[1])}:${m[2] ?? '00'}`; continue }
     if (/^#[\p{L}\p{N}_-]+$/u.test(t)) { tags.push(t.slice(1)); continue }
-    if (/^@[\p{L}\p{N}._-]+$/u.test(t)) { props.person = t.slice(1); continue }
+    // mehrere @Namen = mehrere Zuständige
+    if (/^@[\p{L}\p{N}._-]+$/u.test(t)) { props.person = props.person ? [].concat(props.person, t.slice(1)) : t.slice(1); continue }
     if (/^!/.test(t) && PRIO[t.slice(1).toLowerCase()]) { props.prio = PRIO[t.slice(1).toLowerCase()]; continue }
     if (t.startsWith('*') && REPEAT[t.slice(1).toLowerCase()]) { props.repeat = REPEAT[t.slice(1).toLowerCase()]; continue }
     if (/^nächste$/i.test(t) && /^woche$/i.test(tokens[i + 1] ?? '')) {

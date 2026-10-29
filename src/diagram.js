@@ -1,6 +1,8 @@
 // Diagramm-Block: Codeblock der Sprache "diagramm". Oben Einstellungen ("typ: balken"), darunter bei eigener Tabelle
 // die Daten mit ; oder Tab getrennt (erste Zeile Überschriften, erste Spalte Beschriftungen). Reine Rechnungen, die Ansicht ist Chart.jsx.
 
+import { personsOf } from './people.js'
+
 export const CHART_TYPES = [
   ['balken', 'Balken'], ['quer', 'Balken quer'], ['gestapelt', 'Gestapelt'], ['linie', 'Linie'], ['flaeche', 'Fläche'],
   ['torte', 'Torte'], ['ring', 'Ring'], ['punkte', 'Punkte'], ['netz', 'Netz'], ['polar', 'Polar'],
@@ -91,7 +93,7 @@ export function fromList(rows, fields, gruppe, nur, done) {
       series: [{ name: 'Punkte', values: keys.map((k) => counts.get(k)) }],
     }
   } else {
-    for (const r of shown) add(r.props?.person || 'Niemand')
+    for (const r of shown) for (const p of personsOf(r.props?.person).length ? personsOf(r.props.person) : ['Niemand']) add(p)
   }
   const labels = order ? order.filter((k) => counts.has(k)) : [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a) || a.localeCompare(b, 'de'))
   return { labels, series: [{ name: 'Punkte', values: labels.map((k) => counts.get(k)) }] }

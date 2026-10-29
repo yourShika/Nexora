@@ -82,7 +82,7 @@ export function ParsedPreview({ props }) {
         <>
           {props.due && <span>Fällig <DateText value={props.due} /></span>}
           {prio && <Chip color={prio.color}>{prio.name}</Chip>}
-          {props.person && <span className="text-muted">@{props.person}</span>}
+          {props.person && <span className="text-muted">{[].concat(props.person).map((p) => `@${p}`).join(' ')}</span>}
           {props.tags?.map((t) => <Chip key={t}>#{t}</Chip>)}
         </>
       ) : (

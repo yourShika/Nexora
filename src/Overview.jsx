@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowCounterClockwise, FolderSimplePlus, Plus, Trash } from '@phosphor-icons/react'
+import { ArrowCounterClockwise, FileText, FolderSimplePlus, Plus, Trash } from '@phosphor-icons/react'
 import { NodeIcon } from './Sidebar.jsx'
 import { Cover, IconRow } from './PageHead.jsx'
 
@@ -32,7 +32,7 @@ export function Overview({ node, kids, onOpen, onAdd, onSave }) {
         </ul>
       ) : (
         <p className="mb-4 text-muted">
-          {node.kind === 'notebook' ? 'Noch keine Abschnitte. Ein Abschnitt fasst Seiten zu einem Thema zusammen.' : 'Noch keine Seiten in diesem Abschnitt.'}
+          {node.kind === 'notebook' ? 'Noch nichts darin. Ein Abschnitt fasst Seiten zu einem Thema zusammen; Seiten gehen auch direkt ins Notizbuch.' : 'Noch keine Seiten in diesem Abschnitt.'}
         </p>
       )}
       <button
@@ -41,6 +41,11 @@ export function Overview({ node, kids, onOpen, onAdd, onSave }) {
       >
         <Plus size={16} weight="bold" /> {label}
       </button>
+      {node.kind === 'notebook' && (
+        <button onClick={() => onAdd('page', node.id)} className="mt-2 flex items-center gap-2 rounded-md border border-line px-3 py-1.5 text-muted hover:bg-hover hover:text-text">
+          <FileText size={16} /> Neue Seite ohne Abschnitt
+        </button>
+      )}
       {node.kind === 'section' && (
         <button onClick={() => onAdd('section', node.id)} className="mt-2 flex items-center gap-2 rounded-md border border-line px-3 py-1.5 text-muted hover:bg-hover hover:text-text">
           <FolderSimplePlus size={16} /> Neuer Abschnitt darin

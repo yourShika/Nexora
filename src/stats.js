@@ -1,3 +1,4 @@
+import { personsOf } from './people.js'
 import { addDays, daysBetween, dayOf, iso, isDone, isLate, option, statusField, today } from './fields.js'
 import { monday, weekNumber } from './journal.js'
 
@@ -27,8 +28,7 @@ export function doneMoments(rows, fieldsFor, changes, journal) {
 function tally(items, keyOf, max = 8) {
   const m = new Map()
   for (const it of items) {
-    const k = keyOf(it)
-    m.set(k, (m.get(k) ?? 0) + 1)
+    for (const k of [].concat(keyOf(it))) m.set(k, (m.get(k) ?? 0) + 1) // mehrere Schlüssel (Personen) zählen einzeln
   }
   const list = [...m].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'de'))
   if (list.length <= max) return list
@@ -87,7 +87,7 @@ export function stats({ rows, fieldsFor, listOf, done, now = new Date(), weeks =
       return (sf && r.props?.[sf.id] && option(sf, r.props[sf.id]).name) || 'Ohne Status'
     }),
     byList: tally(open, listOf),
-    byPerson: tally(open, (r) => r.props?.person || 'Niemand'),
+    byPerson: tally(open, (r) => (personsOf(r.props?.person).length ? personsOf(r.props.person) : 'Niemand')),
     byPrio: tally(open, (r) => select(r, 'prio', 'Ohne Priorität')),
   }
 }

@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import {
   AppWindow, ArrowCircleUp, ArrowsLeftRight, FileArrowDown, FileArrowUp, FolderSimplePlus, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
-  Browsers, PushPin, SidebarSimple, Stamp, Star, Table, Trash, Tray, Warning,
+  Browsers, PushPin, SidebarSimple, Sparkle, Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { useApp } from './ctx.js'
 import { DEFAULT_LOOK, setLook, useLook } from './theme.js'
+import { initials } from './people.js'
 import logo from '../src-tauri/icons/icon.svg'
 
 export const COLORS = {
@@ -188,13 +189,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
             <LockSimpleOpen size={16} /> Tresor offen, sperren
           </button>
         )}
-        <button
-          onClick={() => actions.open('trash')}
-          className={`flex h-[var(--row)] w-full items-center gap-2 rounded-md px-2 text-muted ${current === 'trash' ? 'bg-accent-soft text-text' : 'hover:bg-hover hover:text-text'}`}
-        >
-          <Trash size={16} />
-          Papierkorb
-        </button>
+        <UserButton current={current} actions={actions} />
       </div>
 
       {menu && (
@@ -202,7 +197,8 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
           {m.kind === 'page' && <MenuItem icon={AppWindow} onClick={run(() => actions.openWindow(m.id))}>In eigenem Fenster öffnen</MenuItem>}
           <MenuItem icon={Plus} onClick={run(() => actions.add(CHILD[m.kind], m.id))}>{NEW_LABEL[m.kind]}</MenuItem>
           {m.kind === 'section' && <MenuItem icon={FolderSimplePlus} onClick={run(() => actions.add('section', m.id))}>Neuer Abschnitt darin</MenuItem>}
-          {['section', 'page'].includes(m.kind) && (
+          {m.kind === 'notebook' && <MenuItem icon={FileText} onClick={run(() => actions.add('page', m.id))}>Neue Seite (ohne Abschnitt)</MenuItem>}
+          {['notebook', 'section', 'page'].includes(m.kind) && (
             <>
               <MenuItem icon={FrameCorners} onClick={run(() => actions.add('page', m.id, 'frei'))}>Neue freie Seite</MenuItem>
               <MenuItem icon={ListChecks} onClick={run(() => actions.add('database', m.id, 'lop'))}>Neue LOP-Liste</MenuItem>
@@ -219,7 +215,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
               )}
             </>
           )}
-          {['section', 'page'].includes(m.kind) && (
+          {['notebook', 'section', 'page'].includes(m.kind) && (
             <MenuItem icon={DownloadSimple} onClick={run(() => actions.importFiles(m.id))}>Textdateien importieren …</MenuItem>
           )}
           {m.kind === 'notebook' && <MenuItem icon={FileArrowUp} onClick={run(() => actions.exportNexora(m.id))}>Als Nexora-Datei speichern …</MenuItem>}
@@ -380,6 +376,44 @@ export function Rail({ current, counts, actions, onSearch }) {
       <span className="flex-1" />
       {item('Einstellungen', GearSix, () => actions.open('settings'), current === 'settings')}
     </aside>
+  )
+}
+
+// Benutzer-Anzeige unten: Klick oder Rechtsklick öffnet Neuigkeiten, Papierkorb, Einstellungen, Update-Suche
+function UserButton({ current, actions }) {
+  const profile = useApp()?.profile ?? { name: '' }
+  const [menu, setMenu] = useState(null)
+  const close = useCallback(() => setMenu(null), [])
+  const open = (e) => {
+    e.preventDefault()
+    const r = e.currentTarget.getBoundingClientRect()
+    setMenu({ x: r.left, y: r.top - 168 }) // darüber; Menu schiebt es sonst ins Fenster
+  }
+  const run = (fn) => () => (close(), fn())
+  return (
+    <>
+      <button
+        onClick={open}
+        onContextMenu={open}
+        aria-haspopup="menu"
+        aria-label={`${profile.name || 'Benutzer'}: Neuigkeiten, Papierkorb, Einstellungen`}
+        className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-left ${current === 'trash' || menu ? 'bg-accent-soft' : 'hover:bg-hover'}`}
+      >
+        <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold text-white" style={{ background: COLORS[profile.color] ?? COLORS.petrol }}>
+          {initials(profile.name || '?')}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{profile.name}</span>
+        <DotsThree size={16} className="shrink-0 text-faint" />
+      </button>
+      {menu && (
+        <Menu x={menu.x} y={menu.y} onClose={close}>
+          <MenuItem icon={Sparkle} onClick={run(actions.showNews)}>Neuigkeiten</MenuItem>
+          <MenuItem icon={Trash} onClick={run(() => actions.open('trash'))}>Papierkorb</MenuItem>
+          <MenuItem icon={GearSix} onClick={run(() => actions.open('settings'))}>Einstellungen</MenuItem>
+          <MenuItem icon={ArrowsClockwise} onClick={run(actions.checkUpdates)}>Nach Updates suchen</MenuItem>
+        </Menu>
+      )}
+    </>
   )
 }
 
