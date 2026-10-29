@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ArrowBendUpRight, CalendarBlank, EnvelopeSimple, Lightning, Tray } from '@phosphor-icons/react'
-import { eventDays, eventTime } from './outlook.js'
+import { BUSY, eventDays, eventLook, eventTime } from './outlook.js'
 import Menu, { MenuItem } from './Menu.jsx'
 import { Chip, DateText, FieldValue } from './Props.jsx'
 import { LOP_FIELDS, dayOf, fieldsOf, formatNr, isDone, isLate, isToday, option, statusField, today } from './fields.js'
@@ -154,10 +154,13 @@ export function Today({ rows, dbOf, events = [], onOpen, onToggle, onFollowUp })
           <ul className="divide-y divide-line border-y border-line">
             {meetings.map((e) => (
               <li key={e.id} className="flex items-center gap-3 py-2">
+                <span aria-hidden className="h-5 w-[3px] shrink-0 rounded-full" style={{ background: eventLook(e).stripe }} />
                 <CalendarBlank size={16} className="shrink-0 text-faint" />
                 <span className="w-24 shrink-0 text-sm tabular-nums text-muted">{eventTime(e)}</span>
                 <span className="min-w-0 flex-1 truncate">{e.subject}</span>
                 {e.location && <span className="truncate text-sm text-faint">{e.location}</span>}
+                {e.busy !== 2 && BUSY[e.busy] && <span className="shrink-0 text-xs text-faint">{BUSY[e.busy]}</span>}
+                {e.categories && <span className="shrink-0 truncate text-xs text-faint">{e.categories}</span>}
               </li>
             ))}
           </ul>

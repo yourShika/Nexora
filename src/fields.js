@@ -183,3 +183,20 @@ export function sortRows(rows, fields, levels) {
 
 // Sortierung je Ansicht; ältere Listen hatten eine einzige für alle Ansichten (config.sort)
 export const sortsOf = (config, view) => config.sorts?.[view] ?? (config.sort ? [config.sort] : [])
+
+// Kalenderwoche nach ISO 8601 (Woche mit dem ersten Donnerstag ist KW 1)
+export function isoWeek(day) {
+  const d = new Date(Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10))))
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7)) // Donnerstag dieser Woche
+  return Math.ceil(((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7)
+}
+
+// Getippte Uhrzeit → "HH:MM": "9" → 09:00, "930" → 09:30, "14.30" → 14:30; ungültig → null, leer → ''
+export function parseTime(text) {
+  const t = text.trim()
+  if (!t) return ''
+  const m = t.match(/^(\d{1,2})(?:[:.,]?(\d{2}))?$/) ?? t.match(/^(\d)(\d{2})$/)
+  if (!m) return null
+  const [h, min] = [Number(m[1]), Number(m[2] ?? 0)]
+  return h < 24 && min < 60 ? `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}` : null
+}

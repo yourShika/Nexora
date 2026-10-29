@@ -4,6 +4,7 @@ import { CHART_TYPES, GROUPS, SOURCES, foldSlices, fromList, fromRows, num, page
 import { fieldsOf, isDone } from './fields.js'
 import { useApp } from './ctx.js'
 import { useDark } from './theme.js'
+import Select from './Select.jsx'
 
 // Reihenfarben (geprüft auf Farbfehlsichtigkeit, siehe Statistik), feste Reihenfolge
 const PALETTE = {
@@ -143,31 +144,31 @@ function Settings({ spec, set, databases, tables }) {
         </label>
         <label className="flex items-center gap-2">
           Daten
-          <select value={spec.quelle} onChange={(e) => set({ quelle: e.target.value })} className={field}>
+          <Select value={spec.quelle} onChange={(e) => set({ quelle: e.target.value })} className={field}>
             {SOURCES.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-          </select>
+          </Select>
         </label>
         {spec.quelle === 'liste' && (
           <>
-            <select aria-label="Liste" value={spec.liste} onChange={(e) => set({ liste: e.target.value })} className={field}>
+            <Select aria-label="Liste" value={spec.liste} onChange={(e) => set({ liste: e.target.value })} className={field}>
               <option value="">Liste wählen …</option>
               {databases.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
-            </select>
-            <select aria-label="Gruppieren nach" value={spec.gruppe} onChange={(e) => set({ gruppe: e.target.value })} className={field}>
+            </Select>
+            <Select aria-label="Gruppieren nach" value={spec.gruppe} onChange={(e) => set({ gruppe: e.target.value })} className={field}>
               {GROUPS.map(([id, name]) => <option key={id} value={id}>nach {name}</option>)}
-            </select>
-            <select aria-label="Welche Punkte" value={spec.nur} onChange={(e) => set({ nur: e.target.value })} className={field}>
+            </Select>
+            <Select aria-label="Welche Punkte" value={spec.nur} onChange={(e) => set({ nur: e.target.value })} className={field}>
               <option value="offen">nur offene</option>
               <option value="alle">alle</option>
-            </select>
+            </Select>
           </>
         )}
         {spec.quelle === 'seite' && (
-          <select aria-label="Tabelle" value={spec.seite} onChange={(e) => set({ seite: Number(e.target.value) })} className={field}>
+          <Select aria-label="Tabelle" value={spec.seite} onChange={(e) => set({ seite: Number(e.target.value) })} className={field}>
             {(tables.length ? tables : [[['–']]]).map((t, i) => (
               <option key={i} value={i + 1}>{i + 1}. Tabelle ({t[0]?.slice(0, 3).join(', ')})</option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
       {spec.quelle === 'tabelle' && <Grid rows={spec.rows} onRows={(rows) => set({ rows })} />}

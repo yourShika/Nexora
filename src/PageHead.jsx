@@ -1,15 +1,9 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import { ImageSquare, Smiley, Trash } from '@phosphor-icons/react'
 import Menu from './Menu.jsx'
+import { EmojiPicker } from './EmojiPicker.jsx'
 import { assetUrl, importImage } from './images.js'
-
-const EMOJIS = [
-  '📝', '📌', '📎', '📁', '🗂️', '📋', '✅', '⭐', '🔥', '💡', '⚠️', '❓',
-  '🔒', '🔑', '🛡️', '🖥️', '💻', '🖨️', '📱', '🌐', '🔌', '🗄️', '💾', '⚙️',
-  '🔧', '🛠️', '🐛', '🧪', '🚀', '📦', '📊', '📈', '📅', '⏰', '📞', '✉️',
-  '👥', '🏢', '🏭', '🧾', '💶', '🎯', '🧠', '📚', '🗒️', '🧹', '🔄', '🏁',
-]
 
 // Titelbild über die ganze Breite; nur zu sehen, wenn eins gesetzt ist
 export function Cover({ node, onSave }) {
@@ -42,6 +36,7 @@ export function IconRow({ node, onSave, onError }) {
     setMenu({ x: r.left, y: r.bottom + 6 })
   }
   const setIcon = (icon) => (onSave(node.id, { icon }), setMenu(null))
+  const closeMenu = useCallback(() => setMenu(null), [])
 
   // Gesperrt: Symbol nur anzeigen
   if (node.locked) return node.icon ? <div className={`${node.cover ? '-mt-10' : ''} relative mb-2 text-[44px] leading-none`}>{node.icon}</div> : null
@@ -66,29 +61,13 @@ export function IconRow({ node, onSave, onError }) {
         )}
       </div>
       {menu && (
-        <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
-          <div className="grid w-72 grid-cols-8 gap-0.5 p-1">
-            {EMOJIS.map((e) => (
-              <button key={e} onClick={() => setIcon(e)} aria-label={`Symbol ${e}`} className="grid size-8 place-items-center rounded text-xl hover:bg-hover">{e}</button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 border-t border-line p-1.5 pt-2">
-            <input
-              aria-label="Anderes Emoji"
-              placeholder="Anderes: Win + .  drücken"
-              onChange={(e) => {
-                // erstes Zeichen (Graphem), damit zusammengesetzte Emojis ganz bleiben
-                const first = [...new Intl.Segmenter('de', { granularity: 'grapheme' }).segment(e.target.value.trim())][0]?.segment
-                if (first) setIcon(first)
-              }}
-              className="min-w-0 flex-1 rounded border border-line bg-bg px-2 py-1 outline-none focus:border-accent"
-            />
-            {node.icon && (
-              <button onClick={() => setIcon(null)} aria-label="Symbol entfernen" className="rounded p-1.5 text-muted hover:bg-hover hover:text-danger">
-                <Trash size={15} />
-              </button>
-            )}
-          </div>
+        <Menu x={menu.x} y={menu.y} onClose={closeMenu} role="dialog" label="Symbol wählen">
+          <EmojiPicker onPick={setIcon} />
+          {node.icon && (
+            <button onClick={() => setIcon(null)} className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted hover:bg-hover hover:text-danger">
+              <Trash size={15} /> Symbol entfernen
+            </button>
+          )}
         </Menu>
       )}
     </div>

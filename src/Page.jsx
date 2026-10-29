@@ -12,6 +12,8 @@ import FreeCanvas from './FreeCanvas.jsx'
 import { hasInk, isFree, toFlow, toFree } from './free.js'
 import { IconButton } from './Sidebar.jsx'
 import { PropsPanel } from './Props.jsx'
+import Select from './Select.jsx'
+import { DateField } from './DatePicker.jsx'
 
 export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove, fields, db: parentDb, onAddOption, flushRef, onWindow, windowed, onFollowUp, onPrint }) {
   const [body, setBody] = useState(null)
@@ -310,13 +312,13 @@ function ChecklistDialog({ pageId, onClose }) {
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-xs text-muted">
               Liste
-              <select value={list} onChange={(e) => setList(e.target.value)} className="rounded-md border border-line bg-raised px-2 py-1 text-sm text-text">
+              <Select value={list} onChange={(e) => setList(e.target.value)} className="rounded-md border border-line bg-raised px-2 py-1 text-sm text-text">
                 {app.databases.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col gap-1 text-xs text-muted">
               Stichtag
-              <input type="date" value={day} onChange={(e) => setDay(e.target.value)} className="rounded-md border border-line bg-raised px-2 py-1 text-sm text-text" />
+              <DateField value={day} onChange={(d) => setDay(d ?? '')} className="rounded-md border border-line bg-raised px-2 py-1 text-sm text-text" />
             </label>
             <button onClick={run} disabled={!list || !day || busy} className="rounded-md bg-accent px-3 py-1.5 font-medium text-white disabled:opacity-50 dark:text-bg">
               {busy ? 'Legt an …' : 'Punkte anlegen'}

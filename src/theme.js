@@ -17,6 +17,7 @@ export const DEFAULT_LOOK = {
   font: 'geist', // geist | segoe | arial | georgia
   sidebar: 256, // Breite der Seitenleiste in px
   sidebarHidden: false,
+  motion: 'system', // system (wie Windows „Animationseffekte“) | on | off
 }
 const ZOOM = { klein: 0.9, normal: 1, gross: 1.12, sehrgross: 1.25 }
 const media = matchMedia('(prefers-color-scheme: dark)')
@@ -55,7 +56,7 @@ export function applyLook(next = look) {
   look = next
   const root = document.documentElement
   if (!printing) root.dataset.theme = next.mode === 'dark' || (next.mode === 'system' && media.matches) ? 'dark' : 'light'
-  Object.assign(root.dataset, { density: next.density, width: next.width, radius: next.radius, font: next.font })
+  Object.assign(root.dataset, { density: next.density, width: next.width, radius: next.radius, font: next.font, motion: next.motion ?? 'system' })
   styleElement().textContent = lookCss(next)
   // Schriftgröße als Zoom des Fensters (wie Strg+Mausrad im Browser); kleine Fenster bleiben, wie sie sind
   const factor = ZOOM[next.size] ?? 1
@@ -71,6 +72,9 @@ const remember = (next) => {
     localStorage.setItem('look', JSON.stringify(next))
   } catch {}
 }
+
+// Bewegung erlaubt? Eigene Einstellung vor der von Windows
+export const motionOn = () => (look.motion === 'system' || !look.motion ? !matchMedia('(prefers-reduced-motion: reduce)').matches : look.motion === 'on')
 
 // Ändern: sofort anwenden, für die anderen Fenster merken und in der Datenbank ablegen
 export function setLook(patch) {

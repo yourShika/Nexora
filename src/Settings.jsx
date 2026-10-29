@@ -4,7 +4,7 @@ import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
 import { open } from '@tauri-apps/plugin-dialog'
-import { ArrowCircleUp, Bell, ClockCounterClockwise, Database, EnvelopeSimple, FolderOpen, GearSix, Key, Keyboard, MagnifyingGlass, Monitor, Moon, Palette, SlidersHorizontal, Sun, TerminalWindow, UsersThree } from '@phosphor-icons/react'
+import { ArrowCircleUp, Bell, ClockCounterClockwise, Database, EnvelopeSimple, FolderOpen, GearSix, Key, Keyboard, MagnifyingGlass, Monitor, Moon, Palette, SlidersHorizontal, Sun, TerminalWindow, Users, UsersThree } from '@phosphor-icons/react'
 import { BACKUP_DEFAULTS, loadBackupSettings } from './backup.js'
 import { deleteImages, unusedImages } from './images.js'
 import { shells } from './runner.js'
@@ -16,6 +16,11 @@ import { HOTKEYS, accelFromEvent, hotkeyLabel } from './hotkey.js'
 import { DEFAULT_LOOK, setLook, useDark, useLook } from './theme.js'
 import { THEMES, palette } from './colors.js'
 import * as db from './db.js'
+import Select from './Select.jsx'
+import { ColorInput } from './ColorPicker.jsx'
+import { TimeInput } from './DatePicker.jsx'
+import { CHIP_COLORS } from './fields.js'
+import { colorOf, initials } from './people.js'
 
 const INTERVALS = [
   { hours: 1, label: 'jede Stunde' },
@@ -57,9 +62,9 @@ function BackupSection({ status, onBackupNow }) {
       <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-2">
         <label className="flex items-center gap-2">
           Sichern
-          <select value={s.hours} onChange={(e) => set('hours', 'backupHours', Number(e.target.value))} className="rounded-md border border-line bg-raised px-2 py-1">
+          <Select value={s.hours} onChange={(e) => set('hours', 'backupHours', Number(e.target.value))} className="rounded-md border border-line bg-raised px-2 py-1">
             {INTERVALS.map((i) => <option key={i.hours} value={i.hours}>{i.label}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="flex items-center gap-2">
           Stände behalten
@@ -291,7 +296,7 @@ function VaultSection() {
       )}
       <label className="flex items-center gap-3">
         Automatisch sperren nach
-        <select
+        <Select
           value={minutes}
           onChange={(e) => (setMinutes(e.target.value), db.setSetting('vault-minutes', e.target.value).catch(() => {}))}
           className="rounded-md border border-line bg-raised px-2 py-1"
@@ -299,7 +304,7 @@ function VaultSection() {
           {VAULT_MINUTES.map(([v, label]) => (
             <option key={v} value={v}>{label}</option>
           ))}
-        </select>
+        </Select>
       </label>
     </section>
   )
@@ -370,11 +375,12 @@ function HotkeyRow({ item, accel, busy, onChange }) {
 // Kategorien links, Suche oben; keys: weitere Suchwörter
 const CATEGORIES = [
   { id: 'allgemein', label: 'Allgemein', icon: SlidersHorizontal, keys: 'fenster autostart windows start tray eigenes fenster' },
-  { id: 'aussehen', label: 'Aussehen', icon: Palette, keys: 'farbe farbschema schema theme hell dunkel modus darstellung verlauf gradient akzent discord schrift schriftart schriftgröße größe zoom dichte zeilenabstand kompakt breite seitenbreite ecken rund eckig seitenleiste' },
+  { id: 'aussehen', label: 'Aussehen', icon: Palette, keys: 'farbe farbschema schema theme hell dunkel modus darstellung verlauf gradient akzent discord schrift schriftart schriftgröße größe zoom bewegung animation übergang dichte zeilenabstand kompakt breite seitenbreite ecken rund eckig seitenleiste' },
   { id: 'tasten', label: 'Tastenkürzel', icon: Keyboard, keys: 'hotkey kürzel tastatur schnellerfassung zwischenablage snippet picker' },
   { id: 'erinnerungen', label: 'Erinnerungen', icon: Bell, keys: 'meldung sammelmeldung benachrichtigung fällig uhrzeit morgen' },
   { id: 'outlook', label: 'Outlook', icon: EnvelopeSimple, keys: 'kalender termine mail fälligkeiten' },
   { id: 'tresor', label: 'Tresor', icon: Key, keys: 'vaultwarden bitwarden passwort bw cli' },
+  { id: 'personen', label: 'Personen', icon: Users, keys: 'zuständig person name kollegen farbe initialen' },
   { id: 'team', label: 'Team-Server', icon: UsersThree, keys: 'server entra anmelden online geteilt' },
   { id: 'sicherung', label: 'Sicherung', icon: ClockCounterClockwise, keys: 'backup sichern ordner netzlaufwerk' },
   { id: 'runbooks', label: 'Runbooks', icon: TerminalWindow, keys: 'powershell skript ausführen code cmd python admin' },
@@ -470,20 +476,21 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
         </p>
         <label className="flex items-center gap-3">
           Sammelmeldung um
-          <input
-            type="time"
+          <TimeInput
             value={digestTime}
-            onChange={(e) => {
-              setDigestTime(e.target.value)
-              if (e.target.value) db.setSetting('digestTime', e.target.value).catch(() => {})
+            onChange={(t) => {
+              if (!t) return // ohne Uhrzeit keine Sammelmeldung: alter Wert bleibt
+              setDigestTime(t)
+              db.setSetting('digestTime', t).catch(() => {})
             }}
-            className="rounded-md border border-line bg-raised px-2 py-1 focus:border-accent focus:outline-none"
+            className="w-20 rounded-md border border-line bg-raised px-2 py-1 focus:border-accent focus:outline-none"
           />
         </label>
       </section>
     ),
     outlook: <OutlookSection state={outlook} onChange={onOutlook} onSync={onOutlookSync} />,
     tresor: <VaultSection />,
+    personen: <PeopleSection />,
     team: <TeamSection />,
     sicherung: <BackupSection status={backup} onBackupNow={onBackupNow} />,
     runbooks: <RunbookSection />,
@@ -595,8 +602,68 @@ function Swatch({ theme, active, dark, onClick }) {
   )
 }
 
+// Personenliste für "Zuständig" in allen LOP-Listen
+function PeopleSection() {
+  const app = useApp()
+  const [name, setName] = useState('')
+  const count = (n) => [...app.alive.values()].filter((r) => r.kind === 'row' && r.props?.person === n).length
+  const add = () => {
+    const n = name.trim()
+    if (n && !app.people.some((p) => p.name.toLowerCase() === n.toLowerCase())) app.savePeople([...app.people, { name: n }])
+    setName('')
+  }
+  return (
+    <section>
+      <h2 className="mb-1 font-semibold">Personen</h2>
+      <p className="mb-3 text-muted">
+        Für „Zuständig“ in allen LOP-Listen. Wer schon in einem Punkt steht, ist automatisch dabei; @Name in der Kurzsyntax legt neue an.
+        Umbenennen ändert auch die Punkte, Entfernen leert dort „Zuständig“.
+      </p>
+      <ul className="mb-4 divide-y divide-line border-y border-line">
+        {app.people.map((p) => {
+          const n = count(p.name)
+          return (
+            <li key={p.name} className="flex flex-wrap items-center gap-3 py-2">
+              <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ background: CHIP_COLORS[colorOf(p)] }}>{initials(p.name)}</span>
+              <input
+                defaultValue={p.name}
+                aria-label={`Name von ${p.name}`}
+                onBlur={(e) => app.renamePerson(p.name, e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 hover:border-line focus:border-accent focus:outline-none"
+              />
+              <span role="radiogroup" aria-label={`Farbe von ${p.name}`} className="flex gap-1">
+                {Object.entries(CHIP_COLORS).map(([key, hex]) => (
+                  <button
+                    key={key}
+                    role="radio"
+                    aria-checked={colorOf(p) === key}
+                    aria-label={key}
+                    title={key}
+                    onClick={() => app.savePeople(app.people.map((x) => (x.name === p.name ? { ...x, color: key } : x)))}
+                    style={{ background: hex }}
+                    className={`size-4 rounded-full ${colorOf(p) === key ? 'ring-2 ring-text ring-offset-1 ring-offset-bg' : ''}`}
+                  />
+                ))}
+              </span>
+              <span className="w-24 text-right text-xs text-faint">{n ? `in ${n} ${n === 1 ? 'Punkt' : 'Punkten'}` : 'nicht benutzt'}</span>
+              <ConfirmButton compact onConfirm={() => app.removePerson(p.name)} />
+            </li>
+          )
+        })}
+        {!app.people.length && <li className="py-3 text-muted">Noch keine Personen.</li>}
+      </ul>
+      <div className="flex gap-2">
+        <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="Name" aria-label="Neue Person" className="w-64 rounded-md border border-line bg-raised px-3 py-1.5 focus:border-accent focus:outline-none" />
+        <button onClick={add} disabled={!name.trim()} className="rounded-md bg-accent px-3 py-1.5 font-medium text-white disabled:opacity-50 dark:text-bg">Hinzufügen</button>
+      </div>
+    </section>
+  )
+}
+
 function AppearanceSection() {
   const look = useLook()
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
   const dark = useDark()
   const solid = THEMES.filter((t) => !t.stops)
   const gradients = THEMES.filter((t) => t.stops)
@@ -628,7 +695,7 @@ function AppearanceSection() {
         <div className="mb-2 flex flex-wrap items-center gap-3">
           <span className="text-sm text-muted">Eigener Verlauf</span>
           {mine.colors.map((c, i) => (
-            <input key={i} type="color" value={c} aria-label={`Farbe ${i + 1}`} onChange={(e) => useMine({ ...mine, colors: mine.colors.map((x, j) => (j === i ? e.target.value : x)) })} className="h-7 w-9 cursor-pointer rounded border border-line bg-transparent" />
+            <ColorInput key={i} value={c} aria-label={`Farbe ${i + 1}`} onChange={(hex) => useMine({ ...mine, colors: mine.colors.map((x, j) => (j === i ? hex : x)) })} />
           ))}
           <button onClick={() => useMine({ ...mine, colors: mine.colors.length === 3 ? mine.colors.slice(0, 2) : [...mine.colors, '#5bc0be'] })} className="rounded-md px-2 py-1 text-sm text-muted hover:bg-hover hover:text-text">
             {mine.colors.length === 3 ? 'Nur zwei Farben' : '+ dritte Farbe'}
@@ -644,7 +711,7 @@ function AppearanceSection() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm text-muted">Eigene Akzentfarbe</span>
-          <input type="color" value={look.accent ?? current.accent.slice(0, 7)} aria-label="Akzentfarbe" onChange={(e) => setLook({ accent: e.target.value })} className="h-7 w-9 cursor-pointer rounded border border-line bg-transparent" />
+          <ColorInput value={look.accent ?? current.accent.slice(0, 7)} aria-label="Akzentfarbe" onChange={(hex) => setLook({ accent: hex })} />
           <span className="rounded px-2 py-0.5 text-sm font-medium text-white dark:text-bg" style={{ background: current.accent }}>So sieht ein Knopf aus</span>
           {look.accent && <button onClick={() => setLook({ accent: null })} className="rounded-md px-2 py-1 text-sm text-muted hover:bg-hover hover:text-text">Vom Schema nehmen</button>}
         </div>
@@ -655,6 +722,8 @@ function AppearanceSection() {
       <Choice label="Schriftart" value={look.font} onChange={(font) => setLook({ font })} options={[['geist', 'Geist'], ['segoe', 'Segoe UI'], ['arial', 'Arial'], ['georgia', 'Georgia']]} styleOf={(id) => ({ fontFamily: FONTS[id] })} />
       <Choice label="Dichte" value={look.density} onChange={(density) => setLook({ density })} options={[['kompakt', 'Kompakt'], ['normal', 'Normal'], ['luftig', 'Luftig']]} />
       <Choice label="Seitenbreite" value={look.width} onChange={(width) => setLook({ width })} options={[['schmal', 'Schmal'], ['breit', 'Breit'], ['voll', 'Volle Breite']]} />
+      <Choice label="Bewegung" value={look.motion ?? 'system'} onChange={(motion) => setLook({ motion })} options={[['system', 'Wie Windows'], ['on', 'Immer'], ['off', 'Aus']]} />
+      {(look.motion ?? 'system') === 'system' && reducedMotion && <p className="-mt-3 mb-5 text-xs text-faint">Windows hat die Animationseffekte ausgeschaltet, darum bewegt sich in Nexora gerade nichts. „Immer“ schaltet Übergänge und Einblenden trotzdem ein.</p>}
       <Choice label="Ecken" value={look.radius} onChange={(radius) => setLook({ radius })} options={[['eckig', 'Eckig'], ['normal', 'Normal'], ['rund', 'Rund']]} />
 
       <div className="mb-5">

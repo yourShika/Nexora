@@ -4,6 +4,7 @@ import * as db from './db.js'
 import { addDays, fieldsOf, formatDate, isDone, isLate, today } from './fields.js'
 import { KIND_ORDER, monday, weekMarkdown, weekNumber } from './journal.js'
 import { View } from './Rows.jsx'
+import Select from './Select.jsx'
 
 const KINDS = {
   notiz: { label: 'Notiz', icon: NotePencil },
@@ -169,9 +170,9 @@ export default function Journal({ alive, rows, dbOf, sections, onOpen, onSavePag
                 Als Seite speichern
               </button>
               <span className="text-muted">in</span>
-              <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Abschnitt" className="rounded-md border border-line bg-raised px-2 py-1.5">
+              <Select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Abschnitt" className="rounded-md border border-line bg-raised px-2 py-1.5">
                 {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
-              </select>
+              </Select>
             </div>
           )}
         </>

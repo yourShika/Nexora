@@ -153,6 +153,7 @@ pub fn run() {
             clip::clipboard_read,
             clip::toggle_picker,
             clip::picker_paste,
+            clip::snap_layouts,
             admin::open_admin_link,
             team::team_status,
             team::team_logout,

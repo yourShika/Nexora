@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { enable as enableAutostart } from '@tauri-apps/plugin-autostart'
 import { emitTo, listen } from '@tauri-apps/api/event'
@@ -34,7 +35,9 @@ import { indexText } from './ocr.js'
 import { loadBackupSettings, maybeBackup, runBackup } from './backup.js'
 import { findUpdate, installUpdate } from './updates.js'
 import Tabs from './Tabs.jsx'
-import { getLook, loadLook, setLook, useLook } from './theme.js'
+import TitleBar from './TitleBar.jsx'
+import { peopleList } from './people.js'
+import { getLook, loadLook, motionOn, setLook, useLook } from './theme.js'
 import { dayOf, daysBetween, describe, emptyConfig, fieldsOf, formatDate, isDone, lopConfig, nextDate, shiftDate, statusField, today, toggleDone } from './fields.js'
 import CalendarView from './Calendar.jsx'
 import { CalendarBlank } from '@phosphor-icons/react'
@@ -84,7 +87,12 @@ function buildTree(nodes) {
 
 export default function App() {
   const [nodes, setNodes] = useState(null)
-  const [current, setCurrent] = useState(null)
+  const [current, setCurrentNow] = useState(null)
+  // Seitenwechsel weich: alte Seite blendet aus, neue gleitet leicht herein (View Transition, nur der Inhalt, index.css)
+  const setCurrent = useCallback((id) => {
+    if (!document.startViewTransition || !motionOn()) return setCurrentNow(id)
+    document.startViewTransition(() => flushSync(() => setCurrentNow(id)))
+  }, [])
   const [fresh, setFresh] = useState(null)
   const [renaming, setRenaming] = useState(null)
   const [expanded, setExpanded] = useState(loadExpanded)
@@ -95,6 +103,7 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState('allgemein')
   const [area, setArea] = useState('arbeit') // aktiver Bereich: 'arbeit' | 'privat'
   const [tabs, setTabs] = useState([]) // angepinnte Seiten (IDs in Reiter-Reihenfolge)
+  const [peopleSaved, setPeopleSaved] = useState([]) // Personenliste mit Farben (Einstellung "personen")
   const areaValue = area === 'privat' ? 'privat' : null // so steht er am obersten Knoten
   const [notice, setNotice] = useState('')
   const [oneNote, setOneNote] = useState(null) // offen: { busy: Fortschrittstext }
@@ -388,6 +397,7 @@ export default function App() {
   const reload = useCallback(() => db.allNodes().then(setNodes).catch((e) => setError(`Datenbank nicht erreichbar: ${e}`)), [])
 
   useEffect(() => {
+    db.getSetting('personen').then((p) => p && setPeopleSaved(JSON.parse(p))).catch(() => {})
     // Seitenfenster: nur Daten laden; Aufräumen, Beispieldaten und Wiederherstellen macht das Hauptfenster
     const off = listen('nodes-changed', (e) => e.payload?.from !== label && reload())
     if (windowPage) {
@@ -971,8 +981,23 @@ export default function App() {
   const favorites = nodes.filter((n) => n.favorite && tree.alive.has(n.id) && tree.areaOf(n.id) === area)
   // Reiter wie Favoriten nur im aktiven Bereich; gelöschte Seiten bleiben gemerkt und kommen mit dem Wiederherstellen zurück
   const tabNodes = windowPage || focusMode ? [] : tabs.map((id) => tree.alive.get(id)).filter((n) => n && tree.areaOf(n.id) === area)
+  const loose = !windowPage && !focusMode && node && !tabs.includes(node.id) ? node : null
   const trashed = nodes.filter((n) => n.deleted_at)
   const allRows = [...tree.alive.values()].filter((n) => n.kind === 'row')
+  const people = peopleList(peopleSaved, allRows)
+  // gespeichert wird immer die ganze Liste (auch Namen, die bisher nur in Punkten standen)
+  const savePeople = (list) => (setPeopleSaved(list), db.setSetting('personen', JSON.stringify(list)).catch(fail))
+  // Umbenennen und Entfernen gelten auch für die Punkte, in denen die Person zuständig ist
+  function renamePerson(old, name) {
+    name = name.trim()
+    if (!name || name === old) return
+    savePeople(people.filter((p) => p.name !== old && p.name.toLowerCase() !== name.toLowerCase()).concat({ ...people.find((p) => p.name === old), name }))
+    for (const r of allRows) if (r.props?.person === old) save(r.id, { props: { ...r.props, person: name } })
+  }
+  function removePerson(name) {
+    savePeople(people.filter((p) => p.name !== name))
+    for (const r of allRows) if (r.props?.person === name) save(r.id, { props: { ...r.props, person: null } })
+  }
   // Heute, Eingang, Kalender, Suche, Tagebuch, Statistik zeigen nur den aktiven Bereich; Erinnerungen kommen aus beiden
   const inArea = (n) => tree.areaOf(n.id) === area
   const areaAlive = areaTree.alive
@@ -991,6 +1016,10 @@ export default function App() {
     databases,
     open: actions.open,
     notice: setNotice,
+    people,
+    savePeople,
+    renamePerson,
+    removePerson,
     tabs: windowPage ? null : tabs,
     toggleTab: actions.toggleTab,
     unlockVault,
@@ -1189,12 +1218,20 @@ export default function App() {
 
   return (
     <AppContext.Provider value={app}>
-    <div className="flex h-full" data-focus={focusMode || undefined}>
-      {focusMode && (
-        <button onClick={() => setFocusMode(false)} className="fixed right-3 top-2 z-20 rounded-md px-2 py-1 text-xs text-faint opacity-60 hover:bg-hover hover:text-text hover:opacity-100">
-          Fokus beenden (Esc)
-        </button>
-      )}
+    <div className="flex h-full flex-col" data-focus={focusMode || undefined}>
+      <TitleBar>
+        {windowPage ? (
+          <span data-tauri-drag-region className="min-w-0 self-center truncate text-sm text-muted">{windowTitle || 'Ohne Titel'}</span>
+        ) : (
+          <Tabs nodes={tabNodes} current={current} loose={loose} onOpen={actions.open} onClose={actions.toggleTab} onMove={actions.moveTab} onPin={actions.toggleTab} />
+        )}
+        {focusMode && (
+          <button onClick={() => setFocusMode(false)} className="my-1.5 ml-2 shrink-0 self-center rounded-md px-2 py-1 text-xs text-faint hover:bg-hover hover:text-text">
+            Fokus beenden (Esc)
+          </button>
+        )}
+      </TitleBar>
+      <div className="flex min-h-0 flex-1">
       {!windowPage && !focusMode && look.sidebarHidden && <Rail current={current} counts={counts} actions={actions} onSearch={() => setSearching(true)} />}
       {!windowPage && !focusMode && !look.sidebarHidden && <Sidebar
         tree={areaTree}
@@ -1211,10 +1248,8 @@ export default function App() {
         vaultOpen={vaultOpen}
         onLockVault={lockVault}
       />}
-      {/* key: bei jedem Seitenwechsel neu einblenden */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {tabNodes.length > 0 && <Tabs nodes={tabNodes} current={current} onOpen={actions.open} onClose={actions.toggleTab} onMove={actions.moveTab} />}
-        <main key={current} className="anim-page min-h-0 flex-1 bg-bg">{view}</main>
+      {/* key: jede Seite frisch; das Einblenden macht setCurrent */}
+      <main key={current} className="page-main min-w-0 flex-1 bg-bg">{view}</main>
       </div>
 
       {printing?.ask && <PrintAsk node={printing.ask} count={printing.count} onChoose={(kids) => (kids === null ? setPrinting(null) : printPage(printing.ask, kids))} />}

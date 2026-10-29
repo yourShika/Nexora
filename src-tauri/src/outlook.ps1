@@ -39,12 +39,18 @@ try {
                 $items = $folder.Items
                 $items.IncludeRecurrences = $true
                 $items.Sort('[Start]')
+                # Farbe je Kategorie (OlCategoryColor), für die Anzeige in der Farbe der ersten Kategorie
+                $catColor = @{}
+                foreach ($c in $ns.Categories) { $catColor[$c.Name] = $c.Color }
                 # Restrict erwartet Datumsangaben im Format der Windows-Region
                 $from = [datetime]::Parse($env:NEXORA_FROM, $culture).ToString('g')
                 $to = [datetime]::Parse($env:NEXORA_TO, $culture).ToString('g')
                 foreach ($a in $items.Restrict("[Start] < '$to' AND [End] > '$from'")) {
                     if ($out.Count -ge 1000) { break }
                     if ($a.Categories -match '(^|;\s*)Nexora($|;)') { continue }
+                    $first = @($a.Categories -split ';\s*' | Where-Object { $_ })[0]
+                    $color = $null
+                    if ($first) { $color = $catColor[$first] }
                     [void]$out.Add([ordered]@{
                         id = $a.GlobalAppointmentID + '/' + $a.Start.ToString('s')
                         subject = $a.Subject
@@ -53,6 +59,8 @@ try {
                         allDay = $a.AllDayEvent
                         location = $a.Location
                         busy = $a.BusyStatus
+                        categories = $a.Categories
+                        color = $color
                     })
                 }
             }

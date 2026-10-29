@@ -10,7 +10,8 @@ export default function Menu({ x, y, onClose, children, role = 'menu', label }) 
     const el = ref.current
     el.style.left = `${Math.min(x, innerWidth - el.offsetWidth - 8)}px`
     el.style.top = `${Math.min(y, innerHeight - el.offsetHeight - 8)}px`
-    el.querySelector('button')?.focus()
+    const first = el.querySelector('[data-autofocus]') ?? el.querySelector('button')
+    first?.focus()
     const away = (e) => !el.contains(e.target) && onClose()
     const key = (e) => e.key === 'Escape' && onClose()
     addEventListener('mousedown', away)

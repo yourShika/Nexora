@@ -106,3 +106,23 @@ export function lookCss(look) {
   }
   return `${block(false)}\n${block(true)}`
 }
+
+// Für den Farbwähler: Hex ↔ HSV (h 0–360, s und v 0–1); "#abc" geht auch, Ungültiges ergibt null
+export function hexToHsv(hex) {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex?.trim() ?? '')
+  if (!m) return null
+  const full = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1]
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) / 255)
+  const max = Math.max(r, g, b)
+  const d = max - Math.min(r, g, b)
+  const h = !d ? 0 : max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+  return { h: (h * 60 + 360) % 360, s: max ? d / max : 0, v: max }
+}
+
+export function hsvToHex({ h, s, v }) {
+  const f = (n) => {
+    const k = (n + h / 60) % 6
+    return Math.round((v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255).toString(16).padStart(2, '0')
+  }
+  return `#${f(5)}${f(3)}${f(1)}`
+}

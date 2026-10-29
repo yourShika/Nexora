@@ -110,7 +110,12 @@ body {
 @keyframes nx-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes nx-zoom { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
 .anim-pop { animation: nx-pop 0.16s var(--ease-out) both; transform-origin: top left; }
-.anim-page { animation: nx-rise 0.24s var(--ease-out) both; }
+/* Seitenwechsel (App.jsx setCurrent): nur der Inhalt blendet, Titel- und Seitenleiste wechseln ohne Bewegung */
+.page-main { view-transition-name: seite; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition-group(seite) { animation-duration: 0s; }
+::view-transition-old(seite) { animation: nx-fade 0.12s ease-in reverse both; }
+::view-transition-new(seite) { animation: nx-rise 0.22s var(--ease-out) 0.04s both; }
 .anim-row { animation: nx-rise 0.2s var(--ease-out) both; }
 .anim-tree { animation: nx-drop 0.18s var(--ease-out) both; }
 .anim-panel { animation: nx-slide 0.24s var(--ease-out) both; }
@@ -125,8 +130,10 @@ body {
   }
 }
 
+/* Bewegung aus: in Aussehen gewählt, oder Windows sagt „Animationseffekte aus“ und Nexora soll sich danach richten */
+:root[data-motion='off'] *, :root[data-motion='off'] *::before, :root[data-motion='off'] *::after { transition: none !important; animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; animation: none !important; }
+  :root[data-motion='system'] *, :root[data-motion='system'] *::before, :root[data-motion='system'] *::after { transition: none !important; animation: none !important; }
 }
 
 /* ---------- Editor ---------- */

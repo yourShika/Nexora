@@ -10,6 +10,7 @@ import { QuickAdd, RowItem } from './Rows.jsx'
 import { useApp } from './ctx.js'
 import { fieldsOf, isDone } from './fields.js'
 import { norm } from './Search.jsx'
+import Select from './Select.jsx'
 
 // Aktueller Stand der Knoten für Markdown und Vorschläge (setzt App bei jeder Änderung)
 let data = { get: () => null, list: () => [] }
@@ -148,7 +149,7 @@ function LopEmbedView({ node, updateAttributes, editor }) {
       <NodeViewWrapper className="my-3 rounded-lg border border-dashed border-line p-3" contentEditable={false}>
         <label className="flex items-center gap-2 text-muted">
           <ListChecks size={18} /> Welche Liste soll hier stehen?
-          <select
+          <Select
             value=""
             disabled={!editor.isEditable}
             onChange={(e) => updateAttributes({ id: e.target.value })}
@@ -156,7 +157,7 @@ function LopEmbedView({ node, updateAttributes, editor }) {
           >
             <option value="">Liste wählen</option>
             {app.databases.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
-          </select>
+          </Select>
         </label>
       </NodeViewWrapper>
     )

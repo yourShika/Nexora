@@ -34,6 +34,7 @@ export async function openWindow(id, saved = {}) {
     minWidth: 360,
     minHeight: 260,
     alwaysOnTop: !!saved.pin,
+    decorations: false, // eigene Titelleiste (TitleBar.jsx)
     dragDropEnabled: false,
     ...place,
   })

@@ -8,6 +8,7 @@ import CalendarView from './Calendar.jsx'
 import TimelineView from './Timeline.jsx'
 import { CHIP_COLORS, TYPES, between, isDone, newId, sortRows, sortsOf, statusField } from './fields.js'
 import Menu, { MenuItem } from './Menu.jsx'
+import Select from './Select.jsx'
 
 const TITLE = { id: 'title', name: 'Titel', type: 'title' }
 // Startbreiten in Pixeln; gezogene Breiten stehen je Liste in config.widths
@@ -185,9 +186,9 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
               onRow={onRow}
               onAdd={onAdd}
               header={dateFields.length > 1 && (
-                <select value={config.calendarField ?? dateFields[0].id} onChange={(e) => setConfig({ calendarField: e.target.value })} aria-label="Datumsfeld" className="rounded-md border border-line bg-raised px-2 py-1">
+                <Select value={config.calendarField ?? dateFields[0].id} onChange={(e) => setConfig({ calendarField: e.target.value })} aria-label="Datumsfeld" className="rounded-md border border-line bg-raised px-2 py-1">
                   {dateFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-                </select>
+                </Select>
               )}
             />
           )}
@@ -212,13 +213,13 @@ function SortMenu({ x, y, fields, sorts, onSorts, onClose }) {
         {sorts.map((s, i) => (
           <div key={i} className="mb-1.5 flex items-center gap-1.5">
             <span className="w-10 shrink-0 text-xs text-faint">{i ? 'dann' : 'Nach'}</span>
-            <select value={s.field} onChange={(e) => change(i, { field: e.target.value })} aria-label={`Feld der ${i + 1}. Ebene`} className={`min-w-0 flex-1 ${select}`}>
+            <Select value={s.field} onChange={(e) => change(i, { field: e.target.value })} aria-label={`Feld der ${i + 1}. Ebene`} className={`min-w-0 flex-1 ${select}`}>
               {cols.filter((c) => c.id === s.field || free.includes(c)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <select value={s.dir} onChange={(e) => change(i, { dir: e.target.value })} aria-label={`Richtung der ${i + 1}. Ebene`} className={select}>
+            </Select>
+            <Select value={s.dir} onChange={(e) => change(i, { dir: e.target.value })} aria-label={`Richtung der ${i + 1}. Ebene`} className={select}>
               <option value="asc">Aufsteigend</option>
               <option value="desc">Absteigend</option>
-            </select>
+            </Select>
             <button aria-label={`${i + 1}. Ebene entfernen`} onClick={() => onSorts(sorts.filter((_, j) => j !== i))} className="rounded p-1 text-faint hover:bg-hover hover:text-text">
               <X size={14} />
             </button>
@@ -482,11 +483,11 @@ function FieldsPanel({ config, onConfig, onClose }) {
             className="mb-2 w-full rounded-md border border-line bg-bg px-2 py-1 outline-none focus:border-accent"
           />
           <div className="flex gap-2">
-            <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Typ" className="flex-1 rounded-md border border-line bg-bg px-2 py-1">
+            <Select value={type} onChange={(e) => setType(e.target.value)} aria-label="Typ" className="flex-1 rounded-md border border-line bg-bg px-2 py-1">
               {Object.entries(TYPES)
                 .filter(([t]) => !(['nr', 'status', 'repeat', 'deps'].includes(t) && hasType(t)))
                 .map(([t, label]) => <option key={t} value={t}>{label}</option>)}
-            </select>
+            </Select>
             <button onClick={add} className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 font-medium text-white dark:text-bg">
               <Plus size={14} weight="bold" /> Hinzufügen
             </button>

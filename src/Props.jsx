@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowSquareOut, Check, X } from '@phosphor-icons/react'
+import { useCallback, useEffect, useState } from 'react'
+import { ArrowSquareOut, Check, Plus, X } from '@phosphor-icons/react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import Menu, { MenuItem } from './Menu.jsx'
+import { DatePicker, TimeInput } from './DatePicker.jsx'
 import { CHIP_COLORS, REPEATS, dayOf, formatDate, formatNr, isLate, isToday, option, timeOf } from './fields.js'
 import { useApp } from './ctx.js'
+import { colorOf, initials } from './people.js'
 
 export function Chip({ color = 'grau', children }) {
   const hex = CHIP_COLORS[color] ?? CHIP_COLORS.grau
@@ -58,7 +60,7 @@ export function FieldValue({ field, value, db, done }) {
     case 'date':
       return <DateText value={value} done={done} />
     case 'person':
-      return <span className="text-xs text-muted">@{value}</span>
+      return <PersonChip name={value} />
     case 'checkbox':
       return value ? <Check size={14} className="text-muted" aria-label={field.name} /> : null
     case 'nr':
@@ -91,6 +93,8 @@ export function FieldEditor({ field, value, db, onChange, onAddOption, withTime,
       )
     case 'date':
       return <DateEditor field={field} value={value} onChange={onChange} withTime={withTime} />
+    case 'person':
+      return <PersonEditor field={field} value={value} onChange={onChange} />
     case 'status':
     case 'select':
     case 'multi': {
@@ -135,16 +139,21 @@ export function FieldEditor({ field, value, db, onChange, onAddOption, withTime,
   }
 }
 
-// Zeigt "Fr., 30. Okt." statt TT.MM.JJJJ; Klick öffnet den Kalender des Systems.
+// Zeigt "Fr., 30. Okt." statt TT.MM.JJJJ; Klick öffnet den eigenen Kalender (DatePicker).
 // Eine vorhandene Uhrzeit bleibt beim Datumswechsel erhalten; withTime zeigt ein Uhrzeitfeld daneben.
 function DateEditor({ field, value, onChange, withTime }) {
-  const ref = useRef(null)
+  const [at, setAt] = useState(null)
+  const close = useCallback(() => setAt(null), [])
   const time = timeOf(value)
   return (
     <span className="group/date relative flex items-center gap-1">
       <button
         aria-label={`${field.name}: ${value ? formatDate(value) : 'leer'}`}
-        onClick={() => ref.current?.showPicker()}
+        aria-haspopup="dialog"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          setAt({ x: r.left, y: r.bottom + 4 })
+        }}
         className="flex-1 whitespace-nowrap rounded px-1.5 py-1 text-left hover:bg-hover"
       >
         {value ? <DateText value={withTime ? dayOf(value) : value} size="" /> : <span className="text-faint">–</span>}
@@ -155,23 +164,18 @@ function DateEditor({ field, value, onChange, withTime }) {
         </button>
       )}
       {withTime && value && (
-        <input
-          type="time"
+        <TimeInput
           aria-label={`${field.name}: Uhrzeit`}
           value={time ?? ''}
-          onChange={(e) => onChange(e.target.value ? `${dayOf(value)}T${e.target.value}` : dayOf(value))}
-          className={`w-24 shrink-0 rounded bg-transparent px-1 py-0.5 hover:bg-hover focus:bg-raised focus:outline-none focus:ring-1 focus:ring-accent ${time ? '' : 'text-faint'}`}
+          onChange={(t) => onChange(t ? `${dayOf(value)}T${t}` : dayOf(value))}
+          className="w-16 shrink-0 rounded bg-transparent px-1 py-0.5 hover:bg-hover focus:bg-raised focus:outline-none focus:ring-1 focus:ring-accent"
         />
       )}
-      <input
-        ref={ref}
-        type="date"
-        tabIndex={-1}
-        aria-hidden
-        value={dayOf(value) ?? ''}
-        onChange={(e) => onChange(e.target.value ? `${e.target.value}${time ? `T${time}` : ''}` : null)}
-        className="pointer-events-none absolute bottom-0 left-0 h-0 w-0 opacity-0"
-      />
+      {at && (
+        <Menu x={at.x} y={at.y} onClose={close} role="dialog" label={`${field.name} wählen`}>
+          <DatePicker value={dayOf(value)} onPick={(day) => (close(), onChange(day ? `${day}${time ? `T${time}` : ''}` : null))} />
+        </Menu>
+      )}
     </span>
   )
 }
@@ -201,6 +205,95 @@ function TextInput({ field, value, onChange }) {
         </button>
       )}
     </span>
+  )
+}
+
+// Person mit Kreis (Initialen in ihrer Farbe aus der Personenliste) und Namen
+export function PersonChip({ name }) {
+  const app = useApp()
+  const p = app?.people?.find((x) => x.name.toLowerCase() === name.toLowerCase()) ?? { name }
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-xs">
+      <span aria-hidden className="grid size-5 shrink-0 place-items-center rounded-full text-[9px] font-semibold text-white" style={{ background: CHIP_COLORS[colorOf(p)] }}>
+        {initials(name)}
+      </span>
+      <span className="truncate text-muted">{name}</span>
+    </span>
+  )
+}
+
+// Zuständig wählen wie Tags: Liste aller Personen mit Suche; ein neuer Name legt die Person an
+function PersonEditor({ field, value, onChange }) {
+  const app = useApp()
+  const [at, setAt] = useState(null)
+  const [q, setQ] = useState('')
+  const [active, setActive] = useState(0)
+  const close = useCallback(() => (setAt(null), setQ('')), [])
+  const people = app?.people ?? []
+  const needle = q.trim().toLowerCase()
+  const shown = (needle ? people.filter((p) => p.name.toLowerCase().includes(needle)) : people).map((p) => p.name)
+  const fresh = needle && !people.some((p) => p.name.toLowerCase() === needle) ? q.trim() : null
+  const items = fresh ? [...shown, fresh] : shown
+  const pick = (name) => (close(), name !== value && onChange(name || null))
+  const id = `person-${field.id}`
+  return (
+    <>
+      <button
+        aria-label={`${field.name}: ${value || 'niemand'}`}
+        aria-haspopup="dialog"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          setActive(0)
+          setAt({ x: r.left, y: r.bottom + 4 })
+        }}
+        className="flex min-h-7 w-full items-center rounded px-1.5 py-1 text-left hover:bg-hover"
+      >
+        {value ? <PersonChip name={value} /> : <span className="text-faint">–</span>}
+      </button>
+      {at && (
+        <Menu x={at.x} y={at.y} onClose={close} role="dialog" label={`${field.name} wählen`}>
+          <input
+            data-autofocus
+            role="combobox"
+            aria-label="Person suchen oder neu anlegen"
+            aria-controls={id}
+            aria-expanded
+            aria-activedescendant={items.length ? `${id}-${active}` : undefined}
+            value={q}
+            placeholder="Name suchen oder neu …"
+            onChange={(e) => (setQ(e.target.value), setActive(0))}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') (e.preventDefault(), setActive((a) => Math.min(items.length - 1, Math.max(0, a + (e.key === 'ArrowDown' ? 1 : -1)))))
+              if (e.key === 'Enter' && items[active]) (e.preventDefault(), pick(items[active]))
+            }}
+            className="mb-1 w-60 rounded-md border border-line bg-bg px-2 py-1.5 text-sm outline-none focus:border-accent"
+          />
+          <ul id={id} role="listbox" className="max-h-64 overflow-y-auto">
+            {items.map((name, i) => (
+              <li
+                key={name}
+                id={`${id}-${i}`}
+                role="option"
+                aria-selected={name === value}
+                onMouseEnter={() => setActive(i)}
+                onClick={() => pick(name)}
+                className={`flex cursor-default items-center justify-between gap-3 rounded-md px-2 py-1.5 ${i === active ? 'bg-hover' : ''}`}
+              >
+                {name === fresh ? <span className="flex items-center gap-2 text-sm"><Plus size={14} /> „{fresh}“ anlegen</span> : <PersonChip name={name} />}
+                {name === value && <Check size={14} />}
+              </li>
+            ))}
+            {!items.length && <li className="px-2 py-1.5 text-sm text-faint">Noch keine Personen. Namen tippen, Enter legt an.</li>}
+          </ul>
+          {value && (
+            <>
+              <div className="my-1 border-t border-line" />
+              <MenuItem onClick={() => pick(null)}>Niemand</MenuItem>
+            </>
+          )}
+        </Menu>
+      )}
+    </>
   )
 }
 

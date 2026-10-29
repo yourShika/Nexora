@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { CaretLeft, CaretRight, Plus } from '@phosphor-icons/react'
-import { CHIP_COLORS, addDays, dayOf, fieldsOf, isDone, iso, option, statusField, timeOf, today } from './fields.js'
+import { CHIP_COLORS, LOP_FIELDS, addDays, dayOf, fieldsOf, isDone, iso, option, timeOf, today } from './fields.js'
 import { parseQuick } from './quick.js'
-import { eventDays, eventTime } from './outlook.js'
+import { BUSY, eventDays, eventLook, eventTime } from './outlook.js'
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
@@ -94,15 +94,26 @@ export default function CalendarView({ rows, dbOf, events = [], field = 'due', o
                 )}
               </div>
               <ul className="space-y-0.5">
-                {(expanded ? meetings : meetings.slice(0, 3)).map((e) => (
-                  <li key={e.id} title={`${eventTime(e)} ${e.subject}${e.location ? ` (${e.location})` : ''} · Outlook`} className="truncate rounded bg-hover px-1.5 py-0.5 text-xs text-muted">
-                    {!e.allDay && <span className="mr-1 text-faint">{e.start.slice(11, 16)}</span>}
-                    {e.subject}
-                  </li>
-                ))}
+                {(expanded ? meetings : meetings.slice(0, 3)).map((e) => {
+                  const look = eventLook(e)
+                  return (
+                    <li
+                      key={e.id}
+                      title={`${eventTime(e)} ${e.subject}${e.location ? ` (${e.location})` : ''} · ${look.label} · Outlook`}
+                      style={{ background: look.tint ?? undefined }}
+                      className={`relative truncate rounded bg-hover py-0.5 pl-2.5 pr-1.5 text-xs ${look.tint ? 'text-text' : 'text-muted'} ${e.busy === 0 ? 'opacity-75' : ''}`}
+                    >
+                      <span aria-hidden className="absolute inset-y-0.5 left-0.5 w-[3px] rounded-full" style={{ background: look.stripe }} />
+                      {!e.allDay && <span className="mr-1 opacity-70">{e.start.slice(11, 16)}</span>}
+                      {e.subject}
+                    </li>
+                  )
+                })}
                 {shown.map((r) => {
                   const db = dbOf(r)
-                  const o = option(statusField(fieldsOf(db)), r.props?.status)
+                  // nach Priorität gefärbt (Liste ohne Priorität: grau)
+                  const p = option(fieldsOf(db).find((f) => f.id === 'prio'), r.props?.prio)
+                  const color = CHIP_COLORS[p?.color] ?? CHIP_COLORS.grau
                   const done = isDone(r, fieldsOf(db))
                   return (
                     <li key={r.id}>
@@ -110,8 +121,8 @@ export default function CalendarView({ rows, dbOf, events = [], field = 'due', o
                         draggable
                         onDragStart={(e) => e.dataTransfer.setData('text/plain', r.id)}
                         onClick={() => onOpen(r.id)}
-                        title={`${r.title}${db ? ` (${db.title})` : ''}`}
-                        style={{ borderLeftColor: CHIP_COLORS[o?.color] ?? CHIP_COLORS.grau }}
+                        title={`${r.title}${db ? ` (${db.title})` : ''}${p ? ` · Priorität ${p.name}` : ''}`}
+                        style={{ borderLeftColor: color, background: p ? `color-mix(in oklab, ${color} 12%, var(--raised))` : undefined }}
                         className={`block w-full truncate rounded border-l-[3px] bg-raised px-1.5 py-0.5 text-left text-xs shadow-sm hover:bg-hover ${done ? 'text-faint line-through' : ''}`}
                       >
                         {timeOf(r.props?.[field]) && <span className="mr-1 text-faint">{timeOf(r.props[field])}</span>}
@@ -150,6 +161,25 @@ export default function CalendarView({ rows, dbOf, events = [], field = 'due', o
           )
         })}
       </div>
+      <Legend outlook={events.length > 0} />
     </div>
+  )
+}
+
+// Farben erklären, damit sie nicht allein die Bedeutung tragen
+const PRIO = LOP_FIELDS.find((f) => f.id === 'prio').options
+function Legend({ outlook }) {
+  const mark = (background) => <span aria-hidden className="inline-block h-3 w-[3px] rounded-full" style={{ background }} />
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+      <span>Punkte nach Priorität:</span>
+      {PRIO.map((o) => <span key={o.id} className="flex items-center gap-1.5">{mark(CHIP_COLORS[o.color])}{o.name}</span>)}
+      {outlook && (
+        <>
+          <span className="ml-2">Outlook:</span>
+          {BUSY.map((name, busy) => <span key={name} className="flex items-center gap-1.5">{mark(eventLook({ busy }).stripe)}{name}</span>)}
+        </>
+      )}
+    </p>
   )
 }

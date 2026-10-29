@@ -6,6 +6,7 @@ import { useApp } from './ctx.js'
 import { RUNNABLE, fill, parseTable, placeholders, runCode } from './runner.js'
 import { isDark, useDark } from './theme.js'
 import { ChartBlock } from './Chart.jsx'
+import Select from './Select.jsx'
 
 // Auswahl statt aller ~40 lowlight-Sprachen: das, was im IT-Alltag vorkommt
 export const LANGUAGES = {
@@ -131,7 +132,7 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos }) {
   return (
     <NodeViewWrapper className="codeblock">
       <div contentEditable={false} className="flex items-center gap-1 border-b border-line px-2 py-1 text-xs">
-        <select
+        <Select
           aria-label="Sprache"
           value={LANGUAGES[lang] ? lang : 'plaintext'}
           onChange={(e) => updateAttributes({ language: e.target.value })}
@@ -141,7 +142,7 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos }) {
           {Object.entries(LANGUAGES).map(([id, label]) => (
             <option key={id} value={id}>{label}</option>
           ))}
-        </select>
+        </Select>
         <span className="flex-1" />
         {runnable && (
           <>

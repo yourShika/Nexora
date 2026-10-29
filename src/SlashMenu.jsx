@@ -4,8 +4,9 @@ import { ReactRenderer } from '@tiptap/react'
 import Suggestion from '@tiptap/suggestion'
 import { pickAttachments } from './Attachment.jsx'
 import { pickVault } from './Vault.jsx'
+import { pickEmoji } from './EmojiPicker.jsx'
 import {
-  ChartBar, CheckSquare, Code, FlowArrow, Key, Scribble, LinkSimple, ListBullets, ListChecks, ListNumbers, Minus, Paperclip, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
+  ChartBar, CheckSquare, Smiley, Code, FlowArrow, Key, Scribble, LinkSimple, ListBullets, ListChecks, ListNumbers, Minus, Paperclip, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
 } from '@phosphor-icons/react'
 
 // `keys`: weitere Suchwörter, damit auch "todo", "h1" oder "pre" trifft
@@ -25,10 +26,20 @@ const ITEMS = [
   { title: 'Tabelle', keys: 'table', icon: Table, run: (c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
   { title: 'Trennlinie', keys: 'hr linie divider', icon: Minus, run: (c) => c.setHorizontalRule() },
   { title: 'Seite verlinken', keys: 'link verweis [[', icon: LinkSimple, run: (c) => c.insertContent('[[') },
+  { title: 'Emoji', keys: 'smiley symbol icon zeichen', icon: Smiley, run: (c, editor) => (emoji(editor), c) },
   { title: 'Tresor-Eintrag', keys: 'vault passwort kennwort bitwarden zugang', icon: Key, run: (c, editor) => (pickVault(editor), c) },
   { title: 'LOP-Liste einbetten', keys: 'lop liste datenbank punkte', icon: ListChecks, run: (c) => c.insertContent({ type: 'lopEmbed', attrs: { id: null } }) },
   { title: 'Datei anhängen', keys: 'anhang datei pdf upload', icon: Paperclip, run: (c, editor) => (attach(editor), c) },
 ]
+
+// Emoji-Auswahl an der Schreibmarke, das gewählte kommt an dieselbe Stelle
+// (Stelle erst danach lesen: das /-Menü löscht "/emoji" erst nach diesem Aufruf)
+async function emoji(editor) {
+  const r = editor.view.coordsAtPos(editor.state.selection.from)
+  const e = await pickEmoji({ x: r.left, y: r.bottom + 6 })
+  if (e) editor.chain().focus().insertContent(e).run()
+  else editor.commands.focus()
+}
 
 const List = forwardRef(function List({ items, command }, ref) {
   const [active, setActive] = useState(0)

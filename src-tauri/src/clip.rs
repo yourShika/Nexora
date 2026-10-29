@@ -11,7 +11,7 @@ use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, GetClipboardData, GetClipboardSequenceNumber, IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
 };
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE};
-use windows::Win32::UI::Input::KeyboardAndMouse::{SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CONTROL};
+use windows::Win32::UI::Input::KeyboardAndMouse::{SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CONTROL, VK_LWIN};
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
 
 const CF_UNICODETEXT: u32 = 13;
@@ -150,6 +150,18 @@ fn key(vk: VIRTUAL_KEY, up: bool) -> INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: vk, dwFlags: if up { KEYEVENTF_KEYUP } else { Default::default() }, ..Default::default() } },
     }
+}
+
+// Snap-Layouts von Windows 11: die eigene Titelleiste hat keinen echten Maximieren-Knopf.
+// Win+Z gilt dem Fenster vorne, darum nur, wenn das dieses ist (Zeigen allein holt es nicht nach vorne)
+#[tauri::command]
+pub fn snap_layouts(window: tauri::WebviewWindow) {
+    if window.hwnd().ok().map(|h| h.0) != Some(unsafe { GetForegroundWindow() }.0) {
+        return;
+    }
+    let z = VIRTUAL_KEY(b'Z' as u16);
+    let keys = [key(VK_LWIN, false), key(z, false), key(z, true), key(VK_LWIN, true)];
+    unsafe { SendInput(&keys, std::mem::size_of::<INPUT>() as i32) };
 }
 
 // Text ins vorher aktive Fenster einfügen: über die Zwischenablage und Strg+V, danach die alte Zwischenablage zurück.
