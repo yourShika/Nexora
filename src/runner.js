@@ -58,3 +58,8 @@ export function parseTable(lines) {
   const cut = (line) => [0, ...cuts].map((from, i) => line.slice(from, cuts[i]).trim())
   return { headers: cut(lines[sep - 1]), rows: body.map(cut) }
 }
+
+// Codeblöcke aus dem Markdown einer Seite (Snippet-Übersicht und Snippet-Picker)
+export function codeBlocks(body) {
+  return [...body.matchAll(/^```([\w-]*)[^\n]*\n([\s\S]*?)\n```/gm)].map((m) => ({ lang: m[1] || 'plaintext', code: m[2] }))
+}

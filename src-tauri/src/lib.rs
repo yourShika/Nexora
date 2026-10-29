@@ -1,9 +1,11 @@
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod admin;
 mod attach;
+mod clip;
 mod files;
 mod ocr;
 mod onenote;
@@ -129,6 +131,10 @@ pub fn run() {
             outlook::outlook_draft,
             outlook::outlook_drop_test,
             team::team_login,
+            clip::clipboard_read,
+            clip::toggle_picker,
+            clip::picker_paste,
+            admin::open_admin_link,
             team::team_status,
             team::team_logout,
             vault::vault_status,
@@ -150,6 +156,7 @@ pub fn run() {
         .manage(run::Runs::default())
         .manage(vault::Vault::default())
         .manage(team::Team::default())
+        .manage(clip::Picker::default())
         .setup(|app| {
             if !std::env::args().any(|a| a == "--hidden") {
                 show(app.handle());
@@ -161,8 +168,9 @@ pub fn run() {
             app.asset_protocol_scope().allow_directory(&images, true)?;
             let open = MenuItem::with_id(app, "open", "Öffnen", true, None::<&str>)?;
             let quick = MenuItem::with_id(app, "capture", "Schnellerfassung", true, None::<&str>)?;
+            let clip = MenuItem::with_id(app, "clip", "Zwischenablage in den Eingang", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open, &quick, &quit])?;
+            let menu = Menu::with_items(app, &[&open, &quick, &clip, &quit])?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("Nexora")
@@ -171,6 +179,10 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show(app),
                     "capture" => toggle(app),
+                    // erledigt das Hauptfenster (Text, Bild, Passwort-Warnung)
+                    "clip" => {
+                        let _ = app.emit_to("main", "clipboard-to-inbox", ());
+                    }
                     "quit" => app.exit(0),
                     _ => {}
                 })

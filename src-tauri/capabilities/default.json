@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Rechte von Hauptfenster, Schnellerfassung und Seitenfenstern",
-  "windows": ["main", "capture", "seite-*"],
+  "windows": ["main", "capture", "picker", "seite-*"],
   "permissions": [
     "core:default",
     "core:window:allow-hide",

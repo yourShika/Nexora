@@ -118,6 +118,8 @@ body {
   padding-bottom: 40vh;
 }
 .free-box .tiptap { padding-bottom: 0; }
+/* Admin-Links: Strg+Klick öffnet */
+.tiptap .adminlink { text-decoration: underline dotted; text-decoration-color: var(--accent); text-underline-offset: 3px; }
 .tiptap > * + * { margin-top: 0.6em; }
 .tiptap p.is-empty::before,
 .tiptap h1.is-empty::before,

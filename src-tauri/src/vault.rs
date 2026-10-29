@@ -195,10 +195,10 @@ pub async fn vault_copy(vault: State<'_, Vault>, id: String, what: String) -> Re
         let key = v.key().ok_or(LOCKED)?;
         let item: Value = serde_json::from_str(&bw(&["get", "item", &id], Some(&key), None)?).map_err(|e| e.to_string())?;
         let value = field(&item, &what).ok_or("Der Eintrag hat dieses Feld nicht")?;
-        let seq = clipboard::put(&value, what == "passwort").map_err(|e| format!("Zwischenablage: {e}"))?;
+        let seq = crate::clip::put(&value, what == "passwort").map_err(|e| format!("Zwischenablage: {e}"))?;
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_secs(30));
-            clipboard::clear_if_unchanged(seq);
+            crate::clip::clear_if_unchanged(seq);
         });
         Ok(())
     })
@@ -255,55 +255,6 @@ pub fn mask(line: &str, secrets: &[String]) -> String {
     secrets.iter().filter(|s| !s.is_empty()).fold(line.to_string(), |l, s| l.replace(s.as_str(), "••••••"))
 }
 
-mod clipboard {
-    use windows::core::HSTRING;
-    use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, GetClipboardSequenceNumber, OpenClipboard, RegisterClipboardFormatW, SetClipboardData};
-    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
-
-    const CF_UNICODETEXT: u32 = 13;
-
-    unsafe fn set(format: u32, bytes: &[u8]) -> windows::core::Result<()> {
-        let mem = GlobalAlloc(GMEM_MOVEABLE, bytes.len())?;
-        let ptr = GlobalLock(mem) as *mut u8;
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len());
-        let _ = GlobalUnlock(mem); // meldet beim letzten Entsperren "Fehler 0"
-        SetClipboardData(format, Some(HANDLE(mem.0)))?;
-        Ok(())
-    }
-
-    // Gibt die Sequenznummer zurück, an der man später erkennt, ob jemand anderes kopiert hat
-    pub fn put(text: &str, private: bool) -> windows::core::Result<u32> {
-        unsafe {
-            OpenClipboard(None)?;
-            let result = (|| {
-                EmptyClipboard()?;
-                let wide: Vec<u8> = text.encode_utf16().chain([0]).flat_map(u16::to_le_bytes).collect();
-                set(CF_UNICODETEXT, &wide)?;
-                if private {
-                    // Windows-Zwischenablageverlauf (Win+V) und Cloud-Abgleich lassen solche Inhalte aus
-                    for name in ["ExcludeClipboardContentFromMonitorProcessing", "CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"] {
-                        set(RegisterClipboardFormatW(&HSTRING::from(name)), &0u32.to_le_bytes())?;
-                    }
-                }
-                Ok(())
-            })();
-            let _ = CloseClipboard();
-            // erst nach dem Schließen gezählt
-            result.map(|_| GetClipboardSequenceNumber())
-        }
-    }
-
-    pub fn clear_if_unchanged(seq: u32) {
-        unsafe {
-            if GetClipboardSequenceNumber() == seq && OpenClipboard(None).is_ok() {
-                let _ = EmptyClipboard();
-                let _ = CloseClipboard();
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -326,16 +277,5 @@ mod tests {
     fn gesperrt_ohne_schluessel() {
         assert_eq!(fill(&Vault::default(), "x {{vault:A}}").unwrap_err(), LOCKED);
         assert_eq!(fill(&Vault::default(), "ohne").unwrap(), ("ohne".to_string(), vec![]));
-    }
-
-    // Verändert die echte Zwischenablage, darum nur auf Wunsch: cargo test -- --ignored
-    #[test]
-    #[ignore]
-    fn zwischenablage() {
-        let seq = clipboard::put("nexora-test", true).unwrap();
-        let read = || String::from_utf8(Command::new("powershell").args(["-NoProfile", "-Command", "Get-Clipboard"]).output().unwrap().stdout).unwrap();
-        assert_eq!(read().trim(), "nexora-test");
-        clipboard::clear_if_unchanged(seq);
-        assert_eq!(read().trim(), "");
     }
 }

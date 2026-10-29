@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLineDown, Copy } from '@phosphor-icons/react'
 import { EditorContent, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
-import { generateJSON, resolveExtensions } from '@tiptap/core'
+import { Extension, generateJSON, resolveExtensions } from '@tiptap/core'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import { invoke } from '@tauri-apps/api/core'
 import { MarkdownManager } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from '@tiptap/markdown'
@@ -25,6 +28,9 @@ import { VaultRef } from './Vault.jsx'
 import Menu, { MenuItem } from './Menu.jsx'
 import { useApp } from './ctx.js'
 import { imageText } from './ocr.js'
+import { maskSecrets, secretSpans } from './secrets.js'
+import { adminLinks } from './adminlinks.js'
+import SecretDialog from './SecretDialog.jsx'
 
 const lowlight = createLowlight(common)
 lowlight.register({ powershell, dos, dockerfile, nginx })
@@ -81,6 +87,36 @@ function pastedFiles(data) {
   return [...data.files]
 }
 
+// Admin-Links (\\server\freigabe, C:\Pfad, rdp://, ssh://) gepunktet unterstreichen; geöffnet wird mit Strg+Klick (handleClick)
+function adminDecorations(doc) {
+  const decos = []
+  doc.descendants((node, pos) => {
+    if (node.type.name === 'codeBlock') return false
+    if (node.isText) for (const l of adminLinks(node.text)) decos.push(Decoration.inline(pos + l.from, pos + l.to, { class: 'adminlink', title: 'Strg+Klick öffnet' }))
+  })
+  return DecorationSet.create(doc, decos)
+}
+const AdminLinks = Extension.create({
+  name: 'adminLinks',
+  addProseMirrorPlugins() {
+    const key = new PluginKey('adminLinks')
+    return [
+      new Plugin({
+        key,
+        state: { init: (_, { doc }) => adminDecorations(doc), apply: (tr, old) => (tr.docChanged ? adminDecorations(tr.doc) : old) },
+        props: { decorations: (state) => key.getState(state) },
+      }),
+    ]
+  },
+})
+
+// Admin-Link unter dem Mauszeiger; Knoten wie Seitenlinks zählen als ein Zeichen, damit die Stellen stimmen
+function adminLinkAt(view, pos) {
+  const $pos = view.state.doc.resolve(pos)
+  const text = $pos.parent.textBetween(0, $pos.parent.content.size, undefined, '\ufffc')
+  return adminLinks(text).find((l) => l.from <= $pos.parentOffset && $pos.parentOffset <= l.to)
+}
+
 const extensions = [
   StarterKit.configure({ codeBlock: false, link: { openOnClick: false, autolink: true } }),
   CodeBlockLowlight.extend({ addNodeView: () => ReactNodeViewRenderer(CodeBlockView) }).configure({ lowlight }),
@@ -99,6 +135,7 @@ const extensions = [
   PageLinkSuggest,
   LopEmbed,
   VaultRef,
+  AdminLinks,
   Markdown,
   SlashCommand,
 ]
@@ -117,6 +154,9 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
   const [error, setError] = useState('')
   const [zoom, setZoom] = useState(null)
   const [menu, setMenu] = useState(null)
+  // Passwort-Warnung: das abgefangene Einfügen wartet hier auf die Entscheidung
+  const [secret, setSecret] = useState(null)
+  const bypass = useRef(false)
   const app = useApp()
   const wrapper = useRef(null)
   const editor = useEditor({
@@ -125,7 +165,22 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
     contentType: 'markdown',
     onUpdate: ({ editor }) => change.current(editor.getMarkdown()),
     editorProps: {
-      handlePaste: (view, event) => insertFiles(view, pastedFiles(event.clipboardData), null, setError),
+      handlePaste: (view, event) => {
+        if (insertFiles(view, pastedFiles(event.clipboardData), null, setError)) return true
+        if (bypass.current) return false
+        const text = event.clipboardData?.getData('text/plain') ?? ''
+        const spans = secretSpans(text)
+        if (!spans.length) return false
+        setSecret({ view, text, spans })
+        return true
+      },
+      handleClick: (view, pos, event) => {
+        if (!(event.ctrlKey || event.metaKey)) return false
+        const link = adminLinkAt(view, pos)
+        if (!link) return false
+        invoke('open_admin_link', { target: link.target }).catch((e) => setError(String(e)))
+        return true
+      },
       handleDrop: (view, event, _slice, moved) =>
         !moved && insertFiles(view, [...(event.dataTransfer?.files ?? [])], view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos, setError),
     },
@@ -182,8 +237,19 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
       editor.chain().insertContentAt(at, lines.map((line) => ({ type: 'paragraph', content: [{ type: 'text', text: line }] }))).run()
     })
 
+  function pasteChosen(choice) {
+    const { view, text, spans } = secret
+    setSecret(null)
+    view.focus()
+    if (!choice) return
+    bypass.current = true
+    view.pasteText(choice === 'masked' ? maskSecrets(text, spans) : text)
+    bypass.current = false
+  }
+
   return (
     <>
+      {secret && <SecretDialog text={secret.text} spans={secret.spans} onChoose={pasteChosen} />}
       {menu && (
         <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
           <MenuItem icon={Copy} onClick={() => copyText(menu.file)}>Text aus dem Bild kopieren</MenuItem>

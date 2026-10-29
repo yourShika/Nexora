@@ -49,3 +49,11 @@ export async function saveImageBytes(bytes, ext) {
   indexImages()
   return `bilder/${name}`
 }
+
+// Bild aus der Zwischenablage (BMP, Base64 aus clip.rs) als PNG-Bytes
+export async function bmpToPng(base64) {
+  const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], { type: 'image/bmp' }))
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+  canvas.getContext('2d').drawImage(bitmap, 0, 0)
+  return new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer())
+}

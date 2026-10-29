@@ -4,11 +4,8 @@ import * as db from './db.js'
 import { View } from './Rows.jsx'
 import { LANGUAGES } from './CodeBlock.jsx'
 import { norm } from './Search.jsx'
-
-// Codeblöcke aus dem Markdown einer Seite
-export function codeBlocks(body) {
-  return [...body.matchAll(/^```([\w-]*)[^\n]*\n([\s\S]*?)\n```/gm)].map((m) => ({ lang: m[1] || 'plaintext', code: m[2] }))
-}
+import { codeBlocks } from './runner.js'
+export { codeBlocks }
 
 // Alle Codeblöcke aus allen Seiten, nach Sprache und Text filterbar
 export default function Snippets({ alive, pathOf, onOpen }) {

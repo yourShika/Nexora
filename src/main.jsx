@@ -7,5 +7,7 @@ import { applyTheme } from './theme.js'
 
 applyTheme()
 // Das Schnellerfassungs-Fenster lädt nur sein Eingabefeld, nicht Editor und Baum
-const { default: Root } = await (getCurrentWindow().label === 'capture' ? import('./Capture.jsx') : import('./App.jsx'))
+// Snippet-Picker ebenso nur seine Liste
+const label = getCurrentWindow().label
+const { default: Root } = await (label === 'capture' ? import('./Capture.jsx') : label === 'picker' ? import('./Picker.jsx') : import('./App.jsx'))
 createRoot(document.getElementById('root')).render(<Root />)

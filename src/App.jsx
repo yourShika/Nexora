@@ -16,9 +16,12 @@ import { Inbox, Today } from './Rows.jsx'
 import Snippets from './Snippets.jsx'
 import Settings from './Settings.jsx'
 import Search from './Search.jsx'
-import { DEFAULT_HOTKEY, bindHotkey, hotkeyLabel } from './hotkey.js'
+import { HOTKEYS, bindHotkeys, hotkeyLabel } from './hotkey.js'
+import { maskSecrets, secretSpans } from './secrets.js'
+import SecretDialog from './SecretDialog.jsx'
+import { isPermissionGranted, sendNotification } from '@tauri-apps/plugin-notification'
 import { checkReminders } from './notify.js'
-import { initImages, saveImageBytes } from './images.js'
+import { bmpToPng, initImages, saveImageBytes } from './images.js'
 import { describeReport, hash, link as oneNoteLink, syncNotebook } from './onenote.js'
 import { desiredEvents, followUpMail, pushDue, readEvents } from './outlook.js'
 import Journal from './Journal.jsx'
@@ -126,8 +129,11 @@ export default function App() {
     const t = setTimeout(() => setNotice(''), 6000)
     return () => clearTimeout(t)
   }, [notice])
-  const [hotkey, setHotkey] = useState(DEFAULT_HOTKEY)
-  const [hotkeyError, setHotkeyError] = useState('')
+  const [hotkeys, setHotkeys] = useState(() => Object.fromEntries(HOTKEYS.map((h) => [h.id, h.fallback])))
+  const [hotkeyBusy, setHotkeyBusy] = useState([])
+  const hotkeyError = hotkeyBusy.length ? `${hotkeyLabel(hotkeys[hotkeyBusy[0]])} ist belegt. Andere Tasten wählen` : ''
+  const hotkeyRun = useRef(null)
+  const [secretAsk, setSecretAsk] = useState(null) // Passwort-Warnung bei "Zwischenablage in den Eingang"
   const [searching, setSearching] = useState(false)
   const [backup, setBackup] = useState({ busy: false, error: '', dest: '' })
   const [update, setUpdate] = useState({ found: null, busy: false, error: '' })
@@ -288,21 +294,32 @@ export default function App() {
       .catch(() => {})
   }, [])
 
-  // Gespeicherte Tastenkombination binden; belegt ein anderes Programm sie, Hinweis statt Absturz
+  // Gespeicherte Tastenkürzel binden; belegt ein anderes Programm eins, Hinweis statt Absturz
+  async function applyHotkeys(keys) {
+    setHotkeys(keys)
+    const busy = await bindHotkeys(keys, (id) => hotkeyRun.current?.(id))
+    setHotkeyBusy(busy)
+    return busy
+  }
   useEffect(() => {
     if (windowPage) return
-    db.getSetting('hotkey')
-      .catch(() => null)
-      .then(async (saved) => {
-        const accel = saved || DEFAULT_HOTKEY
-        setHotkey(accel)
-        try {
-          await bindHotkey(accel)
-        } catch {
-          setHotkeyError(`${hotkeyLabel(accel)} ist belegt. Andere Tasten wählen`)
-        }
-      })
+    Promise.all(HOTKEYS.map((h) => db.getSetting(h.setting).catch(() => null))).then((saved) =>
+      applyHotkeys(Object.fromEntries(HOTKEYS.map((h, i) => [h.id, saved[i] || h.fallback]))),
+    )
+    // Tray-Menü: "Zwischenablage in den Eingang"
+    const off = listen('clipboard-to-inbox', () => hotkeyRun.current?.('clipboard'))
+    return () => off.then((f) => f())
   }, [])
+  // Neues Kürzel: bei Belegung bleibt das alte
+  async function changeHotkey(id, accel) {
+    const before = hotkeys
+    if ((await applyHotkeys({ ...before, [id]: accel })).includes(id)) {
+      await applyHotkeys(before)
+      return false
+    }
+    await db.setSetting(HOTKEYS.find((h) => h.id === id).setting, accel).catch(fail)
+    return true
+  }
   const fail = (e) => setError(`Speichern fehlgeschlagen: ${e}`)
   const reload = useCallback(() => db.allNodes().then(setNodes).catch((e) => setError(`Datenbank nicht erreichbar: ${e}`)), [])
 
@@ -519,6 +536,48 @@ export default function App() {
       setError(`Outlook: ${e}`)
     }
   }
+
+  // Meldung im Fenster, oder als Windows-Meldung, wenn Nexora gerade im Hintergrund ist
+  async function tell(text) {
+    setNotice(text)
+    if (document.hasFocus()) return
+    if (await isPermissionGranted().catch(() => false)) sendNotification({ title: 'Nexora', body: text })
+  }
+
+  // Zwischenablage in den Eingang: Text wird ein Punkt (erste Zeile Titel), ein Bild ein Punkt mit Bild
+  async function clipboardToInbox() {
+    try {
+      const clip = await invoke('clipboard_read')
+      let text = clip.text?.trim()
+      if (text) {
+        const spans = secretSpans(text)
+        if (spans.length) {
+          const w = getCurrentWindow()
+          await w.unminimize().then(() => w.show()).then(() => w.setFocus()).catch(() => {})
+          const choice = await new Promise((resolve) => setSecretAsk({ text, spans, resolve }))
+          if (!choice) return
+          if (choice === 'masked') text = maskSecrets(text, spans)
+        }
+        const [first, ...rest] = text.split(/\r?\n/)
+        const title = first.trim().slice(0, 120) || 'Aus der Zwischenablage'
+        const more = (first.trim().length > 120 ? text : rest.join('\n')).trim()
+        const row = await addRow(null, title, {})
+        if (row && more) await db.update(row.id, { body: more })
+        return tell(`Im Eingang: ${title}`)
+      }
+      if (clip.bmp) {
+        const src = await saveImageBytes(await bmpToPng(clip.bmp), 'png')
+        const title = `Bild aus der Zwischenablage, ${new Date().toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+        const row = await addRow(null, title, {})
+        if (row) await db.update(row.id, { body: `![](${src})` })
+        return tell(`Im Eingang: ${title}`)
+      }
+      tell('Die Zwischenablage ist leer.')
+    } catch (e) {
+      setError(`Zwischenablage: ${e}`)
+    }
+  }
+  hotkeyRun.current = (id) => (id === 'capture' ? invoke('toggle_capture') : id === 'clipboard' ? clipboardToInbox() : invoke('toggle_picker'))
 
   // Wochenrückblick als Seite ablegen
   async function savePage(parentId, title, body) {
@@ -839,9 +898,9 @@ export default function App() {
   } else if (current === 'settings') {
     view = (
       <Settings
-        hotkey={hotkey}
-        hotkeyError={hotkeyError}
-        onHotkey={(accel, err) => (setHotkey(accel), setHotkeyError(err))}
+        hotkeys={hotkeys}
+        hotkeyBusy={hotkeyBusy}
+        onHotkey={changeHotkey}
         backup={backup}
         onBackupNow={() => doBackup(true)}
         updates={updates}
@@ -885,7 +944,7 @@ export default function App() {
         onToggle={toggleRow}
         onAdd={(title, props) => addRow(null, title, props)}
         onAssign={assign}
-        hotkey={hotkeyLabel(hotkey)}
+        hotkey={hotkeyLabel(hotkeys.capture)}
       />
     )
   } else if (windowPage && !node) {
@@ -978,6 +1037,16 @@ export default function App() {
       {/* key: bei jedem Seitenwechsel neu einblenden */}
       <main key={current} className="anim-page min-w-0 flex-1">{view}</main>
 
+      {secretAsk && (
+        <SecretDialog
+          text={secretAsk.text}
+          spans={secretAsk.spans}
+          onChoose={(choice) => {
+            secretAsk.resolve(choice)
+            setSecretAsk(null)
+          }}
+        />
+      )}
       {vaultAsk && (
         <VaultUnlock
           status={vaultAsk.status}

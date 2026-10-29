@@ -13,7 +13,7 @@ import { vault } from './Vault.jsx'
 import { FOLDER as OUTLOOK_FOLDER } from './outlook.js'
 import { ConfirmButton } from './Overview.jsx'
 import { View } from './Rows.jsx'
-import { accelFromEvent, bindHotkey, hotkeyLabel } from './hotkey.js'
+import { HOTKEYS, accelFromEvent, hotkeyLabel } from './hotkey.js'
 import { applyTheme, getTheme } from './theme.js'
 import * as db from './db.js'
 
@@ -340,8 +340,40 @@ function UpdateSection({ updates }) {
 
 const WINDOW_MODES = [['never', 'Nie'], ['ctrl', 'Mit Strg+Klick'], ['always', 'Immer']]
 
-export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBackupNow, updates, windowMode, onWindowMode, outlook, onOutlook, onOutlookSync }) {
+// Ein Tastenkürzel aufnehmen: klicken, Kombination drücken; belegt ein anderes Programm sie, bleibt die alte
+function HotkeyRow({ item, accel, busy, onChange }) {
   const [recording, setRecording] = useState(false)
+  const [message, setMessage] = useState('')
+  async function onKey(e) {
+    e.preventDefault()
+    if (e.key === 'Escape') return setRecording(false)
+    const next = accelFromEvent(e)
+    if (!next) return
+    setRecording(false)
+    const ok = await onChange(item.id, next)
+    setMessage(ok ? `Gespeichert: ${hotkeyLabel(next)}` : `${hotkeyLabel(next)} ist von einem anderen Programm belegt. Bitte eine andere Kombination wählen.`)
+  }
+  const text = message || (busy ? `${hotkeyLabel(accel)} ist von einem anderen Programm belegt. Bitte eine andere Kombination wählen.` : '')
+  return (
+    <div className="mb-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="w-60">{item.label}</span>
+        <button
+          onClick={() => (setRecording(true), setMessage(''))}
+          onKeyDown={recording ? onKey : undefined}
+          onBlur={() => setRecording(false)}
+          className={`flex min-w-56 items-center gap-2 rounded-md border px-3 py-1.5 text-left ${recording ? 'border-accent bg-accent-soft' : busy ? 'border-danger bg-raised' : 'border-line bg-raised hover:border-faint'}`}
+        >
+          <Keyboard size={18} className="text-muted" />
+          {recording ? 'Jetzt Tasten drücken …' : hotkeyLabel(accel)}
+        </button>
+      </div>
+      {text && <p className={`mt-1 text-sm ${text.startsWith('Gespeichert') ? 'text-accent' : 'text-danger'}`}>{text}</p>}
+    </div>
+  )
+}
+
+export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBackupNow, updates, windowMode, onWindowMode, outlook, onOutlook, onOutlookSync }) {
   const [message, setMessage] = useState('')
   const [theme, setTheme] = useState(getTheme)
   const [dir, setDir] = useState('')
@@ -362,43 +394,15 @@ export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBack
     }
   }
 
-  async function onKey(e) {
-    e.preventDefault()
-    if (e.key === 'Escape') return setRecording(false)
-    const accel = accelFromEvent(e)
-    if (!accel) return
-    setRecording(false)
-    try {
-      await bindHotkey(accel)
-      await db.setSetting('hotkey', accel)
-      onHotkey(accel, '')
-      setMessage(`Gespeichert: ${hotkeyLabel(accel)}`)
-    } catch {
-      setMessage(`${hotkeyLabel(accel)} ist von einem anderen Programm belegt. Bitte eine andere Kombination wählen.`)
-      await bindHotkey(hotkey).catch(() => {})
-    }
-  }
-
   return (
     <View title="Einstellungen" icon={GearSix}>
       <section className="mb-10">
-        <h2 className="mb-1 font-semibold">Schnellerfassung</h2>
-        <p className="mb-3 text-muted">Diese Tasten öffnen von überall das Eingabefeld für den Eingang.</p>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => (setRecording(true), setMessage(''))}
-            onKeyDown={recording ? onKey : undefined}
-            onBlur={() => setRecording(false)}
-            className={`flex min-w-56 items-center gap-2 rounded-md border px-3 py-2 text-left ${recording ? 'border-accent bg-accent-soft' : 'border-line bg-raised hover:border-faint'}`}
-          >
-            <Keyboard size={18} className="text-muted" />
-            {recording ? 'Jetzt Tasten drücken …' : hotkeyLabel(hotkey)}
-          </button>
-          {!recording && <span className="text-muted">Klicken, dann die neue Kombination drücken</span>}
-        </div>
-        {(message || hotkeyError) && (
-          <p className={`mt-2 ${message.startsWith('Gespeichert') ? 'text-accent' : 'text-danger'}`}>{message || hotkeyError}</p>
-        )}
+        <h2 className="mb-1 font-semibold">Tastenkürzel</h2>
+        <p className="mb-3 text-muted">Gelten überall in Windows, solange Nexora läuft (auch im Tray). Klicken, dann die neue Kombination drücken.</p>
+        {HOTKEYS.map((h) => (
+          <HotkeyRow key={h.id} item={h} accel={hotkeys[h.id]} busy={hotkeyBusy.includes(h.id)} onChange={onHotkey} />
+        ))}
+        {message && <p className="mt-2 text-danger">{message}</p>}
       </section>
 
       <section className="mb-10">
