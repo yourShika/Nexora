@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { appConfigDir } from '@tauri-apps/api/path'
 import { getVersion } from '@tauri-apps/api/app'
+import { invoke } from '@tauri-apps/api/core'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
 import { open } from '@tauri-apps/plugin-dialog'
 import { FolderOpen, GearSix, Keyboard, Monitor, Moon, Sun } from '@phosphor-icons/react'
@@ -160,6 +161,68 @@ function RunbookSection() {
         PowerShell-Blöcke mit PowerShell 7 ausführen
         {!list.includes('pwsh') && <span className="text-xs text-faint">nicht installiert</span>}
       </label>
+    </section>
+  )
+}
+
+// Anmeldung am Team-Server (Stufe 5): Microsoft-Anmeldung im Browser, Token bleibt verschlüsselt auf diesem PC
+function TeamSection() {
+  const [status, setStatus] = useState(null)
+  const [server, setServer] = useState('')
+  const [busy, setBusy] = useState('')
+  const [error, setError] = useState('')
+  useEffect(() => {
+    db.getSetting('team-server').then((s) => s && setServer(s)).catch(() => {})
+    invoke('team_status').then((s) => (setStatus(s), s.server && setServer(s.server)), (e) => setError(String(e)))
+  }, [])
+  async function login() {
+    setBusy('Die Microsoft-Anmeldung öffnet sich im Browser …')
+    setError('')
+    try {
+      await db.setSetting('team-server', server.trim())
+      setStatus(await invoke('team_login', { server }))
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setBusy('')
+    }
+  }
+  async function logout() {
+    await invoke('team_logout').catch((e) => setError(String(e)))
+    setStatus({ connected: false })
+  }
+  const user = status?.connected && status.user
+  return (
+    <section className="mb-10">
+      <h2 className="mb-1 font-semibold">Team-Server</h2>
+      <p className="mb-3 text-muted">
+        Für Team-Notizbücher, die mehrere gemeinsam bearbeiten. Private Notizen bleiben immer nur auf diesem PC.
+        Angemeldet wird mit dem Microsoft-Konto der Firma; die Anmeldung bleibt verschlüsselt auf diesem PC gespeichert.
+      </p>
+      {user ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <span>
+            Angemeldet als <strong>{user.name}</strong>
+            {user.email ? ` (${user.email})` : ''} bei {status.server}
+          </span>
+          <button onClick={logout} className="rounded-md border border-line px-3 py-1.5 hover:bg-hover">Abmelden</button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={server}
+            onChange={(e) => setServer(e.target.value)}
+            placeholder="https://nexora.firma.local"
+            aria-label="Adresse des Team-Servers"
+            className="w-80 max-w-full rounded-md border border-line bg-raised px-3 py-1.5 outline-none focus:border-accent"
+          />
+          <button disabled={!server.trim() || !!busy} onClick={login} className="rounded-md bg-accent px-3 py-1.5 font-medium text-white disabled:opacity-50 dark:text-bg">
+            Anmelden
+          </button>
+        </div>
+      )}
+      {busy && <p className="mt-2 text-sm text-muted" aria-live="polite">{busy}</p>}
+      {(error || status?.error) && <p className="mt-2 text-sm text-danger">{error || `Anmeldung abgelaufen oder Server nicht erreichbar: ${status.error}`}</p>}
     </section>
   )
 }
@@ -406,6 +469,8 @@ export default function Settings({ hotkey, hotkeyError, onHotkey, backup, onBack
           ))}
         </div>
       </section>
+
+      <TeamSection />
 
       <OutlookSection state={outlook} onChange={onOutlook} onSync={onOutlookSync} />
 

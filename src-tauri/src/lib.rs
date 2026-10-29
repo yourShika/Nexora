@@ -10,6 +10,7 @@ mod onenote;
 mod outlook;
 mod vault;
 mod run;
+mod team;
 
 fn show(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
@@ -120,6 +121,9 @@ pub fn run() {
             outlook::outlook_events,
             outlook::outlook_push,
             outlook::outlook_drop_test,
+            team::team_login,
+            team::team_status,
+            team::team_logout,
             vault::vault_status,
             vault::vault_unlock,
             vault::vault_lock,
@@ -138,6 +142,7 @@ pub fn run() {
         ])
         .manage(run::Runs::default())
         .manage(vault::Vault::default())
+        .manage(team::Team::default())
         .setup(|app| {
             if !std::env::args().any(|a| a == "--hidden") {
                 show(app.handle());

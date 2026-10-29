@@ -86,6 +86,7 @@ Die neuen Nummern 52–71 werden beim Bau der passenden Stufe eingeordnet.
 - **0.15.0 (Stufe 4, OneNote-Brücke Teil 1, nur lesen):** OneNote-Notizbuch über das installierte OneNote (COM, festes PowerShell-Skript, nur Lesebefehle) verbinden; Abschnitte, Abschnittsgruppen („Gruppe / Abschnitt“) und Unterseiten; Seiten werden freie Seiten mit Kästen an der OneNote-Position; übernommen: Überschriften, Fett/Kursiv/Durchgestrichen, Links, Listen, Aufgaben als Checklisten, Tabellen, Bilder (danach durchsuchbar); Freihand, Audio und eingebettete Dateien als Hinweis. Abgleich per Knopf: Änderungen am Inhalt erkennt Nexora über eine Prüfsumme (OneNote setzt den Zeitstempel der Seite nicht verlässlich); in Nexora unverändert → ersetzen (alte Fassung im Verlauf), in beiden geändert → OneNote-Fassung als eigene Seite daneben; in OneNote gelöschte Seiten bleiben; verbundene Seiten sind gesperrt
 - **0.16.0 (Stufe 4, Vaultwarden):** Tresor über die Bitwarden-CLI (bw, per winget): Anmelden einmal im Terminal, Nexora entsperrt mit dem Master-Passwort (nur per Umgebungsvariable an bw), Sitzung nur im Speicher, sperrt sich nach 15 Minuten (einstellbar) und beim Beenden; „/Tresor-Eintrag“ fügt einen Verweis `[[vault:id|Name]]` ein (nur ID und Name gespeichert) mit Knöpfen Benutzer/Passwort kopieren; Passwort in der Zwischenablage nach 30 s gelöscht und vom Windows-Verlauf und Cloud-Abgleich ausgenommen; Runbooks: `{{vault:Name}}` (Passwort) und `{{vault:Name:benutzer}}`, eingesetzt in Rust, Passwörter in Ausgabe und Protokoll als ••••••; Passwörter erreichen die Oberfläche nie
 - **0.17.0 (Stufe 4, Outlook):** über das installierte klassische Outlook (COM, festes PowerShell-Skript), in den Einstellungen einzuschalten: offene Punkte mit Fälligkeit als Termine im eigenen Kalender „Nexora“ (ohne Uhrzeit ganztägig, mit Uhrzeit 30 Minuten, ohne Erinnerung, als frei, Kategorie „Nexora“); Änderungen und Erledigt werden nachgezogen, andere Kalender fasst Nexora nicht an; Outlook-Termine (eine Woche zurück bis zwei Monate voraus) in Heute und im Gesamtkalender, nur angezeigt, nicht gespeichert; Abgleich alle 15 Minuten, 10 s nach Änderungen und per Knopf. Testversion arbeitet nur mit „Nexora-Test“
+- **0.18.0 (Stufe 5, Schritt 1):** Nexora-Server im Ordner `server/` (ein Container ohne npm-Abhängigkeiten: Gesundheitsseite, Anmeldeangaben, Prüfung der Entra-Token mit Signatur, Aussteller, Zielgruppe, Zeit und Berechtigung; merkt sich angemeldete Personen), Dockerfile, `compose.yaml` für Arcane (Bau aus GitHub) und Einrichtungsanleitung `server/README.md`; in Nexora Einstellungen → Team-Server: Anmelden im Browser mit PKCE über `http://localhost`, Erneuerungs-Token mit DPAPI verschlüsselt im Datenordner, „Angemeldet als …“, Abmelden
 - Offen in Stufe 4: OneNote zurückschreiben (nach Test des Lesens durch den Nutzer); Outlook-Termine in der Zeitleiste; bei Umstieg auf das neue Outlook auf Graph wechseln
 
 ## Stufe 5 – Team (Plan, abgestimmt am 2026-10-29)
@@ -110,7 +111,7 @@ Die neuen Nummern 52–71 werden beim Bau der passenden Stufe eingeordnet.
 
 ### Teilschritte (je ein Release)
 
-1. **Server und Anmeldung:** Server-Grundgerüst mit Gesundheitsseite, Entra-Prüfung, Dockerfile und `compose.yaml`, Anleitung für Arcane; in Nexora „Mit Team-Server verbinden“ (Anmelden, angemeldet als …, Abmelden)
+1. ✓ (0.18.0) **Server und Anmeldung:** Server-Grundgerüst mit Gesundheitsseite, Entra-Prüfung, Dockerfile und `compose.yaml`, Anleitung für Arcane; in Nexora „Mit Team-Server verbinden“ (Anmelden, angemeldet als …, Abmelden)
 2. **Team-Notizbücher:** neues Team-Notizbuch anlegen oder vorhandenes teilen, Rechte vergeben; Baum und LOP-Punkte abgleichen, live und offline mit Warteschlange
 3. **Gemeinsam schreiben:** normale Seiten gleichzeitig (Yjs, Cursor mit Namen und Farben), offline zusammenführen, Versionsverlauf mit Namen; freie Seiten „wird bearbeitet von X“
 4. **Bilder und Anhänge** in Team-Notizbüchern über den Server, lokal zwischengespeichert
@@ -120,7 +121,7 @@ Die neuen Nummern 52–71 werden beim Bau der passenden Stufe eingeordnet.
 
 ### Was du einrichten musst (Anleitung kommt mit Schritt 1)
 
-- Entra: App-Registrierung „Nexora“ (Plattform „Mobile und Desktop“, Umleitung `http://localhost`), eine API-Berechtigung für den Server, Gruppenansprüche im Token
+- Entra: App-Registrierung „Nexora“ (Plattform „Mobile und Desktop“, Umleitung `http://localhost`), eine API-Berechtigung für den Server, Gruppenansprüche im Token; Schritt für Schritt in `server/README.md`. Der Erneuerungs-Token liegt mit DPAPI verschlüsselt in einer Datei statt in der Windows-Anmeldeverwaltung (die erlaubt nur 2,5 KB je Eintrag)
 - Server: DNS-Eintrag für den Server (z. B. `nexora.firma.local`), Proxy-Host im Nginx Proxy Manager mit WebSocket-Unterstützung, freier Port (vorher prüfen), Arcane-Projekt mit `compose.yaml` und `.env`
 - Prüfen, ob Arcane github.com erreicht (Firewall); sonst Spiegel im eigenen Git-Server
 

@@ -1,6 +1,6 @@
 {
   "name": "nexora",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Notizen, LOP und Runbooks in einer schlanken Desktop-App",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "build": "vite build",
     "tauri": "tauri",
     "app": "tauri dev --config src-tauri/tauri.dev.json",
-    "test": "node --test src/*.test.js",
+    "test": "node --disable-warning=ExperimentalWarning --test src/*.test.js server/*.test.js",
     "release": "node tools/release.mjs"
   },
   "dependencies": {

@@ -1,0 +1,18 @@
+# Nexora-Server für Arcane: diese Datei und .env (aus .env.example) ins Arcane-Projekt legen,
+# dann "Build & Deploy". Gebaut wird direkt aus dem GitHub-Repo.
+services:
+  nexora:
+    build:
+      context: https://github.com/yourShika/Nexora.git#main
+      dockerfile: server/Dockerfile
+    pull_policy: build
+    image: nexora-server:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${APP_PORT:-8092}:8080"
+    volumes:
+      - nexora-data:/data
+
+volumes:
+  nexora-data:
