@@ -150,7 +150,10 @@ export default function FreeCanvas({ body, editable, onChange }) {
   useEffect(() => {
     if (!drawing) return
     const key = (e) => {
-      if (e.key === 'Escape') setTool('write')
+      if (e.key === 'Escape') {
+        e.preventDefault() // Esc gilt dem Werkzeug, nicht dem Fokus-Modus
+        setTool('write')
+      }
       if (e.ctrlKey && e.key.toLowerCase() === 'z' && !document.activeElement?.closest('.tiptap') && undo.current.length) {
         e.preventDefault()
         inkRef.current = undo.current.pop()
@@ -249,7 +252,7 @@ export default function FreeCanvas({ body, editable, onChange }) {
         ref={canvas}
         onClick={create}
         style={{ zoom }}
-        className={`relative grid min-h-[60vh] w-max min-w-full pb-[50vh] pr-[40vw] ${editable && !drawing ? 'cursor-text' : ''}`}
+        className={`free-canvas relative grid min-h-[60vh] w-max min-w-full pb-[50vh] pr-[40vw] ${editable && !drawing ? 'cursor-text' : ''}`}
       >
         {!boxes.length && !ink.length && (
           <p className="pointer-events-none text-faint" style={{ gridArea: '1 / 1', marginTop: TOP }}>

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import {
-  AppWindow, ArrowCircleUp, BookOpenText, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
+  AppWindow, ArrowCircleUp, ArrowsLeftRight, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
   Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
@@ -24,7 +24,7 @@ export function NodeIcon({ node, size = 16 }) {
   return <FileText size={size} className="text-muted" />
 }
 
-export default function Sidebar({ tree, favorites, counts, current, expanded, renaming, actions, warning, onSearch, updates, vaultOpen, onLockVault }) {
+export default function Sidebar({ tree, area, favorites, counts, current, expanded, renaming, actions, warning, onSearch, updates, vaultOpen, onLockVault }) {
   const [menu, setMenu] = useState(null)
   const templates = useApp()?.templates ?? []
 
@@ -50,6 +50,20 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
         </IconButton>
       </div>
 
+      <div role="radiogroup" aria-label="Bereich" className="mx-2 mb-2 grid grid-cols-2 gap-0.5 rounded-md bg-hover p-0.5 text-xs">
+        {[['arbeit', 'Arbeit', Briefcase], ['privat', 'Privat', House]].map(([id, label, Icon]) => (
+          <button
+            key={id}
+            role="radio"
+            aria-checked={area === id}
+            onClick={() => actions.setArea(id)}
+            className={`flex items-center justify-center gap-1.5 rounded px-2 py-1 ${area === id ? 'bg-raised text-text shadow-sm' : 'text-muted hover:text-text'}`}
+          >
+            <Icon size={14} weight={area === id ? 'fill' : 'regular'} className={area === id ? 'text-accent' : ''} /> {label}
+          </button>
+        ))}
+      </div>
+
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
         <button onClick={onSearch} className="mb-1 flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-muted hover:bg-hover hover:text-text">
           <MagnifyingGlass size={16} />
@@ -62,6 +76,7 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
             { id: 'inbox', label: 'Eingang', icon: Tray, count: counts.inbox },
             { id: 'calendar', label: 'Kalender', icon: CalendarBlank },
             { id: 'journal', label: 'Tagebuch', icon: BookOpenText },
+            { id: 'stats', label: 'Statistik', icon: ChartBar },
             { id: 'snippets', label: 'Snippets', icon: Code },
           ].map((v) => (
             <li key={v.id}>
@@ -176,6 +191,9 @@ export default function Sidebar({ tree, favorites, counts, current, expanded, re
           <MenuItem icon={Star} onClick={run(() => actions.save(m.id, { favorite: m.favorite ? 0 : 1 }))}>
             {m.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
           </MenuItem>
+          {m.kind === 'notebook' && (
+            <MenuItem icon={ArrowsLeftRight} onClick={run(() => actions.moveArea(m.id))}>{m.area === 'privat' ? 'In den Bereich Arbeit' : 'In den Bereich Privat'}</MenuItem>
+          )}
           {m.kind === 'notebook' && m.config?.onenote && (
             <>
               <MenuItem icon={ArrowsClockwise} onClick={run(() => actions.oneNoteSync(m.id))}>Mit OneNote abgleichen</MenuItem>

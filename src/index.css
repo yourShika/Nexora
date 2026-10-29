@@ -41,6 +41,9 @@
   --code-fn: #1f5fa8;
   --code-com: #7a8487;
   --code-var: #b0362f;
+  /* Diagramme: zwei Reihen, geprüft auf Farbfehlsichtigkeit und Kontrast zur Fläche */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
 }
 
 [data-theme="dark"] {
@@ -64,6 +67,8 @@
   --code-fn: #7cb4f0;
   --code-com: #7d878a;
   --code-var: #ef8a83;
+  --series-1: #3987e5;
+  --series-2: #d95926;
 }
 
 html, body, #root { height: 100%; }
@@ -111,6 +116,26 @@ body {
 }
 
 /* ---------- Editor ---------- */
+/* Drucken: Print.jsx baut die Seiten in #print-root auf (unsichtbar, in Blattbreite), gedruckt wird nur das */
+#print-root { position: fixed; left: -10000px; top: 0; width: 680px; visibility: hidden; }
+#print-root .free-canvas { padding: 0; min-height: 0; }
+#print-root .tiptap { padding-bottom: 0; }
+#print-root [role='toolbar'], #print-root .codeblock > [contenteditable='false']:first-child { display: none; }
+@media print {
+  @page { margin: 16mm; }
+  html, body { height: auto; background: #fff; }
+  #root { display: none; }
+  #print-root { position: static; width: auto; visibility: visible; }
+  .print-page + .print-page { break-before: page; }
+  #print-root pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
+  #print-root img, #print-root svg, #print-root pre, #print-root tr { break-inside: avoid; }
+}
+
+/* Fokus-Modus: Seitenleiste und Kopfzeile weg, nur Titel und Text, etwas größer */
+[data-focus] .page-head, [data-focus] .page-cover { display: none; }
+[data-focus] article { padding-top: 4.5rem; }
+[data-focus] .tiptap { font-size: 17px; }
+
 .tiptap {
   outline: none;
   font-size: 15.5px;

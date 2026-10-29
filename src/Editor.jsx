@@ -34,6 +34,7 @@ import SecretDialog from './SecretDialog.jsx'
 
 const lowlight = createLowlight(common)
 lowlight.register({ powershell, dos, dockerfile, nginx })
+lowlight.registerAlias({ plaintext: ['mermaid'] }) // Diagramm-Code nicht raten lassen
 
 // Bild mit Breite im Obsidian-Format "![alt|400](bilder/x.png)"; Höhe folgt dem Seitenverhältnis
 const Bild = Image.extend({

@@ -61,5 +61,7 @@ export function parseTable(lines) {
 
 // Codeblöcke aus dem Markdown einer Seite (Snippet-Übersicht und Snippet-Picker)
 export function codeBlocks(body) {
-  return [...body.matchAll(/^```([\w-]*)[^\n]*\n([\s\S]*?)\n```/gm)].map((m) => ({ lang: m[1] || 'plaintext', code: m[2] }))
+  return [...body.matchAll(/^```([\w-]*)[^\n]*\n([\s\S]*?)\n```/gm)]
+    .map((m) => ({ lang: m[1] || 'plaintext', code: m[2] }))
+    .filter((b) => b.lang !== 'mermaid') // Diagramme sind keine Snippets
 }

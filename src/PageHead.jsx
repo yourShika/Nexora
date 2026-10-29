@@ -15,7 +15,7 @@ const EMOJIS = [
 export function Cover({ node, onSave }) {
   if (!node.cover) return null
   return (
-    <div className="group/cover relative h-44 w-full overflow-hidden bg-side">
+    <div className="page-cover group/cover relative h-44 w-full overflow-hidden bg-side">
       <img src={assetUrl(node.cover)} alt="" className="h-full w-full object-cover" />
       <div className={`absolute bottom-2 right-3 hidden gap-1 ${node.locked ? '' : 'group-hover/cover:flex'}`}>
         <CoverButton onClick={() => pickCover(node, onSave)}>Ändern</CoverButton>

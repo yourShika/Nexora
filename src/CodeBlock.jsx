@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NodeViewContent, NodeViewWrapper } from '@tiptap/react'
-import { Check, Copy, NotePencil, Play, ShieldCheck, Stop, Table, TextAlignLeft, X } from '@phosphor-icons/react'
+import { Check, Code, Copy, FlowArrow, NotePencil, Play, ShieldCheck, Stop, Table, TextAlignLeft, X } from '@phosphor-icons/react'
 import * as db from './db.js'
 import { useApp } from './ctx.js'
 import { RUNNABLE, fill, parseTable, placeholders, runCode } from './runner.js'
+import { isDark, useDark } from './theme.js'
 
 // Auswahl statt aller ~40 lowlight-Sprachen: das, was im IT-Alltag vorkommt
 export const LANGUAGES = {
@@ -20,6 +21,7 @@ export const LANGUAGES = {
   nginx: 'Nginx',
   csharp: 'C#',
   javascript: 'JavaScript',
+  mermaid: 'Mermaid (Diagramm)',
   plaintext: 'Text',
 }
 
@@ -32,6 +34,10 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos }) {
   const app = useApp()
   const lang = node.attrs.language || 'plaintext'
   const runnable = lang in RUNNABLE
+  const diagram = lang === 'mermaid'
+  // Diagramm zeigt erst nur das Bild; der Code kommt auf Knopfdruck (oder solange er leer ist)
+  const [showCode, setShowCode] = useState(false)
+  const empty = !node.textContent.trim()
 
   async function copy() {
     await navigator.clipboard.writeText(node.textContent)
@@ -127,14 +133,54 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos }) {
             <BarButton onClick={() => start(true)} disabled={run?.running} title="Als Administrator ausführen (Windows fragt nach)" icon={ShieldCheck}>Als Admin</BarButton>
           </>
         )}
+        {diagram && !empty && (
+          <BarButton onClick={() => setShowCode(!showCode)} icon={showCode ? FlowArrow : Code}>{showCode ? 'Nur Diagramm' : 'Code'}</BarButton>
+        )}
         <BarButton onClick={copy} icon={copied ? Check : Copy}>{copied ? 'Kopiert' : 'Kopieren'}</BarButton>
       </div>
-      <pre>
+      <pre className={diagram && !showCode && !empty ? 'hidden' : ''}>
         <NodeViewContent as="code" className={`hljs language-${lang}`} />
       </pre>
+      {diagram && !empty && <Diagram code={node.textContent} />}
       {ask && <AskValues ask={ask} onRun={(values) => go(node.textContent, ask.admin, values)} onCancel={() => setAsk(null)} />}
       {run && <Output run={run} onClose={() => setRun(null)} onProtocol={toProtocol} />}
     </NodeViewWrapper>
+  )
+}
+
+// Mermaid erst laden, wenn ein Diagramm auf der Seite ist (die Bibliothek ist groß)
+let mermaidLib
+let seq = 0
+async function drawMermaid(code) {
+  const mermaid = (await (mermaidLib ??= import('mermaid'))).default
+  // strict: kein HTML und keine Klick-Skripte aus importierten Notizen
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: isDark() ? 'dark' : 'default' })
+  await mermaid.parse(code) // Syntaxfehler hier abfangen, sonst hängt Mermaid eine Fehlergrafik an die Seite
+  return (await mermaid.render(`mermaid-${++seq}`, code)).svg
+}
+
+export function Diagram({ code }) {
+  const [out, setOut] = useState({})
+  const dark = useDark()
+  useEffect(() => {
+    let alive = true
+    const t = setTimeout(() => {
+      drawMermaid(code).then(
+        (svg) => alive && setOut({ svg }),
+        (e) => alive && setOut((o) => ({ svg: o.svg, error: String(e?.message ?? e).split('\n')[0] })),
+      )
+    }, 250)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [code, dark])
+  return (
+    <div contentEditable={false} className="mermaid-view px-3 py-3">
+      {out.svg && <div className="flex justify-center [&_svg]:h-auto [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: out.svg }} />}
+      {out.error && <p role="alert" className="mt-1 text-xs text-danger">Diagramm nicht lesbar: {out.error}</p>}
+      {!out.svg && !out.error && <p data-pending className="text-xs text-faint">Diagramm wird gezeichnet …</p>}
+    </div>
   )
 }
 

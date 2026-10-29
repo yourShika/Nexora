@@ -10,7 +10,7 @@ const now = () => new Date().toISOString()
 const changed = () => emit('nodes-changed', { from: getCurrentWindow().label }).catch(() => {})
 
 // Nur diese Spalten dürfen über update() geschrieben werden
-const FIELDS = new Set(['title', 'icon', 'color', 'cover', 'locked', 'template', 'body', 'props', 'config', 'favorite', 'parent_id', 'sort', 'deleted_at'])
+const FIELDS = new Set(['title', 'icon', 'color', 'cover', 'locked', 'template', 'body', 'props', 'config', 'favorite', 'parent_id', 'sort', 'deleted_at', 'area'])
 const JSON_FIELDS = new Set(['props', 'config'])
 const encode = (k, v) => (JSON_FIELDS.has(k) && v != null ? JSON.stringify(v) : v)
 
@@ -28,7 +28,7 @@ function parse(row) {
 export async function allNodes() {
   const rows = await (await db()).select(
     // Text nur bei Punkten, für den Fortschritt ihrer Checkliste; danach wieder weg
-    "SELECT id, parent_id, kind, title, icon, color, cover, locked, template, props, config, sort, favorite, created_at, opened_at, updated_at, deleted_at, CASE WHEN kind = 'row' THEN body END AS row_body FROM nodes ORDER BY sort",
+    "SELECT id, parent_id, kind, title, icon, color, cover, locked, template, props, config, sort, favorite, area, created_at, opened_at, updated_at, deleted_at, CASE WHEN kind = 'row' THEN body END AS row_body FROM nodes ORDER BY sort",
   )
   return rows.map((row) => {
     if (row.kind === 'row') row.tasks = taskCount(row.row_body)
@@ -46,11 +46,11 @@ export async function create(kind, parentId, title = '', extra = {}) {
   const stamp = now()
   const node = {
     id: crypto.randomUUID(), parent_id: parentId, kind, title, sort: Date.now(), favorite: 0,
-    props: null, config: null, ...extra, created_at: stamp, updated_at: stamp, opened_at: null, deleted_at: null,
+    props: null, config: null, area: null, ...extra, created_at: stamp, updated_at: stamp, opened_at: null, deleted_at: null,
   }
   await (await db()).execute(
-    'INSERT INTO nodes (id, parent_id, kind, title, props, config, sort, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)',
-    [node.id, node.parent_id, node.kind, node.title, encode('props', node.props), encode('config', node.config), node.sort, stamp],
+    'INSERT INTO nodes (id, parent_id, kind, title, props, config, sort, area, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)',
+    [node.id, node.parent_id, node.kind, node.title, encode('props', node.props), encode('config', node.config), node.sort, node.area, stamp],
   )
   changed()
   return node
@@ -177,15 +177,23 @@ export async function getSetting(key) {
 }
 
 // Arbeitstagebuch: erledigt | angelegt | bearbeitet (einmal je Tag und Seite) | ausgefuehrt | nachgehakt | notiz
-export async function journal(kind, nodeId, text = '') {
+// area: nur für Notizen ohne Seite; sonst gilt der Bereich des obersten Knotens der Seite
+export async function journal(kind, nodeId, text = '', area = null) {
   const c = await db()
   const day = today()
   if (kind === 'bearbeitet' && (await c.select('SELECT 1 FROM journal WHERE day = $1 AND kind = $2 AND node_id = $3', [day, kind, nodeId])).length) return
-  await c.execute('INSERT INTO journal (day, at, kind, node_id, text) VALUES ($1, $2, $3, $4, $5)', [day, now(), kind, nodeId, text])
+  await c.execute(
+    `INSERT INTO journal (day, at, kind, node_id, text, area) VALUES ($1, $2, $3, $4, $5, COALESCE((
+       WITH RECURSIVE up(id, parent_id, area) AS (
+         SELECT id, parent_id, area FROM nodes WHERE id = $4
+         UNION ALL SELECT n.id, n.parent_id, n.area FROM nodes n JOIN up ON n.id = up.parent_id)
+       SELECT area FROM up WHERE parent_id IS NULL), $6))`,
+    [day, now(), kind, nodeId, text, area],
+  )
 }
 
 export async function journalBetween(from, to) {
-  return (await db()).select('SELECT id, day, at, kind, node_id, text FROM journal WHERE day BETWEEN $1 AND $2 ORDER BY at', [from, to])
+  return (await db()).select('SELECT id, day, at, kind, node_id, text, area FROM journal WHERE day BETWEEN $1 AND $2 ORDER BY at', [from, to])
 }
 
 export async function deleteJournal(id) {
@@ -205,4 +213,13 @@ export async function setSetting(key, value) {
     'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     [key, value],
   )
+}
+
+// Für die Statistik: Feldwechsel aus dem Verlauf und Erledigt-Einträge aus dem Tagebuch
+export async function doneEvents() {
+  const c = await db()
+  return {
+    changes: await c.select("SELECT node_id, text, created_at FROM activity WHERE kind = 'change' AND text LIKE '%→%'"),
+    journal: await c.select("SELECT node_id, at FROM journal WHERE kind = 'erledigt'"),
+  }
 }

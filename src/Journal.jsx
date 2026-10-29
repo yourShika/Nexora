@@ -44,7 +44,7 @@ function Entry({ e, alive, onOpen, onDelete }) {
 }
 
 // Arbeitstagebuch (Tage) und Wochenrückblick (Woche); Einträge schreibt Nexora selbst mit, Notizen kommen dazu
-export default function Journal({ alive, rows, dbOf, sections, onOpen, onSavePage }) {
+export default function Journal({ alive, rows, dbOf, sections, onOpen, onSavePage, area, areaOf }) {
   const [tab, setTab] = useState('tage')
   const [span, setSpan] = useState(14)
   const [week, setWeek] = useState(() => monday(today()))
@@ -62,12 +62,13 @@ export default function Journal({ alive, rows, dbOf, sections, onOpen, onSavePag
   async function addNote(e) {
     e.preventDefault()
     if (!note.trim()) return
-    await db.journal('notiz', null, note.trim())
+    await db.journal('notiz', null, note.trim(), area === 'privat' ? 'privat' : null)
     setNote('')
     load()
   }
   const remove = (id) => db.deleteJournal(id).then(load)
-  const list = entries ?? []
+  // Bereich: lebende Seiten wie jetzt im Baum, Gelöschtes und Notizen wie beim Eintragen
+  const list = (entries ?? []).filter((e) => ((e.node_id && areaOf(e.node_id)) || e.area || 'arbeit') === area)
   const open = rows.filter((r) => !isDone(r, fieldsOf(dbOf(r))))
   const overdue = open.filter((r) => isLate(r.props?.due)).sort((a, b) => a.props.due.localeCompare(b.props.due))
   const waiting = open.filter((r) => r.props?.status === 'wartet')

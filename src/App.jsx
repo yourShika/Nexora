@@ -25,6 +25,8 @@ import { bmpToPng, initImages, saveImageBytes } from './images.js'
 import { describeReport, hash, link as oneNoteLink, syncNotebook } from './onenote.js'
 import { desiredEvents, followUpMail, pushDue, readEvents } from './outlook.js'
 import Journal from './Journal.jsx'
+import Stats from './Stats.jsx'
+import Print, { PrintAsk } from './Print.jsx'
 import OneNoteConnect from './OneNote.jsx'
 import { VaultPicker, VaultUnlock, setVaultPicker, vault } from './Vault.jsx'
 import { htmlToMarkdown } from './Editor.jsx'
@@ -65,10 +67,17 @@ function buildTree(nodes) {
   }
   for (const list of byParent.values()) list.sort((a, b) => a.sort - b.sort)
   const alive = new Map()
-  const walk = (parent) => (byParent.get(parent) ?? []).forEach((n) => (alive.set(n.id, n), walk(n.id)))
+  // Bereich (Arbeit/Privat) steht am obersten Knoten, alles darunter erbt ihn
+  const areas = new Map()
+  const walk = (parent, area) =>
+    (byParent.get(parent) ?? []).forEach((n) => {
+      alive.set(n.id, n)
+      areas.set(n.id, area ?? (n.area || 'arbeit'))
+      walk(n.id, areas.get(n.id))
+    })
   walk(null)
   const kids = (id) => (byParent.get(id) ?? []).filter((n) => n.kind !== 'row')
-  return { alive, roots: kids(null), children: kids, rows: (id) => (byParent.get(id) ?? []).filter((n) => n.kind === 'row') }
+  return { alive, roots: kids(null), children: kids, rows: (id) => (byParent.get(id) ?? []).filter((n) => n.kind === 'row'), areaOf: (id) => areas.get(id) }
 }
 
 export default function App() {
@@ -78,6 +87,10 @@ export default function App() {
   const [renaming, setRenaming] = useState(null)
   const [expanded, setExpanded] = useState(loadExpanded)
   const [error, setError] = useState('')
+  const [focusMode, setFocusMode] = useState(false)
+  const [printing, setPrinting] = useState(null) // { ask: Seite, count } oder { pages }
+  const [area, setArea] = useState('arbeit') // aktiver Bereich: 'arbeit' | 'privat'
+  const areaValue = area === 'privat' ? 'privat' : null // so steht er am obersten Knoten
   const [notice, setNotice] = useState('')
   const [oneNote, setOneNote] = useState(null) // offen: { busy: Fortschrittstext }
   const syncing = useRef(false)
@@ -260,10 +273,22 @@ export default function App() {
   }, [])
 
   const tree = useMemo(() => buildTree(nodes ?? []), [nodes])
+  // Baum nur mit dem aktiven Bereich (Seitenleiste, Suche, Snippets); stabil, solange sich nichts ändert
+  const areaTree = useMemo(() => {
+    const inArea = (n) => tree.areaOf(n.id) === area
+    return { ...tree, alive: new Map([...tree.alive].filter(([, n]) => inArea(n))), roots: tree.roots.filter(inArea) }
+  }, [tree, area])
+  useEffect(() => {
+    db.getSetting('area').then((a) => a && setArea(a)).catch(() => {})
+  }, [])
 
-  // Strg+K öffnet die Suche, auch mitten im Editor
+  // Strg+K öffnet die Suche, auch mitten im Editor; Strg+Umschalt+F schaltet den Fokus-Modus
   useEffect(() => {
     const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setFocusMode((f) => !f)
+      }
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setSearching((s) => !s)
@@ -272,6 +297,14 @@ export default function App() {
     document.addEventListener('keydown', onKey, true)
     return () => document.removeEventListener('keydown', onKey, true)
   }, [])
+
+  // Esc beendet den Fokus-Modus, außer jemand anderes hat Esc schon verbraucht (Slash-Menü, Zeichenwerkzeug)
+  useEffect(() => {
+    if (!focusMode) return
+    const onKey = (e) => e.key === 'Escape' && setTimeout(() => !e.defaultPrevented && setFocusMode(false))
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [focusMode])
 
   // Erinnerungen prüfen: gleich nach dem Laden, dann alle 30 s (live hält den aktuellen Stand)
   const loaded = nodes !== null
@@ -405,7 +438,7 @@ export default function App() {
     try {
       const parts = []
       if (push) {
-        const r = await pushDue(live.current.rows, live.current.dbOf)
+        const r = await pushDue(live.current.work, live.current.dbOf)
         parts.push(`${r.neu} neu, ${r.geaendert} geändert, ${r.entfernt} entfernt`)
         if (r.fehler?.length) throw new Error(r.fehler.join('; '))
       }
@@ -431,7 +464,7 @@ export default function App() {
   }, [])
   // Alle 15 Minuten, und 10 s nachdem sich eine Fälligkeit geändert hat (oder nach dem Einschalten)
   const dueSignature = useMemo(
-    () => (outlook.push ? hash(JSON.stringify([...desiredEvents([...tree.alive.values()].filter((n) => n.kind === 'row'), (r) => tree.alive.get(r.parent_id) ?? null)])) : ''),
+    () => (outlook.push ? hash(JSON.stringify([...desiredEvents([...tree.alive.values()].filter((n) => n.kind === 'row' && tree.areaOf(n.id) !== 'privat'), (r) => tree.alive.get(r.parent_id) ?? null)])) : ''),
     [tree, outlook.push],
   )
   useEffect(() => {
@@ -515,7 +548,7 @@ export default function App() {
     try {
       const list = parentId ? tree.alive.get(parentId) : null
       const full = list ? numbered(list, props) : { status: 'offen', ...props }
-      const node = await db.create('row', parentId, title, { props: full })
+      const node = await db.create('row', parentId, title, { props: full, area: parentId ? null : areaValue })
       setNodes((ns) => [...ns, node])
       db.journal('angelegt', node.id, title).catch(() => {})
       if (open) actions.open(node.id), setFresh(node.id)
@@ -731,7 +764,7 @@ export default function App() {
     openHere(id) {
       setCurrent(id)
       setFresh(null)
-      if (!['trash', 'today', 'inbox', 'settings', 'snippets', 'calendar', 'journal'].includes(id)) {
+      if (!['trash', 'today', 'inbox', 'settings', 'snippets', 'calendar', 'journal', 'stats'].includes(id)) {
         db.touch(id).catch(() => {})
         const node = tree.alive.get(id)
         setExpanded((s) => new Set([...s, ...pathOf(id).slice(0, -1).map((n) => n.id), ...(['notebook', 'section'].includes(node?.kind) ? [id] : [])]))
@@ -741,7 +774,7 @@ export default function App() {
     async oneNoteConnect(book) {
       setOneNote({ busy: 'Notizbuch wird angelegt …' })
       try {
-        const nb = await db.create('notebook', null, book.name, { config: { onenote: { id: book.id } } })
+        const nb = await db.create('notebook', null, book.name, { config: { onenote: { id: book.id } }, area: areaValue })
         await actions.oneNoteSync(nb.id, (text) => setOneNote({ busy: text }))
         actions.openHere(nb.id)
       } catch (e) {
@@ -783,7 +816,7 @@ export default function App() {
       try {
         const config = kind === 'database' ? (template === 'lop' ? lopConfig() : emptyConfig()) : null
         const title = template === 'lop' ? 'Offene Punkte' : DEFAULT_TITLE[kind]
-        const node = await db.create(kind, parentId, title, { config })
+        const node = await db.create(kind, parentId, title, { config, area: parentId ? null : areaValue })
         if (template === 'frei') await db.update(node.id, { body: CANVAS })
         setNodes((ns) => [...ns, node])
         if (kind === 'page') db.journal('angelegt', node.id, title).catch(() => {})
@@ -801,6 +834,19 @@ export default function App() {
       }
     },
     startRename: setRenaming,
+    setArea(next) {
+      setArea(next)
+      db.setSetting('area', next).catch(fail)
+      // offene Seite aus dem anderen Bereich nicht stehen lassen
+      if (tree.alive.has(current) && tree.areaOf(current) !== next) setCurrent('today')
+    },
+    moveArea(id) {
+      const n = tree.alive.get(id)
+      const to = n.area === 'privat' ? null : 'privat'
+      save(id, { area: to })
+      setNotice(`„${n.title || 'Ohne Titel'}“ liegt jetzt im Bereich ${to ? 'Privat' : 'Arbeit'}.`)
+      if (current && pathOf(current).some((p) => p.id === id)) setCurrent('today')
+    },
     rename(id, title) {
       setRenaming(null)
       const node = tree.alive.get(id)
@@ -828,14 +874,19 @@ export default function App() {
   }
 
   const node = tree.alive.get(current)
-  const favorites = nodes.filter((n) => n.favorite && tree.alive.has(n.id))
+  const favorites = nodes.filter((n) => n.favorite && tree.alive.has(n.id) && tree.areaOf(n.id) === area)
   const trashed = nodes.filter((n) => n.deleted_at)
-  const liveRows = [...tree.alive.values()].filter((n) => n.kind === 'row')
-  const inboxRows = tree.rows(null)
-  const databases = [...tree.alive.values()]
+  const allRows = [...tree.alive.values()].filter((n) => n.kind === 'row')
+  // Heute, Eingang, Kalender, Suche, Tagebuch, Statistik zeigen nur den aktiven Bereich; Erinnerungen kommen aus beiden
+  const inArea = (n) => tree.areaOf(n.id) === area
+  const areaAlive = areaTree.alive
+  const liveRows = allRows.filter(inArea)
+  const inboxRows = tree.rows(null).filter(inArea)
+  const shownEvents = area === 'arbeit' ? events : [] // Outlook ist der Arbeitskalender
+  const databases = [...areaAlive.values()]
     .filter((n) => n.kind === 'database')
     .map((d) => ({ ...d, title: pathOf(d.id).map((p) => p.title || 'Ohne Titel').join(' / ') }))
-  live.current = { rows: liveRows, dbOf }
+  live.current = { rows: allRows, dbOf, work: allRows.filter((r) => tree.areaOf(r.id) !== 'privat') }
   // Seitenlinks brauchen den aktuellen Titel auch beim Speichern als Markdown
   const byId = new Map(nodes.map((n) => [n.id, n]))
   setLinkData({ get: (id) => byId.get(id), list: () => [...tree.alive.values()] })
@@ -861,7 +912,9 @@ export default function App() {
     { label: 'Kalender', run: () => actions.open('calendar') },
     { label: 'Snippets', run: () => actions.open('snippets') },
     { label: 'Tagebuch', run: () => actions.open('journal') },
+    { label: 'Statistik', run: () => actions.open('stats') },
     { label: 'Schnellerfassung', run: () => invoke('toggle_capture') },
+    { label: 'Fokus-Modus (Strg+Umschalt+F)', run: () => setFocusMode((f) => !f) },
     { label: 'Neues Notizbuch', run: () => actions.add('notebook', null) },
     { label: 'Einstellungen', run: () => actions.open('settings') },
     { label: 'Papierkorb', run: () => actions.open('trash') },
@@ -873,6 +926,15 @@ export default function App() {
   const counts = {
     inbox: inboxRows.filter((r) => !isDone(r, fieldsOf(null))).length,
     today: liveRows.filter((r) => !isDone(r, fieldsOf(dbOf(r))) && [r.props?.due, r.props?.followup].some((d) => d && dayOf(d) <= t)).length,
+  }
+
+  // Drucken: Seite, auf Wunsch mit allen Unterseiten (Tiefe zuerst, wie in der Seitenleiste)
+  const subpages = (id) => tree.children(id).filter((n) => n.kind === 'page').flatMap((n) => [n, ...subpages(n.id)])
+  function printPage(page, withKids) {
+    const kids = page.kind === 'page' ? subpages(page.id) : []
+    if (withKids === undefined && kids.length) return setPrinting({ ask: page, count: kids.length })
+    const list = [page, ...(withKids ? kids : [])]
+    setPrinting({ pages: list.map((n) => ({ node: n, path: n.kind !== 'row' ? pathOf(n.id).slice(0, -1) : dbOf(n) ? pathOf(dbOf(n).id) : [{ id: 'inbox', title: 'Eingang' }], fields: n.kind === 'row' ? fieldsOf(dbOf(n)) : null, list: dbOf(n) })) })
   }
 
   let view
@@ -917,24 +979,28 @@ export default function App() {
         <h1 className="mb-6 flex items-center gap-3 text-[32px] font-semibold leading-tight tracking-tight">
           <CalendarBlank size={28} className="text-accent" /> Kalender
         </h1>
-        <CalendarView rows={liveRows} dbOf={dbOf} events={events} field="due" hideDone onOpen={actions.open} onRow={save} onAdd={(title, props) => addRow(null, title, props)} />
+        <CalendarView rows={liveRows} dbOf={dbOf} events={shownEvents} field="due" hideDone onOpen={actions.open} onRow={save} onAdd={(title, props) => addRow(null, title, props)} />
       </div>
     )
   } else if (current === 'journal') {
     view = (
       <Journal
-        alive={tree.alive}
+        alive={areaAlive}
         rows={liveRows}
         dbOf={dbOf}
-        sections={[...tree.alive.values()].filter((n) => n.kind === 'section').map((s) => ({ id: s.id, title: pathOf(s.id).map((p) => p.title || 'Ohne Titel').join(' / ') }))}
+        area={area}
+        areaOf={tree.areaOf}
+        sections={[...areaAlive.values()].filter((n) => n.kind === 'section').map((s) => ({ id: s.id, title: pathOf(s.id).map((p) => p.title || 'Ohne Titel').join(' / ') }))}
         onOpen={actions.open}
         onSavePage={savePage}
       />
     )
+  } else if (current === 'stats') {
+    view = <Stats rows={liveRows} dbOf={dbOf} />
   } else if (current === 'snippets') {
-    view = <Snippets alive={tree.alive} pathOf={pathOf} onOpen={actions.open} />
+    view = <Snippets alive={areaAlive} pathOf={pathOf} onOpen={actions.open} />
   } else if (current === 'today') {
-    view = <Today rows={liveRows} dbOf={dbOf} events={events} onOpen={actions.open} onToggle={toggleRow} onFollowUp={followUp} />
+    view = <Today rows={liveRows} dbOf={dbOf} events={shownEvents} onOpen={actions.open} onToggle={toggleRow} onFollowUp={followUp} />
   } else if (current === 'inbox') {
     view = (
       <Inbox
@@ -986,6 +1052,7 @@ export default function App() {
         db={list}
         onAddOption={list && ((fieldId, name) => save(list.id, { config: withTags(list, [name]) }))}
         onFollowUp={followUp}
+        onPrint={printPage}
         flushRef={windowPage ? flushRef : undefined}
         onWindow={windowPage ? undefined : () => actions.openWindow(node.id)}
         windowed={
@@ -1019,9 +1086,15 @@ export default function App() {
 
   return (
     <AppContext.Provider value={app}>
-    <div className="flex h-full">
-      {!windowPage && <Sidebar
-        tree={tree}
+    <div className="flex h-full" data-focus={focusMode || undefined}>
+      {focusMode && (
+        <button onClick={() => setFocusMode(false)} className="fixed right-3 top-2 z-20 rounded-md px-2 py-1 text-xs text-faint opacity-60 hover:bg-hover hover:text-text hover:opacity-100">
+          Fokus beenden (Esc)
+        </button>
+      )}
+      {!windowPage && !focusMode && <Sidebar
+        tree={areaTree}
+        area={area}
         favorites={favorites}
         counts={counts}
         current={current}
@@ -1037,6 +1110,8 @@ export default function App() {
       {/* key: bei jedem Seitenwechsel neu einblenden */}
       <main key={current} className="anim-page min-w-0 flex-1">{view}</main>
 
+      {printing?.ask && <PrintAsk node={printing.ask} count={printing.count} onChoose={(kids) => (kids === null ? setPrinting(null) : printPage(printing.ask, kids))} />}
+      {printing?.pages && <Print pages={printing.pages} onDone={(err) => (setPrinting(null), err && setError(err))} />}
       {secretAsk && (
         <SecretDialog
           text={secretAsk.text}
@@ -1073,7 +1148,7 @@ export default function App() {
           onClose={() => setOneNote(null)}
         />
       )}
-      {searching && <Search tree={tree} pathOf={pathOf} commands={commands} onOpen={actions.open} onClose={() => setSearching(false)} />}
+      {searching && <Search tree={areaTree} pathOf={pathOf} commands={commands} onOpen={actions.open} onClose={() => setSearching(false)} />}
 
       {notice && !error && (
         <div role="status" className="anim-toast fixed bottom-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-line bg-raised p-3 shadow-[var(--shadow)]">

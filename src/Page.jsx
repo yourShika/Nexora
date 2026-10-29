@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AppWindow, Article, ArrowBendDownRight, ArrowSquareIn, ClockCounterClockwise, DotsThree, FrameCorners, ListChecks, LockSimple, LockSimpleOpen, PushPin, Stamp, EnvelopeSimple, Star, Trash, WarningCircle } from '@phosphor-icons/react'
+import { AppWindow, Article, Printer, ArrowBendDownRight, ArrowSquareIn, ClockCounterClockwise, DotsThree, FrameCorners, ListChecks, LockSimple, LockSimpleOpen, PushPin, Stamp, EnvelopeSimple, Star, Trash, WarningCircle } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { NodeIcon } from './Sidebar.jsx'
 import { useApp } from './ctx.js'
@@ -13,7 +13,7 @@ import { hasInk, isFree, toFlow, toFree } from './free.js'
 import { IconButton } from './Sidebar.jsx'
 import { PropsPanel } from './Props.jsx'
 
-export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove, fields, db: parentDb, onAddOption, flushRef, onWindow, windowed, onFollowUp }) {
+export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove, fields, db: parentDb, onAddOption, flushRef, onWindow, windowed, onFollowUp, onPrint }) {
   const [body, setBody] = useState(null)
   const [loadError, setLoadError] = useState(false)
   const [title, setTitle] = useState(node.title)
@@ -91,7 +91,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
   return (
     <div className="flex h-full">
     <div className={`h-full min-w-0 flex-1 ${free ? 'overflow-auto' : 'overflow-y-auto'}`}>
-      <header className="sticky left-0 top-0 z-10 flex h-12 items-center gap-3 bg-bg/90 px-5 backdrop-blur">
+      <header className="page-head sticky left-0 top-0 z-10 flex h-12 items-center gap-3 bg-bg/90 px-5 backdrop-blur">
         <nav aria-label="Pfad" className="flex min-w-0 flex-1 items-center gap-1.5 text-muted">
           {path.map((p, i) => (
             <span key={p.id} className="flex min-w-0 items-center gap-1.5">
@@ -127,6 +127,9 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
           <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
             {node.kind === 'row' && node.props?.status === 'wartet' && onFollowUp && (
               <MenuItem icon={EnvelopeSimple} onClick={() => (setMenu(null), onFollowUp(node))}>Nachhaken (Mail-Entwurf)</MenuItem>
+            )}
+            {onPrint && (
+              <MenuItem icon={Printer} onClick={async () => (setMenu(null), await flush(), onPrint(node))}>Drucken / Als PDF …</MenuItem>
             )}
             {onWindow && <MenuItem icon={AppWindow} onClick={() => (flush(), setMenu(null), onWindow())}>In eigenem Fenster öffnen</MenuItem>}
             {windowed && <MenuItem icon={ArrowSquareIn} onClick={() => (setMenu(null), windowed.onMain())}>Im Hauptfenster öffnen</MenuItem>}

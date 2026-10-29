@@ -35,7 +35,9 @@ export default function Capture() {
     if (!parsed.title || saving) return
     setSaving(true)
     try {
-      const node = await db.create('row', null, parsed.title, { props: { status: 'offen', ...parsed.props } })
+      // landet im Bereich, der im Hauptfenster gerade aktiv ist
+      const area = (await db.getSetting('area').catch(() => null)) === 'privat' ? 'privat' : null
+      const node = await db.create('row', null, parsed.title, { props: { status: 'offen', ...parsed.props }, area })
       db.journal('angelegt', node.id, parsed.title).catch(() => {})
       await emit('nodes-changed')
       setText('')
