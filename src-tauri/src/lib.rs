@@ -11,6 +11,7 @@ mod files;
 mod ocr;
 mod onenote;
 mod outlook;
+mod package;
 mod vault;
 mod run;
 mod team;
@@ -166,7 +167,9 @@ pub fn run() {
             attach::open_attachment,
             attach::reveal_attachment,
             attach::read_text_file,
-            attach::export_files
+            attach::export_files,
+            package::export_nexora,
+            package::import_nexora
         ])
         .manage(run::Runs::default())
         .manage(vault::Vault::default())

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import {
-  AppWindow, ArrowCircleUp, ArrowsLeftRight, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
+  AppWindow, ArrowCircleUp, ArrowsLeftRight, FileArrowDown, FileArrowUp, FolderSimplePlus, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
   Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
@@ -114,6 +114,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
         <Heading
           action={
             <span className="flex gap-0.5">
+              <IconButton label="Nexora-Datei importieren" onClick={actions.importNexora}><FileArrowDown size={14} /></IconButton>
               <IconButton label="OneNote-Notizbuch verbinden" onClick={actions.oneNoteDialog}><PlugsConnected size={14} /></IconButton>
               <IconButton label="Neues Notizbuch" onClick={() => actions.add('notebook', null)}><Plus size={14} /></IconButton>
             </span>
@@ -140,7 +141,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
             className="mb-1 flex w-full items-center gap-2 rounded-md bg-accent-soft px-2 py-1.5 text-left text-xs hover:bg-hover disabled:opacity-60"
           >
             <ArrowCircleUp size={16} className="shrink-0 text-accent" />
-            {updates.busy ? 'Wird installiert …' : `Version ${updates.found.version} installieren`}
+            {updates.busy ? `Version ${updates.found.version} wird installiert …` : `Version ${updates.found.version} jetzt installieren (sonst beim nächsten Start)`}
           </button>
         )}
         {warning && (
@@ -166,6 +167,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
         <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
           {m.kind === 'page' && <MenuItem icon={AppWindow} onClick={run(() => actions.openWindow(m.id))}>In eigenem Fenster öffnen</MenuItem>}
           <MenuItem icon={Plus} onClick={run(() => actions.add(CHILD[m.kind], m.id))}>{NEW_LABEL[m.kind]}</MenuItem>
+          {m.kind === 'section' && <MenuItem icon={FolderSimplePlus} onClick={run(() => actions.add('section', m.id))}>Neuer Abschnitt darin</MenuItem>}
           {['section', 'page'].includes(m.kind) && (
             <>
               <MenuItem icon={FrameCorners} onClick={run(() => actions.add('page', m.id, 'frei'))}>Neue freie Seite</MenuItem>
@@ -186,6 +188,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
           {['section', 'page'].includes(m.kind) && (
             <MenuItem icon={DownloadSimple} onClick={run(() => actions.importFiles(m.id))}>Textdateien importieren …</MenuItem>
           )}
+          {m.kind === 'notebook' && <MenuItem icon={FileArrowUp} onClick={run(() => actions.exportNexora(m.id))}>Als Nexora-Datei speichern …</MenuItem>}
           <MenuItem icon={Export} onClick={run(() => actions.exportTree([m.id]))}>Als Markdown exportieren …</MenuItem>
           <MenuItem icon={PencilSimple} onClick={run(() => actions.startRename(m.id))}>Umbenennen</MenuItem>
           <MenuItem icon={Star} onClick={run(() => actions.save(m.id, { favorite: m.favorite ? 0 : 1 }))}>

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { addDays, taskCount, daysBetween, nextDate } from './fields.js'
+import { addDays, between, taskCount, daysBetween, nextDate } from './fields.js'
 import { parseQuick } from './quick.js'
 
 test('nächster Termin einer Wiederholung', () => {
@@ -27,4 +27,11 @@ test('Kurzsyntax für Wiederholungen', () => {
 test('Unterpunkte: Checkliste im Text des Punkts', () => {
   assert.equal(taskCount('Nur Text'), null)
   assert.deepEqual(taskCount('- [x] a\n- [ ] b\n  - [X] b1\n* [ ]\nText - [ ] mitten im Satz\n- \\[x\\] maskiert'), { done: 2, total: 4 })
+})
+
+test('Sortierwert zwischen Nachbarn', () => {
+  assert.equal(between(10, 20), 15)
+  assert.equal(between(10, undefined), 1010)
+  assert.equal(between(undefined, 10), -990)
+  assert.equal(between(undefined, undefined), 0)
 })

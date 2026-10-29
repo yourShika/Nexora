@@ -149,3 +149,6 @@ export function taskCount(md) {
   const all = [...(md ?? '').matchAll(/^\s*[-*+] \[([ xX])\](?: |$)/gm)]
   return all.length ? { done: all.filter((m) => m[1] !== ' ').length, total: all.length } : null
 }
+
+// Sortierwert zwischen zwei Nachbarn (eigene Reihenfolge per Ziehen); fehlt einer, mit Abstand davor/dahinter
+export const between = (prev, next) => (prev != null && next != null ? (prev + next) / 2 : prev != null ? prev + 1000 : next != null ? next - 1000 : 0)

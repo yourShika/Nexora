@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildExport, decodeText, importedPage, relPath, safeName } from './io.js'
+import { buildExport, decodeText, importedPage, packNotebook, relPath, safeName, unpackNotebook } from './io.js'
 import { lopConfig } from './fields.js'
 
 test('Text: UTF-8 und altes Windows-1252', () => {
@@ -54,4 +54,38 @@ test('Export: Baum, Links, Bilder, Anhänge, Listen', () => {
   assert.match(byPath['IT/Server/LOP.md'], /\| \[Zertifikat\]\(<LOP\/Zertifikat\.md>\) \| 1 \| Wartet \|/)
   assert.match(byPath['IT/Server/LOP/Zertifikat.md'], /- \*\*Status:\*\* Wartet/)
   assert.deepEqual(copies.map((c) => c.from).sort(), [`anhaenge/${id(8)}/Plan.pdf`, 'bilder/abc.png'])
+})
+
+test('Nexora-Datei: packen und mit neuen IDs auspacken', () => {
+  const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+  const nodes = new Map([
+    [id(1), { id: id(1), parent_id: null, kind: 'notebook', title: 'Buch', config: { onenote: { id: 'x' } }, sort: 1 }],
+    [id(2), { id: id(2), parent_id: id(1), kind: 'section', title: 'Abschnitt', sort: 1 }],
+    [id(3), { id: id(3), parent_id: id(2), kind: 'page', title: 'Seite', cover: 'bilder/c0ffee00-0000-4000-8000-000000000001.png', sort: 1 }],
+    [id(4), { id: id(4), parent_id: id(2), kind: 'database', title: 'Liste', config: { fields: [] }, sort: 2 }],
+    [id(5), { id: id(5), parent_id: id(4), kind: 'row', title: 'Punkt', props: { nr: 1, after: [id(6)] }, sort: 1 }],
+    [id(6), { id: id(6), parent_id: id(4), kind: 'row', title: 'Vorher', props: { nr: 2 }, sort: 2 }],
+  ])
+  const kids = (p) => [...nodes.values()].filter((n) => n.parent_id === p)
+  const bodies = { [id(3)]: `Siehe [[Vorher|${id(6)}]] und [[lop:${id(4)}]]\n\n![](bilder/aaaaaaaa-0000-4000-8000-000000000002.png)\n\n[[datei:bbbbbbbb-0000-4000-8000-000000000003/Plan.pdf|12]]` }
+  const { json, files } = packNotebook(id(1), {
+    get: (x) => nodes.get(x),
+    kids,
+    body: (x) => bodies[x] ?? '',
+    activity: (x) => (x === id(5) ? [{ kind: 'comment', text: 'Hallo', created_at: '2026-10-01T10:00:00.000Z' }] : []),
+  })
+  assert.deepEqual(json.nodes.map((n) => n.title), ['Buch', 'Abschnitt', 'Seite', 'Liste', 'Punkt', 'Vorher'])
+  assert.deepEqual(files.sort(), ['anhaenge/bbbbbbbb-0000-4000-8000-000000000003/Plan.pdf', 'bilder/aaaaaaaa-0000-4000-8000-000000000002.png', 'bilder/c0ffee00-0000-4000-8000-000000000001.png'])
+
+  let n = 100
+  const back = unpackNotebook(JSON.parse(JSON.stringify(json)), () => id(n++))
+  const by = Object.fromEntries(back.nodes.map((x) => [x.title, x]))
+  assert.equal(by.Buch.parent_id, null)
+  assert.equal(by.Buch.config, null, 'OneNote-Verbindung fällt weg')
+  assert.equal(by.Abschnitt.parent_id, by.Buch.id)
+  assert.equal(by.Punkt.parent_id, by.Liste.id)
+  assert.deepEqual(by.Punkt.props.after, [by.Vorher.id])
+  assert.equal(by.Seite.body, `Siehe [[Vorher|${by.Vorher.id}]] und [[lop:${by.Liste.id}]]\n\n![](bilder/aaaaaaaa-0000-4000-8000-000000000002.png)\n\n[[datei:bbbbbbbb-0000-4000-8000-000000000003/Plan.pdf|12]]`)
+  assert.deepEqual(back.activity, [{ node_id: by.Punkt.id, kind: 'comment', text: 'Hallo', created_at: '2026-10-01T10:00:00.000Z' }])
+  assert.throws(() => unpackNotebook({ format: 99, nodes: [] }, () => 'x'))
 })

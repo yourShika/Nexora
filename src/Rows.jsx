@@ -20,7 +20,7 @@ export function Progress({ tasks }) {
   )
 }
 
-export function RowItem({ row, db, onOpen, onToggle, showDb, actions }) {
+export function RowItem({ row, db, onOpen, onToggle, showDb, actions, drag, mark = '' }) {
   const fields = fieldsOf(db)
   const done = isDone(row, fields)
   // Status nur zeigen, wenn er vom Ausgangswert (z. B. "Offen") abweicht
@@ -28,7 +28,7 @@ export function RowItem({ row, db, onOpen, onToggle, showDb, actions }) {
   const plainStatus = (row.props?.[sf?.id] ?? sf?.options[0]?.id) === sf?.options[0]?.id
   const shown = fields.filter((f) => f.type !== 'nr' && f.id !== 'followup' && !(f === sf && plainStatus))
   return (
-    <li className="anim-row group flex items-center gap-3 px-2 py-2 hover:bg-hover">
+    <li {...drag} className={`anim-row group flex items-center gap-3 px-2 py-2 hover:bg-hover ${mark}`}>
       <input
         type="checkbox"
         checked={done}

@@ -114,3 +114,53 @@ export function buildExport(rootIds, src) {
   })
   return { files, copies: [...copies.values()].map((p) => ({ from: p, to: p })) }
 }
+
+// Nexora-Datei: ein Notizbuch verlustfrei (Knoten mit Text, Verlauf der Punkte, Bilder und Anhänge)
+export const NEXORA_FORMAT = 1
+const KINDS = new Set(['notebook', 'section', 'page', 'database', 'row'])
+const KEEP = ['id', 'parent_id', 'kind', 'title', 'icon', 'color', 'cover', 'locked', 'template', 'props', 'config', 'sort', 'favorite', 'created_at']
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g
+
+// src: { get(id), kids(id) (auch Punkte), body(id), activity(id) }; Eltern stehen immer vor ihren Kindern
+export function packNotebook(rootId, src) {
+  const nodes = []
+  const walk = (id) => {
+    const n = src.get(id)
+    nodes.push({ ...Object.fromEntries(KEEP.map((k) => [k, n[k] ?? null])), body: src.body(id) ?? '' })
+    for (const k of src.kids(id)) walk(k.id)
+  }
+  walk(rootId)
+  const files = new Set()
+  for (const n of nodes) {
+    for (const m of `${n.body}\n${n.cover ?? ''}`.matchAll(/bilder\/[\w-]+\.\w+/g)) files.add(m[0])
+    for (const m of n.body.matchAll(/\[\[datei:([0-9a-f-]{36}\/[^\]|\n]+)\|/g)) files.add(`anhaenge/${m[1]}`)
+  }
+  const activity = nodes.filter((n) => n.kind === 'row').flatMap((n) => src.activity(n.id).map((a) => ({ node_id: n.id, kind: a.kind, text: a.text, created_at: a.created_at })))
+  return { json: { format: NEXORA_FORMAT, exported: new Date().toISOString(), nodes, activity }, files: [...files] }
+}
+
+// Neue IDs für alles (dieselbe Datei lässt sich mehrfach einlesen); Verweise in Text, Feldern und Einstellungen ziehen mit
+export function unpackNotebook(data, makeId) {
+  if (data?.format !== NEXORA_FORMAT || !Array.isArray(data.nodes) || data.nodes[0]?.kind !== 'notebook') throw new Error('Keine Nexora-Datei in diesem Format')
+  const list = data.nodes.filter((n) => KINDS.has(n.kind) && typeof n.id === 'string')
+  const map = new Map(list.map((n) => [n.id, makeId()]))
+  const swap = (s) => s.replace(UUID, (id) => map.get(id) ?? id)
+  const json = (v) => (v == null ? null : JSON.parse(swap(JSON.stringify(v))))
+  const root = map.get(list[0].id)
+  const nodes = list.map((n, i) => ({
+    ...n,
+    id: map.get(n.id),
+    parent_id: i === 0 ? null : map.get(n.parent_id) ?? root,
+    title: String(n.title ?? ''),
+    body: swap(String(n.body ?? '')),
+    props: json(n.props),
+    config: json(n.config),
+  }))
+  // Die Kopie hängt nicht mehr an OneNote, sonst glichen zwei Notizbücher dasselbe ab
+  if (nodes[0].config?.onenote) {
+    const { onenote: _, ...rest } = nodes[0].config
+    nodes[0].config = Object.keys(rest).length ? rest : null
+  }
+  const activity = (data.activity ?? []).filter((a) => map.has(a.node_id) && ['change', 'comment'].includes(a.kind)).map((a) => ({ ...a, node_id: map.get(a.node_id) }))
+  return { nodes, activity }
+}

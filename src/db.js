@@ -251,3 +251,22 @@ export async function doneEvents() {
     journal: await c.select("SELECT node_id, at FROM journal WHERE kind = 'erledigt'"),
   }
 }
+
+// Ganzer Knoten mit fester ID (Import einer Nexora-Datei); andere Fenster laden danach neu
+export async function insertNode(n) {
+  await (await db()).execute(
+    `INSERT INTO nodes (id, parent_id, kind, title, icon, color, cover, locked, template, body, plain, props, config, sort, favorite, area, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+    [
+      n.id, n.parent_id, n.kind, n.title ?? '', n.icon ?? null, n.color ?? null, n.cover ?? null, n.locked ? 1 : 0, n.template ? 1 : 0,
+      n.body ?? '', searchText(n.body), encode('props', n.props), encode('config', n.config), Number(n.sort) || 0, n.favorite ? 1 : 0,
+      n.area ?? null, n.created_at ?? now(), now(),
+    ],
+  )
+}
+
+export async function insertActivity(a) {
+  await (await db()).execute('INSERT INTO activity (node_id, kind, text, created_at) VALUES ($1, $2, $3, $4)', [a.node_id, a.kind, String(a.text ?? ''), a.created_at ?? now()])
+}
+
+export const nodesChanged = () => changed()

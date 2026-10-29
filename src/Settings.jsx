@@ -319,7 +319,7 @@ function UpdateSection({ updates }) {
   return (
     <section className="mb-10">
       <h2 className="mb-1 font-semibold">Version und Updates</h2>
-      <p className="mb-3 text-muted">Nexora {version} sieht nach dem Start und alle 6 Stunden auf GitHub nach neuen Versionen.</p>
+      <p className="mb-3 text-muted">Nexora {version} sieht beim Start auf GitHub nach und installiert eine neue Version dann gleich, ohne Rückfrage (immer die neueste). Was unterwegs erscheint (Prüfung alle 6 Stunden), kommt beim nächsten Start oder hier per Knopf.</p>
       <div className="flex flex-wrap items-center gap-3">
         {updates.found ? (
           <button onClick={updates.install} disabled={updates.busy} className="rounded-md bg-accent px-3 py-1.5 font-medium text-white disabled:opacity-50 dark:text-bg">

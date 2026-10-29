@@ -38,14 +38,15 @@ import { dayOf, daysBetween, describe, emptyConfig, fieldsOf, formatDate, isDone
 import CalendarView from './Calendar.jsx'
 import { CalendarBlank } from '@phosphor-icons/react'
 import { parseQuick } from './quick.js'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { buildExport, decodeText, importedPage } from './io.js'
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
+import { buildExport, decodeText, importedPage, packNotebook, safeName, unpackNotebook } from './io.js'
 import { setLinkData } from './Links.jsx'
 import { AppContext } from './ctx.js'
 
 const DEFAULT_TITLE = { notebook: 'Neues Notizbuch', section: 'Neuer Abschnitt', page: '', database: 'Neue Liste', row: '' }
 // Wohin etwas im Baum darf (null = oberste Ebene)
-const PARENTS = { notebook: [null], section: ['notebook'], page: ['section', 'page'], database: ['section', 'page'] }
+// Abschnitte dürfen in Abschnitten liegen (wie Abschnittsgruppen in OneNote)
+const PARENTS = { notebook: [null], section: ['notebook', 'section'], page: ['section', 'page'], database: ['section', 'page'] }
 const SEED_SECTION = '7d1f3c2a-0b6e-4c55-9a1e-3f0d2b8c4e02'
 
 function loadExpanded() {
@@ -231,12 +232,20 @@ export default function App() {
     storeWindow.current()
   }
 
-  // Im fertigen Programm kurz nach dem Start und dann alle 6 Stunden nach Updates sehen; Fehler (offline) still
+  // Im fertigen Programm: gleich nach dem Start nachsehen und eine neue Version ohne Klick installieren (immer die neueste,
+  // keine Zwischenstände); unterwegs alle 6 Stunden nur vormerken, dann kommt sie beim nächsten Start. Fehler (offline) still
   useEffect(() => {
     if (!import.meta.env.PROD || windowPage) return
-    const look = () => findUpdate().then((found) => found && setUpdate((u) => ({ ...u, found }))).catch(() => {})
-    const first = setTimeout(look, 10_000)
-    const timer = setInterval(look, 6 * 3600e3)
+    const look = (now) =>
+      findUpdate()
+        .then((found) => {
+          if (!found) return
+          setUpdate((u) => ({ ...u, found, busy: now }))
+          if (now) return installUpdate(found)
+        })
+        .catch((e) => now && setUpdate((u) => ({ ...u, busy: false, error: `Update fehlgeschlagen: ${e}` })))
+    const first = setTimeout(() => look(true), 3_000)
+    const timer = setInterval(() => look(false), 6 * 3600e3)
     return () => (clearTimeout(first), clearInterval(timer))
   }, [])
 
@@ -717,6 +726,52 @@ export default function App() {
     }
   }
 
+  // Notizbuch als Nexora-Datei (verlustfrei, mit Bildern und Anhängen)
+  async function exportNexora(id) {
+    try {
+      const root = tree.alive.get(id)
+      const target = await saveDialog({ title: 'Notizbuch als Nexora-Datei speichern', defaultPath: `${safeName(root.title)}.nexora`, filters: [{ name: 'Nexora-Notizbuch', extensions: ['nexora'] }] })
+      if (!target) return
+      const kids = (x) => [...tree.children(x), ...tree.rows(x)]
+      const bodies = new Map()
+      const activity = new Map()
+      const walk = async (x) => {
+        bodies.set(x, await db.loadBody(x))
+        if (tree.alive.get(x).kind === 'row') activity.set(x, await db.activity(x))
+        for (const k of kids(x)) await walk(k.id)
+      }
+      await walk(id)
+      const { json, files } = packNotebook(id, { get: (x) => tree.alive.get(x), kids, body: (x) => bodies.get(x), activity: (x) => activity.get(x) ?? [] })
+      const copied = await invoke('export_nexora', { target, json: JSON.stringify(json), files })
+      setNotice(`„${root.title || 'Ohne Titel'}“ gespeichert: ${json.nodes.length} Einträge, ${copied} Bilder und Anhänge.`)
+    } catch (e) {
+      setError(`Export: ${e.message ?? e}`)
+    }
+  }
+
+  async function importNexora() {
+    try {
+      const source = await openDialog({ title: 'Nexora-Datei importieren', filters: [{ name: 'Nexora-Notizbuch', extensions: ['nexora'] }] })
+      if (!source) return
+      const { nodes: list, activity } = unpackNotebook(JSON.parse(await invoke('import_nexora', { source })), () => crypto.randomUUID())
+      const [book] = list
+      // Gleichnamiges Notizbuch bleibt unberührt, die Kopie bekommt einen Zusatz; sie landet im aktiven Bereich
+      const taken = new Set([...tree.alive.values()].filter((n) => n.kind === 'notebook').map((n) => n.title))
+      const base = book.title
+      for (let i = 1; taken.has(book.title); i++) book.title = `${base} (Import${i > 1 ? ` ${i}` : ''})`
+      book.area = areaValue
+      book.sort = (tree.roots.at(-1)?.sort ?? 0) + 1000
+      for (const n of list) await db.insertNode(n)
+      for (const a of activity) await db.insertActivity(a)
+      db.nodesChanged()
+      setNodes(await db.allNodes())
+      actions.openHere(book.id)
+      setNotice(`„${book.title}“ importiert: ${list.length} Einträge.`)
+    } catch (e) {
+      setError(`Import: ${e.message ?? e}`)
+    }
+  }
+
   // Ziel beim Ziehen im Baum: zone 'before' | 'after' | 'inside' relativ zu target; null = nicht erlaubt
   function placement(id, targetId, zone) {
     const node = tree.alive.get(id)
@@ -737,6 +792,8 @@ export default function App() {
     fromTemplate,
     importFiles,
     exportTree,
+    exportNexora,
+    importNexora,
     canMove: (id, targetId, zone) => !!placement(id, targetId, zone),
     move(id, targetId, zone) {
       const to = placement(id, targetId, zone)
@@ -916,6 +973,7 @@ export default function App() {
     { label: 'Schnellerfassung', run: () => invoke('toggle_capture') },
     { label: 'Fokus-Modus (Strg+Umschalt+F)', run: () => setFocusMode((f) => !f) },
     { label: 'Neues Notizbuch', run: () => actions.add('notebook', null) },
+    { label: 'Nexora-Datei importieren …', run: () => actions.importNexora() },
     { label: 'Einstellungen', run: () => actions.open('settings') },
     { label: 'Papierkorb', run: () => actions.open('trash') },
     { label: 'Darstellung: Hell', run: () => applyTheme('light') },

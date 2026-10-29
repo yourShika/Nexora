@@ -1,15 +1,66 @@
-import { useEffect, useState } from 'react'
-import { ArrowSquareOut, CalendarBlank, ChartBarHorizontal, Kanban, ListBullets, Plus, SlidersHorizontal, SortAscending, SortDescending, Table, X } from '@phosphor-icons/react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowSquareOut, CalendarBlank, ChartBarHorizontal, DotsSixVertical, Kanban, ListBullets, Plus, SlidersHorizontal, SortAscending, SortDescending, Table, X } from '@phosphor-icons/react'
 import { Chip, FieldEditor, FieldValue } from './Props.jsx'
 import { Progress, QuickAdd, RowItem } from './Rows.jsx'
 import { ConfirmButton } from './Overview.jsx'
 import { Cover, IconRow } from './PageHead.jsx'
 import CalendarView from './Calendar.jsx'
 import TimelineView from './Timeline.jsx'
-import { CHIP_COLORS, TYPES, isDone, newId, statusField } from './fields.js'
+import { CHIP_COLORS, TYPES, between, isDone, newId, statusField } from './fields.js'
 
 const TITLE = { id: 'title', name: 'Titel', type: 'title' }
-const COL_WIDTH = { title: 'min-w-60', nr: 'w-20', status: 'w-28', select: 'w-28', date: 'w-32', person: 'w-28', checkbox: 'w-16', multi: 'min-w-36' }
+// Startbreiten in Pixeln; gezogene Breiten stehen je Liste in config.widths
+const COL_WIDTH = { title: 320, nr: 80, status: 112, select: 112, date: 132, person: 112, checkbox: 64, multi: 160, text: 160, link: 160 }
+const MIN_COL = 48
+
+// Eigene Reihenfolge per Ziehen (nur ohne Spalten-Sortierung): neuer Sortierwert zwischen den Nachbarn
+function useRowDrag(rows, onRow, enabled) {
+  const [over, setOver] = useState(null) // { id, zone: 'before' | 'after' }
+  const dragging = useRef(null)
+  const zoneOf = (e) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return e.clientY - r.top < r.height / 2 ? 'before' : 'after'
+  }
+  return {
+    enabled,
+    handle: (row) =>
+      enabled
+        ? {
+            draggable: true,
+            onDragStart: (e) => {
+              dragging.current = row.id
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('application/x-nexora-row', row.id)
+            },
+            onDragEnd: () => ((dragging.current = null), setOver(null)),
+          }
+        : {},
+    target: (row) =>
+      enabled
+        ? {
+            onDragOver: (e) => {
+              if (!dragging.current || dragging.current === row.id) return
+              e.preventDefault()
+              const zone = zoneOf(e)
+              if (over?.id !== row.id || over.zone !== zone) setOver({ id: row.id, zone })
+            },
+            onDrop: (e) => {
+              e.preventDefault()
+              const id = dragging.current
+              const zone = zoneOf(e)
+              dragging.current = null
+              setOver(null)
+              if (!id || id === row.id) return
+              const list = rows.filter((r) => r.id !== id)
+              const i = list.findIndex((r) => r.id === row.id)
+              const [prev, next] = zone === 'before' ? [list[i - 1], list[i]] : [list[i], list[i + 1]]
+              onRow(id, { sort: between(prev?.sort, next?.sort) })
+            },
+          }
+        : {},
+    mark: (row) => (over?.id !== row.id ? '' : over.zone === 'before' ? 'shadow-[inset_0_2px_0_var(--accent)]' : 'shadow-[inset_0_-2px_0_var(--accent)]'),
+  }
+}
 const VIEWS = [
   { id: 'table', label: 'Tabelle', icon: Table },
   { id: 'list', label: 'Liste', icon: ListBullets },
@@ -103,9 +154,20 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
           <QuickAdd onAdd={onAdd} />
 
           {config.view === 'table' && (
-            <TableView db={db} rows={visible} fields={fields} sort={config.sort} onSort={(sort) => setConfig({ sort })} onOpen={onOpen} onRow={onRow} addOption={addOption} />
+            <TableView
+              db={db}
+              rows={visible}
+              fields={fields}
+              sort={config.sort}
+              onSort={(sort) => setConfig({ sort })}
+              widths={config.widths ?? {}}
+              onWidths={(widths) => setConfig({ widths })}
+              onOpen={onOpen}
+              onRow={onRow}
+              addOption={addOption}
+            />
           )}
-          {config.view === 'list' && <ListView db={db} rows={visible} fields={fields} onOpen={onOpen} onToggle={toggle} />}
+          {config.view === 'list' && <ListView db={db} rows={visible} fields={fields} onOpen={onOpen} onToggle={toggle} drag={!config.sort} onRow={onRow} />}
           {config.view === 'kanban' && (
             hasStatus
               ? <KanbanView db={db} rows={visible} fields={fields} onOpen={onOpen} onRow={onRow} />
@@ -136,29 +198,75 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
   )
 }
 
-function TableView({ db, rows, fields, sort, onSort, onOpen, onRow, addOption }) {
+function TableView({ db, rows, fields, sort, onSort, widths, onWidths, onOpen, onRow, addOption }) {
   const cols = [...fields.filter((f) => f.type === 'nr'), TITLE, ...fields.filter((f) => f.type !== 'nr')]
   const clickSort = (id) =>
     onSort(sort?.field !== id ? { field: id, dir: 'asc' } : sort.dir === 'asc' ? { field: id, dir: 'desc' } : null)
+  const drag = useRowDrag(rows, onRow, !sort)
+  const [live, setLive] = useState(null) // Breiten während des Ziehens
+  const width = (c) => (live ?? widths)[c.id] ?? COL_WIDTH[c.type] ?? 128
+  const total = 24 + cols.reduce((s, c) => s + width(c), 0)
+
+  // Spaltenbreite am rechten Rand ziehen; Doppelklick setzt sie zurück
+  function resize(e, c) {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const start = width(c)
+    let next = widths
+    const move = (ev) => setLive((next = { ...widths, [c.id]: Math.max(MIN_COL, Math.round(start + ev.clientX - startX)) }))
+    const up = () => {
+      removeEventListener('pointermove', move)
+      removeEventListener('pointerup', up)
+      setLive(null)
+      if (next !== widths) onWidths(next)
+    }
+    addEventListener('pointermove', move)
+    addEventListener('pointerup', up)
+  }
+  const reset = (c) => {
+    const { [c.id]: _, ...rest } = widths
+    onWidths(rest)
+  }
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse">
+      <table className="table-fixed border-collapse" style={{ width: total, minWidth: '100%' }}>
+        <colgroup>
+          <col style={{ width: 24 }} />
+          {cols.map((c) => <col key={c.id} style={{ width: width(c) }} />)}
+        </colgroup>
         <thead>
           <tr className="border-b border-line text-left text-xs text-muted">
+            <th aria-label="Reihenfolge" />
             {cols.map((c) => (
-              <th key={c.id} className={`whitespace-nowrap px-1.5 py-1.5 font-medium ${COL_WIDTH[c.type] ?? 'min-w-32'}`}>
-                <button onClick={() => clickSort(c.id)} className="flex items-center gap-1 hover:text-text">
-                  {c.name}
+              <th key={c.id} className="relative whitespace-nowrap px-1.5 py-1.5 font-medium">
+                <button onClick={() => clickSort(c.id)} className="flex max-w-full items-center gap-1 overflow-hidden hover:text-text">
+                  <span className="truncate">{c.name}</span>
                   {sort?.field === c.id && (sort.dir === 'asc' ? <SortAscending size={13} /> : <SortDescending size={13} />)}
                 </button>
+                <span
+                  role="separator"
+                  aria-label={`Breite von ${c.name} ändern`}
+                  title="Breite ziehen, Doppelklick setzt zurück"
+                  onPointerDown={(e) => resize(e, c)}
+                  onDoubleClick={() => reset(c)}
+                  className="absolute -right-1 top-1 bottom-1 z-10 w-2 cursor-col-resize rounded hover:bg-accent/40"
+                />
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className={`group border-b border-line ${isDone(r, fields) ? 'opacity-60' : ''}`}>
+            <tr key={r.id} {...drag.target(r)} className={`group border-b border-line ${isDone(r, fields) ? 'opacity-60' : ''} ${drag.mark(r)}`}>
+              <td className="px-0 py-0.5 align-middle">
+                {drag.enabled && (
+                  <span {...drag.handle(r)} title="Ziehen, um die Reihenfolge zu ändern" aria-label="Zeile verschieben" className="invisible flex cursor-grab justify-center text-faint group-hover:visible">
+                    <DotsSixVertical size={16} weight="bold" />
+                  </span>
+                )}
+              </td>
               {cols.map((c) => (
                 <td key={c.id} className="px-0 py-0.5 align-middle">
                   {c.type === 'title' ? (
@@ -210,7 +318,8 @@ function TitleCell({ row, onOpen, onTitle }) {
   )
 }
 
-function ListView({ db, rows, fields, onOpen, onToggle }) {
+function ListView({ db, rows, fields, onOpen, onToggle, drag: canDrag, onRow }) {
+  const drag = useRowDrag(rows, onRow, canDrag)
   const sf = statusField(fields)
   const groups = sf
     ? [...sf.options.map((o) => ({ key: o.id, label: o, items: rows.filter((r) => r.props?.[sf.id] === o.id) })),
@@ -225,7 +334,7 @@ function ListView({ db, rows, fields, onOpen, onToggle }) {
         </h2>
       )}
       <ul className="divide-y divide-line border-y border-line">
-        {g.items.map((r) => <RowItem key={r.id} row={r} db={db} onOpen={onOpen} onToggle={onToggle} />)}
+        {g.items.map((r) => <RowItem key={r.id} row={r} db={db} onOpen={onOpen} onToggle={onToggle} drag={{ ...drag.handle(r), ...drag.target(r) }} mark={drag.mark(r)} />)}
       </ul>
     </section>
   ))

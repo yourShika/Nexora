@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowCounterClockwise, Plus, Trash } from '@phosphor-icons/react'
+import { ArrowCounterClockwise, FolderSimplePlus, Plus, Trash } from '@phosphor-icons/react'
 import { NodeIcon } from './Sidebar.jsx'
 import { Cover, IconRow } from './PageHead.jsx'
 
@@ -41,6 +41,11 @@ export function Overview({ node, kids, onOpen, onAdd, onSave }) {
       >
         <Plus size={16} weight="bold" /> {label}
       </button>
+      {node.kind === 'section' && (
+        <button onClick={() => onAdd('section', node.id)} className="mt-2 flex items-center gap-2 rounded-md border border-line px-3 py-1.5 text-muted hover:bg-hover hover:text-text">
+          <FolderSimplePlus size={16} /> Neuer Abschnitt darin
+        </button>
+      )}
     </div>
     </div>
   )

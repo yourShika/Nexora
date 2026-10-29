@@ -20,17 +20,23 @@ export async function listNotebooks() {
   return kids(root, 'Notebook').map((n) => ({ id: n.getAttribute('ID'), name: n.getAttribute('nickname') || n.getAttribute('name') }))
 }
 
-// Abschnitte in Reihenfolge; Abschnittsgruppen stehen als "Gruppe / Abschnitt" im Namen, Papierkorb fällt weg
+// Abschnittsgruppen und Abschnitte in Reihenfolge; group = ID der umgebenden Gruppe (null = direkt im Notizbuch).
+// Papierkorb fällt weg
 export function parseNotebook(source) {
   const root = parseXml(source).documentElement
+  const groups = []
   const sections = []
-  const walk = (el, prefix) => {
+  const walk = (el, group) => {
     for (const c of el.children) {
-      if (c.localName === 'SectionGroup' && c.getAttribute('isRecycleBin') !== 'true') walk(c, `${prefix}${c.getAttribute('name')} / `)
+      if (c.localName === 'SectionGroup' && c.getAttribute('isRecycleBin') !== 'true') {
+        groups.push({ id: c.getAttribute('ID'), name: c.getAttribute('name'), group })
+        walk(c, c.getAttribute('ID'))
+      }
       if (c.localName !== 'Section' || c.getAttribute('isInRecycleBin') === 'true') continue
       sections.push({
         id: c.getAttribute('ID'),
-        name: prefix + c.getAttribute('name'),
+        name: c.getAttribute('name'),
+        group,
         locked: c.getAttribute('locked') === 'true' || c.getAttribute('encrypted') === 'true',
         pages: kids(c, 'Page')
           .filter((p) => p.getAttribute('isInRecycleBin') !== 'true')
@@ -38,8 +44,8 @@ export function parseNotebook(source) {
       })
     }
   }
-  walk(root, '')
-  return { id: root.getAttribute('ID'), name: root.getAttribute('nickname') || root.getAttribute('name'), sections }
+  walk(root, null)
+  return { id: root.getAttribute('ID'), name: root.getAttribute('nickname') || root.getAttribute('name'), groups, sections }
 }
 
 const note = (text) => `<p><em>(${esc(text)})</em></p>`
@@ -168,10 +174,21 @@ export async function syncNotebook(nb, all, api) {
   const sources = await fetchPages('pages', stale, 10, (i) => api.progress(`OneNote: Seite ${i} von ${stale.length} wird übernommen …`))
 
   const day = new Date().toLocaleDateString('de-DE')
+  // Abschnittsgruppen werden Abschnitte, die Abschnitte enthalten; früher übernommene "Gruppe / Abschnitt" rücken so ein
+  const holder = new Map()
+  const parentOf = (group) => (group ? holder.get(group) : nb.id)
+  for (const g of book.groups) {
+    let node = known.get(g.id)
+    const parent = parentOf(g.group)
+    if (!node) node = await api.create('section', parent, g.name, { config: { onenote: { id: g.id } } })
+    else if (node.title !== g.name || node.parent_id !== parent) await api.update(node.id, { title: g.name, parent_id: parent })
+    holder.set(g.id, node.id)
+  }
   for (const s of book.sections) {
     let sec = known.get(s.id)
-    if (!sec) sec = await api.create('section', nb.id, s.name, { config: { onenote: { id: s.id } } })
-    else if (sec.title !== s.name || sec.parent_id !== nb.id) await api.update(sec.id, { title: s.name, parent_id: nb.id })
+    const home = parentOf(s.group)
+    if (!sec) sec = await api.create('section', home, s.name, { config: { onenote: { id: s.id } } })
+    else if (sec.title !== s.name || sec.parent_id !== home) await api.update(sec.id, { title: s.name, parent_id: home })
     if (s.locked) {
       report.gesperrt++
       continue
