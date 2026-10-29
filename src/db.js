@@ -116,14 +116,18 @@ export async function search(match, limit = 40) {
     `SELECT id, snippet(search, 2, char(1), char(2), '…', 48) AS snip FROM search WHERE search MATCH $1 ORDER BY rank LIMIT $2`,
     [match, limit],
   )
-  // Text in Bildern zählt für jede Seite, in der das Bild steckt
-  const images = await c.select(
-    `SELECT n.id, 'Im Bild: ' || snippet(ocr, 1, char(1), char(2), '…', 32) AS snip FROM ocr
-     JOIN nodes n ON n.deleted_at IS NULL AND instr(n.body, ocr.file) > 0 WHERE ocr MATCH $1 ORDER BY rank LIMIT $2`,
-    [match, limit],
+  // Text in Bildern und Anhängen zählt für jede Seite, in der sie stecken. Anhänge stehen im Index als
+  // "datei:<uuid>/<Name>|<Seite>", im Seitentext als [[datei:<uuid>/<Name>|<Bytes>]].
+  // Mehr Zeilen holen, weil ein langes PDF sonst mit vielen Seiten alle Plätze belegt
+  const files = await c.select(
+    `SELECT n.id, ocr.file, snippet(ocr, 1, char(1), char(2), '…', 32) AS snip FROM ocr
+     JOIN nodes n ON n.deleted_at IS NULL AND instr(n.body, CASE WHEN substr(ocr.file, 1, 6) = 'datei:'
+       THEN '[[' || substr(ocr.file, 1, instr(ocr.file, '|')) ELSE ocr.file END) > 0
+     WHERE ocr MATCH $1 ORDER BY rank LIMIT $2`,
+    [match, limit * 10],
   )
   const seen = new Set(text.map((r) => r.id))
-  return [...text, ...images.filter((r) => !seen.has(r.id) && seen.add(r.id))]
+  return [...text, ...files.filter((r) => !seen.has(r.id) && seen.add(r.id))]
 }
 
 export async function ocrFiles() {
@@ -144,6 +148,27 @@ export async function setOcr(file, text) {
 export async function dropOcr(files) {
   const c = await db()
   for (const file of files) await c.execute('DELETE FROM ocr WHERE file = $1', [file])
+}
+
+// Text eines Anhangs, eine Zeile je Seite; ohne Seiten ein leerer Platzhalter "|0", damit er nicht wieder dran ist
+const docKey = (rel) => `datei:${rel}|`
+export async function setDocText(rel, pages) {
+  const c = await db()
+  await c.execute('DELETE FROM ocr WHERE substr(file, 1, length($1)) = $1', [docKey(rel)])
+  if (!pages.length) return c.execute('INSERT INTO ocr (file, text) VALUES ($1, $2)', [`${docKey(rel)}0`, ''])
+  for (const [i, text] of pages.entries()) await c.execute('INSERT INTO ocr (file, text) VALUES ($1, $2)', [`${docKey(rel)}${i + 1}`, text])
+}
+
+export async function docText(rel) {
+  const rows = await (await db()).select('SELECT file, text FROM ocr WHERE substr(file, 1, length($1)) = $1', [docKey(rel)])
+  if (!rows.length) return null
+  const page = (r) => Number(r.file.slice(r.file.lastIndexOf('|') + 1))
+  return rows.sort((a, b) => page(a) - page(b)).map((r) => r.text).join('\n\n')
+}
+
+export async function dropDocs(rels) {
+  const c = await db()
+  for (const rel of rels) await c.execute('DELETE FROM ocr WHERE substr(file, 1, length($1)) = $1', [docKey(rel)])
 }
 
 // Vollständige, in sich stimmige Kopie der Datenbank in eine neue Datei

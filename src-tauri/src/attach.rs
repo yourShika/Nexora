@@ -12,7 +12,7 @@ const MAX_TEXT: u64 = 20 * 1024 * 1024;
 // Öffnen per Klick würde diese Dateien ausführen; dafür gibt es nur "Im Ordner zeigen"
 const RUNNABLE: [&str; 14] = ["exe", "msi", "bat", "cmd", "com", "ps1", "vbs", "js", "jse", "wsf", "scr", "lnk", "reg", "hta"];
 
-fn attachments(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn attachments(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app.path().app_config_dir().map_err(|e| e.to_string())?.join("anhaenge"))
 }
 
@@ -32,7 +32,7 @@ fn valid_uuid(s: &str) -> bool {
 }
 
 // "uuid/Dateiname" -> voller Pfad im Anhang-Ordner, sonst Fehler
-fn resolve(app: &AppHandle, rel: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve(app: &AppHandle, rel: &str) -> Result<PathBuf, String> {
     let (id, name) = rel.split_once('/').ok_or("Ungültiger Anhang")?;
     if !valid_uuid(id) || name != clean_name(name) {
         return Err("Ungültiger Anhang".into());

@@ -30,7 +30,7 @@ import Print, { PrintAsk } from './Print.jsx'
 import OneNoteConnect from './OneNote.jsx'
 import { VaultPicker, VaultUnlock, setVaultPicker, vault } from './Vault.jsx'
 import { htmlToMarkdown } from './Editor.jsx'
-import { indexImages } from './ocr.js'
+import { indexText } from './ocr.js'
 import { loadBackupSettings, maybeBackup, runBackup } from './backup.js'
 import { findUpdate, installUpdate } from './updates.js'
 import { applyTheme } from './theme.js'
@@ -383,8 +383,8 @@ export default function App() {
         const up = []
         for (let n = byId.get(start?.parent_id); n; n = byId.get(n.parent_id)) up.push(n.id)
         setExpanded((s) => new Set([...s, ...up]))
-        // Text in Bildern erst, wenn die App steht; läuft still im Hintergrund
-        setTimeout(indexImages, 5000)
+        // Text in Bildern und Anhängen erst, wenn die App steht; läuft still im Hintergrund
+        setTimeout(indexText, 5000)
         return restoreWindows((id) => all.some((n) => n.id === id && !n.deleted_at)).then((ids) => setWindows(new Set(ids)))
       })
       .catch((e) => setError(`Datenbank nicht erreichbar: ${e}`))

@@ -6,6 +6,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 mod admin;
 mod attach;
 mod clip;
+mod doctext;
 mod files;
 mod ocr;
 mod onenote;
@@ -131,6 +132,8 @@ pub fn run() {
             files::list_images,
             files::delete_images,
             ocr::ocr_image,
+            doctext::list_text_attachments,
+            doctext::attachment_text,
             onenote::onenote,
             outlook::outlook_events,
             outlook::outlook_push,

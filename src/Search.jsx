@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, MagnifyingGlass } from '@phosphor-icons/react'
 import * as db from './db.js'
+import { hitLabel } from './ocr.js'
 import { NodeIcon } from './Sidebar.jsx'
 import { fieldsOf, option, statusField } from './fields.js'
 
@@ -68,7 +69,7 @@ export default function Search({ tree, pathOf, commands, onOpen, onClose }) {
     const seen = new Set(byTitle.map((n) => n.id))
     const byText = fts
       .filter((r) => !seen.has(r.id) && tree.alive.has(r.id) && passes(tree.alive.get(r.id)))
-      .map((r) => ({ node: tree.alive.get(r.id), snip: r.snip }))
+      .map((r) => ({ node: tree.alive.get(r.id), snip: r.snip, label: r.file && hitLabel(r.file) }))
     return [...cmds.map((c) => ({ cmd: c })), ...byTitle.slice(0, 30).map((n) => ({ node: n })), ...byText].slice(0, 50)
   }, [f, fts, tree, pathOf, commands])
 
@@ -127,7 +128,7 @@ export default function Search({ tree, pathOf, commands, onOpen, onClose }) {
                     <span className="block truncate text-xs text-faint">
                       {r.node.kind === 'row' && !r.node.parent_id ? 'Eingang' : pathOf(r.node.id).slice(0, -1).map((p) => p.title || 'Ohne Titel').join(' / ')}
                     </span>
-                    {r.snip?.includes('\u0001') && <Snippet text={r.snip} />}
+                    {r.snip?.includes('\u0001') && <Snippet text={r.snip} label={r.label} />}
                   </span>
                 </>
               )}
@@ -145,11 +146,12 @@ export default function Search({ tree, pathOf, commands, onOpen, onClose }) {
   )
 }
 
-// Markdown-Zeichen raus, Treffer (zwischen \u0001 und \u0002) hervorheben
-function Snippet({ text }) {
-  const clean = text.replace(/[#*`>_|]|\[[ xX]\]/g, '').replace(/\s+/g, ' ')
+// Markdown-Zeichen raus (nur bei Seitentext; Bilder und Anhänge bleiben, wie sie sind), Treffer (zwischen \u0001 und \u0002) hervorheben
+function Snippet({ text, label }) {
+  const clean = (label ? text : text.replace(/[#*`>_|]|\[[ xX]\]/g, '')).replace(/\s+/g, ' ')
   return (
     <span className="mt-0.5 block truncate text-xs text-muted">
+      {label && `${label}: `}
       {clean.split(/(\u0001[^\u0002]*\u0002)/).map((part, i) =>
         part.startsWith('\u0001') ? <mark key={i} className="rounded-sm bg-accent-soft text-text">{part.slice(1, -1)}</mark> : part,
       )}

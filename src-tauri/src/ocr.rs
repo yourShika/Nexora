@@ -3,7 +3,7 @@
 use std::path::Path;
 use tauri::{AppHandle, Manager};
 use windows::core::HSTRING;
-use windows::Graphics::Imaging::BitmapDecoder;
+use windows::Graphics::Imaging::{BitmapDecoder, SoftwareBitmap};
 use windows::Media::Ocr::OcrEngine;
 use windows::Storage::{FileAccessMode, StorageFile};
 use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
@@ -16,9 +16,13 @@ fn recognize(path: &Path) -> windows::core::Result<String> {
     let file = StorageFile::GetFileFromPathAsync(&HSTRING::from(path.as_os_str()))?.join()?;
     let stream = file.OpenAsync(FileAccessMode::Read)?.join()?;
     let bitmap = BitmapDecoder::CreateAsync(&stream)?.join()?.GetSoftwareBitmapAsync()?.join()?;
-    let engine = OcrEngine::TryCreateFromUserProfileLanguages()?;
+    lines(&OcrEngine::TryCreateFromUserProfileLanguages()?, &bitmap)
+}
+
+// Erkannte Zeilen eines Bilds, durch \n getrennt (auch für PDF-Seiten aus doctext.rs)
+pub(crate) fn lines(engine: &OcrEngine, bitmap: &SoftwareBitmap) -> windows::core::Result<String> {
     let mut lines = Vec::new();
-    for line in engine.RecognizeAsync(&bitmap)?.join()?.Lines()? {
+    for line in engine.RecognizeAsync(bitmap)?.join()?.Lines()? {
         lines.push(line.Text()?.to_string_lossy());
     }
     Ok(lines.join("\n"))
