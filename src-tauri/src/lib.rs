@@ -104,6 +104,12 @@ pub fn run() {
             sql: include_str!("../migrations/010_bereiche.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 11,
+            description: "suchtext",
+            sql: include_str!("../migrations/011_suchtext.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

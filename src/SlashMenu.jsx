@@ -5,7 +5,7 @@ import Suggestion from '@tiptap/suggestion'
 import { pickAttachments } from './Attachment.jsx'
 import { pickVault } from './Vault.jsx'
 import {
-  CheckSquare, Code, FlowArrow, Key, LinkSimple, ListBullets, ListChecks, ListNumbers, Minus, Paperclip, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
+  CheckSquare, Code, FlowArrow, Key, Scribble, LinkSimple, ListBullets, ListChecks, ListNumbers, Minus, Paperclip, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
 } from '@phosphor-icons/react'
 
 // `keys`: weitere Suchwörter, damit auch "todo", "h1" oder "pre" trifft
@@ -20,6 +20,7 @@ const ITEMS = [
   { title: 'Zitat', keys: 'quote', icon: Quotes, run: (c) => c.toggleBlockquote() },
   { title: 'Code', keys: 'codeblock pre skript script', icon: Code, run: (c) => c.toggleCodeBlock({ language: 'powershell' }) },
   { title: 'Diagramm', keys: 'mermaid flussdiagramm ablauf flowchart sequenz', icon: FlowArrow, run: (c) => c.insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: 'flowchart LR\n  A[Start] --> B[Ende]' }] }) },
+  { title: 'Zeichnung', keys: 'zeichnen skizze stift ink drawing malen', icon: Scribble, run: (c) => c.insertContent({ type: 'drawing', attrs: { h: 240, ink: [] } }) },
   { title: 'Tabelle', keys: 'table', icon: Table, run: (c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
   { title: 'Trennlinie', keys: 'hr linie divider', icon: Minus, run: (c) => c.setHorizontalRule() },
   { title: 'Seite verlinken', keys: 'link verweis [[', icon: LinkSimple, run: (c) => c.insertContent('[[') },

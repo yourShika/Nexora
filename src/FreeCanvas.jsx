@@ -1,52 +1,28 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUpRight, Circle, CursorText, Eraser, Highlighter, LineSegment, MagnifyingGlassMinus, MagnifyingGlassPlus, PenNib, Rectangle, Trash } from '@phosphor-icons/react'
+import { MagnifyingGlassMinus, MagnifyingGlassPlus, Trash } from '@phosphor-icons/react'
 import Editor from './Editor.jsx'
 import { parseBoxes, parseInk, serializeBoxes } from './free.js'
-import { hits, inkExtent, inkPath } from './ink.js'
+import { inkExtent } from './ink.js'
+import { InkOverlay, InkToolbar, Stroke, useInk } from './Ink.jsx'
 
 const TOP = 20 // Platz für die Ziehleiste über dem obersten Kasten
 const NEW_WIDTH = 440 // Codeblock-Leiste passt ohne Umbruch
-const TOOLS = [
-  { id: 'write', label: 'Schreiben (Esc)', icon: CursorText },
-  { id: 'pen', label: 'Stift', icon: PenNib },
-  { id: 'marker', label: 'Textmarker', icon: Highlighter },
-  { id: 'line', label: 'Linie', icon: LineSegment },
-  { id: 'arrow', label: 'Pfeil', icon: ArrowUpRight },
-  { id: 'rect', label: 'Rechteck', icon: Rectangle },
-  { id: 'ellipse', label: 'Ellipse', icon: Circle },
-  { id: 'eraser', label: 'Radierer (ganze Striche)', icon: Eraser },
-]
-const FREEHAND = new Set(['pen', 'marker'])
-const COLORS = [['text', 'Textfarbe'], ['#e5484d', 'Rot'], ['#f5c518', 'Gelb'], ['#30a46c', 'Grün'], ['#3e8bd6', 'Blau'], ['#8e4ec6', 'Lila']]
-const SIZES = { pen: [2, 4, 8], marker: [12, 20, 28] } // Formen nehmen die Stiftstärken
-const SIZE_NAMES = ['Dünn', 'Mittel', 'Dick']
 const clampZoom = (z) => Math.min(2, Math.max(0.5, z))
-const paint = (c) => (c === 'text' ? 'var(--text)' : c)
-
-function Stroke({ s }) {
-  return <path d={inkPath(s)} fill="none" stroke={paint(s.c)} strokeWidth={s.w} strokeLinecap="round" strokeLinejoin="round" opacity={s.t === 'marker' ? 0.4 : 1} />
-}
 
 // Freie Seite wie OneNote: Klick auf leere Fläche legt einen Kasten an, jeder Kasten ist ein vollwertiger Editor.
 // Alle Kästen liegen in derselben Grid-Zelle, so wächst die Fläche von selbst nach rechts und unten mit.
 // Darüber liegt die Zeichenebene; im Modus "Schreiben" klickt man durch sie hindurch.
 export default function FreeCanvas({ body, editable, onChange }) {
   const [boxes, setBoxes] = useState(() => parseBoxes(body).map((b) => ({ ...b, id: crypto.randomUUID() })))
-  const [ink, setInk] = useState(() => parseInk(body))
-  const [draft, setDraft] = useState(null)
+  const [ink, setInkState] = useState(() => parseInk(body))
   const [focus, setFocus] = useState(null)
-  const [tool, setTool] = useState('write')
-  const [colors, setColors] = useState({ pen: 'text', marker: '#f5c518' })
-  const [sizes, setSizes] = useState({ pen: 1, marker: 1 })
   const [zoom, setZoom] = useState(1)
   const latest = useRef(boxes)
   const inkRef = useRef(ink)
-  const undo = useRef([])
   const zoomRef = useRef(1)
   const pendingScroll = useRef(null)
   const canvas = useRef(null)
-  const drawing = editable && tool !== 'write'
-  const kind = tool === 'marker' ? 'marker' : 'pen'
+  const root = useRef(null)
 
   const save = () => onChange(serializeBoxes(latest.current, inkRef.current))
   function commit(next, store = true) {
@@ -56,18 +32,34 @@ export default function FreeCanvas({ body, editable, onChange }) {
   }
   const patch = (id, fields, store) => commit(latest.current.map((b) => (b.id === id ? { ...b, ...fields } : b)), store)
   const remove = (id) => commit(latest.current.filter((b) => b.id !== id))
-  function setStrokes(next, before = inkRef.current) {
-    undo.current.push(before)
-    inkRef.current = next
-    setInk(next)
-    save()
-  }
 
   // Punkt auf der Fläche in ungezoomten Pixeln
   function local(e) {
     const r = canvas.current.getBoundingClientRect()
     return [Math.round((e.clientX - r.left) / zoomRef.current), Math.round((e.clientY - r.top) / zoomRef.current)]
   }
+
+  const k = useInk({
+    ink,
+    setInk: (next) => {
+      inkRef.current = next
+      setInkState(next)
+      save()
+    },
+    local,
+    scale: () => zoomRef.current,
+    editable,
+    ownUndo: true,
+    container: root,
+    // Lasso nimmt Kästen mit; ihre Höhe kennt nur das DOM
+    boxes: {
+      get: () => latest.current,
+      set: commit,
+      rects: () =>
+        latest.current.map((b) => ({ id: b.id, x: b.x, y: b.y, w: b.w, h: canvas.current?.querySelector(`[data-box="${b.id}"]`)?.offsetHeight ?? 40 })),
+    },
+  })
+  const drawing = k.drawing
 
   function create(e) {
     if (!editable || e.target !== e.currentTarget) return
@@ -77,93 +69,26 @@ export default function FreeCanvas({ body, editable, onChange }) {
     commit([...latest.current, box], false)
   }
 
-  // Gemeinsames Ziehen: Listener am Fenster, damit schnelle Bewegungen nicht abreißen
-  function follow(onMove, onUp) {
-    const up = () => {
-      removeEventListener('pointermove', onMove)
-      removeEventListener('pointerup', up)
-      onUp()
-    }
-    addEventListener('pointermove', onMove)
-    addEventListener('pointerup', up)
-  }
-
   // Kasten verschieben oder Breite ändern
   function drag(e, box, mode) {
     if (!editable || e.button !== 0) return
     e.preventDefault()
     const start = { x: e.clientX, y: e.clientY }
     let moved = false
-    follow(
-      (ev) => {
-        const dx = (ev.clientX - start.x) / zoomRef.current
-        const dy = (ev.clientY - start.y) / zoomRef.current
-        moved = true
-        patch(box.id, mode === 'move' ? { x: Math.max(0, box.x + dx), y: Math.max(TOP, box.y + dy) } : { w: Math.max(160, box.w + dx) }, false)
-      },
-      () => moved && save(),
-    )
-  }
-
-  function startInk(e) {
-    if (!drawing || e.button !== 0) return
-    e.preventDefault()
-    const start = local(e)
-    if (tool === 'eraser') {
-      const before = inkRef.current
-      const r = 6 / zoomRef.current
-      let last = start
-      // Zwischenpunkte, damit schnelle Bewegungen keine Striche überspringen
-      const erase = (pt) => {
-        const steps = Math.max(1, Math.ceil(Math.hypot(pt[0] - last[0], pt[1] - last[1]) / r))
-        let rest = inkRef.current
-        for (let i = 1; i <= steps; i++) {
-          const x = last[0] + ((pt[0] - last[0]) * i) / steps
-          const y = last[1] + ((pt[1] - last[1]) * i) / steps
-          rest = rest.filter((s) => !hits(s, x, y, r))
-        }
-        last = pt
-        if (rest.length !== inkRef.current.length) (inkRef.current = rest), setInk(rest)
-      }
-      erase(start)
-      follow((ev) => erase(local(ev)), () => inkRef.current !== before && setStrokes(inkRef.current, before))
-      return
+    const onMove = (ev) => {
+      const dx = (ev.clientX - start.x) / zoomRef.current
+      const dy = (ev.clientY - start.y) / zoomRef.current
+      moved = true
+      patch(box.id, mode === 'move' ? { x: Math.max(0, box.x + dx), y: Math.max(TOP, box.y + dy) } : { w: Math.max(160, box.w + dx) }, false)
     }
-    const stroke = { t: tool, c: colors[kind], w: SIZES[kind][sizes[kind]], p: [start] }
-    setDraft(stroke)
-    follow(
-      (ev) => {
-        const pt = local(ev)
-        if (!FREEHAND.has(tool)) stroke.p = [start, pt]
-        else if (Math.hypot(pt[0] - stroke.p.at(-1)[0], pt[1] - stroke.p.at(-1)[1]) >= 2 / zoomRef.current) stroke.p = [...stroke.p, pt]
-        setDraft({ ...stroke })
-      },
-      () => {
-        setDraft(null)
-        // Form ohne Ausdehnung (nur geklickt) nicht speichern
-        if (FREEHAND.has(tool) || stroke.p.length > 1) setStrokes([...inkRef.current, stroke])
-      },
-    )
-  }
-
-  // Strg+Z nimmt den letzten Strich zurück (solange kein Kasten den Fokus hat), Esc zurück zum Schreiben
-  useEffect(() => {
-    if (!drawing) return
-    const key = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault() // Esc gilt dem Werkzeug, nicht dem Fokus-Modus
-        setTool('write')
-      }
-      if (e.ctrlKey && e.key.toLowerCase() === 'z' && !document.activeElement?.closest('.tiptap') && undo.current.length) {
-        e.preventDefault()
-        inkRef.current = undo.current.pop()
-        setInk(inkRef.current)
-        save()
-      }
+    const up = () => {
+      removeEventListener('pointermove', onMove)
+      removeEventListener('pointerup', up)
+      if (moved) save()
     }
-    addEventListener('keydown', key)
-    return () => removeEventListener('keydown', key)
-  })
+    addEventListener('pointermove', onMove)
+    addEventListener('pointerup', up)
+  }
 
   // Zoomen um einen Punkt (Mauszeiger oder Mitte), der dabei stehen bleibt
   function zoomTo(next, cx, cy) {
@@ -207,46 +132,24 @@ export default function FreeCanvas({ body, editable, onChange }) {
     })
   }
 
-  const strokes = useMemo(() => ink.map((s, i) => <Stroke key={i} s={s} />), [ink])
-  const [inkW, inkH] = useMemo(() => inkExtent(ink), [ink])
-  const button = (active) => `grid size-7 place-items-center rounded-md ${active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-hover hover:text-text'}`
+  const strokes = useMemo(() => k.shown.map((s, i) => <Stroke key={i} s={s} />), [k.shown])
+  const [inkW, inkH] = useMemo(() => inkExtent(k.shown), [k.shown])
+  const zoomButton = 'grid size-7 place-items-center rounded-md text-muted hover:bg-hover hover:text-text'
 
   return (
-    <>
-      <div role="toolbar" aria-label="Zeichnen" className="sticky left-12 top-14 z-20 mb-3 flex w-fit flex-wrap items-center gap-0.5 rounded-lg border border-line bg-raised/95 p-1 backdrop-blur">
-        {editable &&
-          TOOLS.map((t) => (
-            <button key={t.id} aria-label={t.label} title={t.label} aria-pressed={tool === t.id} onClick={() => (t.id !== 'write' && document.activeElement?.blur(), setTool(t.id))} className={button(tool === t.id)}>
-              <t.icon size={17} weight={tool === t.id ? 'fill' : 'regular'} />
-            </button>
-          ))}
+    <div ref={root}>
+      <InkToolbar k={k} tools={editable ? undefined : []} className="sticky left-12 top-14 z-20 mb-3">
         {editable && <span className="mx-1 h-5 w-px bg-line" />}
-        <button aria-label="Verkleinern" title="Verkleinern" onClick={() => zoomCenter(zoom / 1.2)} className={button(false)}>
+        <button aria-label="Verkleinern" title="Verkleinern" onClick={() => zoomCenter(zoom / 1.2)} className={zoomButton}>
           <MagnifyingGlassMinus size={17} />
         </button>
         <button aria-label="Zoom auf 100 %" title="Zoom zurücksetzen (Strg+Mausrad zoomt)" onClick={() => zoomCenter(1)} className="h-7 w-12 rounded-md text-xs tabular-nums text-muted hover:bg-hover hover:text-text">
           {Math.round(zoom * 100)} %
         </button>
-        <button aria-label="Vergrößern" title="Vergrößern" onClick={() => zoomCenter(zoom * 1.2)} className={button(false)}>
+        <button aria-label="Vergrößern" title="Vergrößern" onClick={() => zoomCenter(zoom * 1.2)} className={zoomButton}>
           <MagnifyingGlassPlus size={17} />
         </button>
-        {drawing && tool !== 'eraser' && (
-          <>
-            <span className="mx-1 h-5 w-px bg-line" />
-            {COLORS.map(([c, name]) => (
-              <button key={c} aria-label={name} title={name} aria-pressed={colors[kind] === c} onClick={() => setColors({ ...colors, [kind]: c })} className={button(false)}>
-                <span style={{ background: paint(c) }} className={`size-4 rounded-full ${colors[kind] === c ? 'ring-2 ring-accent ring-offset-2 ring-offset-raised' : ''}`} />
-              </button>
-            ))}
-            <span className="mx-1 h-5 w-px bg-line" />
-            {SIZE_NAMES.map((name, i) => (
-              <button key={name} aria-label={name} title={name} aria-pressed={sizes[kind] === i} onClick={() => setSizes({ ...sizes, [kind]: i })} className={button(sizes[kind] === i)}>
-                <span className="rounded-full bg-current" style={{ width: 4 + i * 4, height: 4 + i * 4 }} />
-              </button>
-            ))}
-          </>
-        )}
-      </div>
+      </InkToolbar>
 
       <div
         ref={canvas}
@@ -264,6 +167,7 @@ export default function FreeCanvas({ body, editable, onChange }) {
         {boxes.map((b) => (
           <div
             key={b.id}
+            data-box={b.id}
             onBlur={(e) => leave(e, b.id)}
             style={{ gridArea: '1 / 1', marginLeft: b.x, marginTop: b.y, width: b.w }}
             className={`group/box anim-pop relative self-start justify-self-start rounded-md border border-transparent ${editable && !drawing ? 'hover:border-line focus-within:border-line' : ''}`}
@@ -291,13 +195,13 @@ export default function FreeCanvas({ body, editable, onChange }) {
         ))}
         <svg
           aria-label={ink.length ? `Zeichnung mit ${ink.length} Strichen` : undefined}
-          onPointerDown={startInk}
-          className={`absolute inset-0 z-10 size-full overflow-visible ${drawing ? 'cursor-crosshair touch-none' : 'pointer-events-none'}`}
+          onPointerDown={k.down}
+          className={`absolute inset-0 z-10 size-full overflow-visible ${drawing ? (k.tool === 'lasso' ? 'touch-none' : 'cursor-crosshair touch-none') : 'pointer-events-none'}`}
         >
           {strokes}
-          {draft && <Stroke s={draft} />}
+          <InkOverlay k={k} />
         </svg>
       </div>
-    </>
+    </div>
   )
 }

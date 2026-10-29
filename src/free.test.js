@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { CANVAS, hasInk, isFree, parseBoxes, parseInk, serializeBoxes, toFlow, toFree } from './free.js'
+import { CANVAS, drawingLine, hasInk, isFree, parseBoxes, parseDrawing, parseInk, searchText, serializeBoxes, toFlow, toFree } from './free.js'
 
 test('Freie Seite: hin und zurück', () => {
   const boxes = [
@@ -42,4 +42,22 @@ test('Freie Seite: Striche hinter den Kästen', () => {
   assert.deepEqual(parseBoxes(body), [{ x: 0, y: 20, w: 300, md: 'Text' }])
   assert.equal(toFlow(body), 'Text')
   assert.equal(hasInk(serializeBoxes([], [])), false)
+})
+
+test('Druckwerte und Zeichnungs-Block', () => {
+  const pen = { t: 'pen', c: 'text', w: 4, p: [[1, 2, 40], [3, 4, 90]] }
+  const shape = { t: 'rect', c: '#e5484d', w: 2, p: [[0, 0], [10, 10]] }
+  const body = serializeBoxes([{ x: 0, y: 20, w: 300, md: 'Text' }], [pen, shape])
+  assert.deepEqual(parseInk(body), [pen, shape])
+  const line = drawingLine({ h: 240, ink: [pen, shape] })
+  assert.equal(line, '<!-- nexora:zeichnung h=240 | t=pen c=text w=4 p=1,2,40 3,4,90 | t=rect c=#e5484d w=2 p=0,0 10,10 -->')
+  assert.deepEqual(parseDrawing(line), { h: 240, ink: [pen, shape] })
+  assert.deepEqual(parseDrawing('<!-- nexora:zeichnung h=180 -->'), { h: 180, ink: [] })
+  assert.equal(parseDrawing('<!-- ink t=pen -->'), null)
+})
+
+test('Suchtext ohne Strich-Zeilen', () => {
+  assert.equal(searchText('# Titel\n\nText'), null)
+  assert.equal(searchText(`oben\n${drawingLine({ h: 100, ink: [] })}\nunten`), 'oben\nunten')
+  assert.equal(searchText(`${CANVAS}\n<!-- box x=0 y=0 w=100 -->\nA\n<!-- ink t=pen c=text w=2 p=1,1 -->`), `${CANVAS}\n<!-- box x=0 y=0 w=100 -->\nA`)
 })

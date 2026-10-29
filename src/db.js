@@ -2,6 +2,7 @@ import Database from '@tauri-apps/plugin-sql'
 import { emit } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { taskCount, today } from './fields.js'
+import { searchText } from './free.js'
 
 let conn
 const db = async () => (conn ??= await Database.load('sqlite:nexora.db'))
@@ -10,7 +11,7 @@ const now = () => new Date().toISOString()
 const changed = () => emit('nodes-changed', { from: getCurrentWindow().label }).catch(() => {})
 
 // Nur diese Spalten dürfen über update() geschrieben werden
-const FIELDS = new Set(['title', 'icon', 'color', 'cover', 'locked', 'template', 'body', 'props', 'config', 'favorite', 'parent_id', 'sort', 'deleted_at', 'area'])
+const FIELDS = new Set(['title', 'icon', 'color', 'cover', 'locked', 'template', 'body', 'props', 'config', 'favorite', 'parent_id', 'sort', 'deleted_at', 'area', 'plain'])
 const JSON_FIELDS = new Set(['props', 'config'])
 const encode = (k, v) => (JSON_FIELDS.has(k) && v != null ? JSON.stringify(v) : v)
 
@@ -57,6 +58,8 @@ export async function create(kind, parentId, title = '', extra = {}) {
 }
 
 export async function update(id, fields) {
+  // Suchfassung ohne Striche gleich mitschreiben (Migration 011)
+  if ('body' in fields) fields = { ...fields, plain: searchText(fields.body) }
   const keys = Object.keys(fields).filter((k) => FIELDS.has(k))
   if (!keys.length) return
   const sets = keys.map((k, i) => `${k} = $${i + 1}`).join(', ')
@@ -64,7 +67,7 @@ export async function update(id, fields) {
     `UPDATE nodes SET ${sets}, updated_at = $${keys.length + 1} WHERE id = $${keys.length + 2}`,
     [...keys.map((k) => encode(k, fields[k])), now(), id],
   )
-  if (keys.some((k) => k !== 'body')) changed()
+  if (keys.some((k) => k !== 'body' && k !== 'plain')) changed()
 }
 
 // Öffnen zählt nicht als Änderung, darum ohne updated_at

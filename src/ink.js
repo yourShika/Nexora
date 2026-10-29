@@ -58,3 +58,57 @@ export function hits(stroke, x, y, r) {
 // Äußerste Ecke aller Striche, damit die Fläche mitwächst
 export const inkExtent = (ink) =>
   ink.reduce(([mx, my], s) => s.p.reduce(([ax, ay], [x, y]) => [Math.max(ax, x + s.w), Math.max(ay, y + s.w)], [mx, my]), [0, 0])
+
+// Druckstärke: Punkte mit drittem Wert (1–100, nur Stift-Eingabe) bekommen eine wechselnde Breite
+export const hasPressure = (s) => s.t === 'pen' && s.p.length > 1 && s.p[0].length > 2
+const radius = (w, pressure) => (w / 2) * (0.25 + (1.5 * pressure) / 100)
+
+// Umriss als gefüllte Fläche: links an den Punkten entlang, runde Kappe, rechts zurück
+export function pressurePath({ p, w }) {
+  const n = p.length
+  const left = []
+  const right = []
+  for (let i = 0; i < n; i++) {
+    const [ax, ay] = p[Math.max(0, i - 1)]
+    const [bx, by] = p[Math.min(n - 1, i + 1)]
+    const len = Math.hypot(bx - ax, by - ay) || 1
+    const r = radius(w, p[i][2])
+    const nx = (-(by - ay) / len) * r
+    const ny = ((bx - ax) / len) * r
+    left.push(`${(p[i][0] + nx).toFixed(1)} ${(p[i][1] + ny).toFixed(1)}`)
+    right.unshift(`${(p[i][0] - nx).toFixed(1)} ${(p[i][1] - ny).toFixed(1)}`)
+  }
+  const cap = (i) => radius(w, p[i][2]).toFixed(1)
+  return `M${left.join('L')}A${cap(n - 1)} ${cap(n - 1)} 0 0 1 ${right[0]}L${right.slice(1).join('L')}A${cap(0)} ${cap(0)} 0 0 1 ${left[0]}Z`
+}
+
+// Lasso: Punkt im Vieleck (Strahlverfahren)
+export function inside([x, y], poly) {
+  let hit = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i]
+    const [xj, yj] = poly[j]
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) hit = !hit
+  }
+  return hit
+}
+
+// Gewählt ist ein Strich, wenn mindestens die Hälfte seiner Punkte im Lasso liegt
+export function lassoPick(ink, poly) {
+  return ink.flatMap((s, i) => {
+    const o = outline(s)
+    return o.filter((pt) => inside(pt, poly)).length * 2 >= o.length ? [i] : []
+  })
+}
+
+// Rahmen um Striche (mit halber Breite) und Rechtecke {x, y, w, h}: [links, oben, rechts, unten]
+export function bounds(strokes, rects = []) {
+  let b = [Infinity, Infinity, -Infinity, -Infinity]
+  for (const s of strokes) for (const [x, y] of outline(s)) b = [Math.min(b[0], x - s.w / 2), Math.min(b[1], y - s.w / 2), Math.max(b[2], x + s.w / 2), Math.max(b[3], y + s.w / 2)]
+  for (const r of rects) b = [Math.min(b[0], r.x), Math.min(b[1], r.y), Math.max(b[2], r.x + r.w), Math.max(b[3], r.y + r.h)]
+  return b[0] === Infinity ? null : b
+}
+
+// Verschieben und Größe ändern (um den Punkt ox, oy); Druckwerte bleiben
+export const moveStroke = (s, dx, dy) => ({ ...s, p: s.p.map(([x, y, ...r]) => [Math.round(x + dx), Math.round(y + dy), ...r]) })
+export const scaleStroke = (s, ox, oy, k) => ({ ...s, p: s.p.map(([x, y, ...r]) => [Math.round(ox + (x - ox) * k), Math.round(oy + (y - oy) * k), ...r]) })
