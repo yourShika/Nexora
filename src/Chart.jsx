@@ -55,9 +55,6 @@ function config(spec, data, dark) {
 export function ChartBlock({ code, editor, editable, editing, onChange }) {
   const spec = useMemo(() => parseSpec(code), [code])
   const app = useApp()
-  const dark = useDark()
-  const canvas = useRef(null)
-  const [ready, setReady] = useState(false)
   const [pageMd, setPageMd] = useState('')
 
   // Tabelle dieser Seite: bei Änderungen am Text neu lesen
@@ -89,10 +86,31 @@ export function ChartBlock({ code, editor, editable, editing, onChange }) {
     return fromRows(spec.rows)
   }, [spec, list, rows, tables])
 
+  const set = (patch) => onChange(serializeSpec({ ...spec, ...patch }))
+  const empty = !data.error && !data.series?.length
+  return (
+    <div contentEditable={false}>
+      {editable && editing && <Settings spec={spec} set={set} databases={app?.databases ?? []} tables={tables} />}
+      <div className="px-3 py-3">
+        {data.error || empty ? (
+          <p className="py-6 text-center text-sm text-muted">{data.error ?? 'Noch keine Zahlen: oben unter „Bearbeiten“ eintragen.'}</p>
+        ) : (
+          <ChartView spec={spec} data={data} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Zeichenfläche (auch für eigene Diagramme der Statistik): spec { typ, titel }, data { labels, series }
+export function ChartView({ spec, data, className = 'h-72' }) {
+  const dark = useDark()
+  const canvas = useRef(null)
+  const [ready, setReady] = useState(false)
   // nur neu zeichnen, wenn sich die Zahlen ändern (Punkte einer Liste kommen bei jeder Änderung als neues Array)
   const key = JSON.stringify(data)
   useEffect(() => {
-    if (data.error || !data.series?.length || !canvas.current) return
+    if (!canvas.current) return
     let chart
     let alive = true
     loadChart().then((Chart) => {
@@ -106,22 +124,10 @@ export function ChartBlock({ code, editor, editable, editing, onChange }) {
       chart?.destroy()
     }
   }, [key, spec.typ, spec.titel, dark])
-
-  const set = (patch) => onChange(serializeSpec({ ...spec, ...patch }))
-  const empty = !data.error && !data.series?.length
   return (
-    <div contentEditable={false}>
-      {editable && editing && <Settings spec={spec} set={set} databases={app?.databases ?? []} tables={tables} />}
-      <div className="px-3 py-3">
-        {data.error || empty ? (
-          <p className="py-6 text-center text-sm text-muted">{data.error ?? 'Noch keine Zahlen: oben unter „Bearbeiten“ eintragen.'}</p>
-        ) : (
-          <div className="relative h-72">
-            {!ready && <p data-pending className="absolute inset-0 grid place-items-center text-xs text-faint">Diagramm wird gezeichnet …</p>}
-            <canvas ref={canvas} role="img" aria-label={spec.titel || 'Diagramm'} />
-          </div>
-        )}
-      </div>
+    <div className={`relative ${className}`}>
+      {!ready && <p data-pending className="absolute inset-0 grid place-items-center text-xs text-faint">Diagramm wird gezeichnet …</p>}
+      <canvas ref={canvas} role="img" aria-label={spec.titel || 'Diagramm'} />
     </div>
   )
 }

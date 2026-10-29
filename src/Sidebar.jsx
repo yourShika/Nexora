@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import {
   AppWindow, ArrowCircleUp, ArrowsLeftRight, FileArrowDown, FileArrowUp, FolderSimplePlus, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
-  PushPin, SidebarSimple, Stamp, Star, Table, Trash, Tray, Warning,
+  Browsers, PushPin, SidebarSimple, Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { useApp } from './ctx.js'
@@ -114,6 +114,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
             <li key={v.id}>
               <button
                 onClick={() => actions.open(v.id)}
+                onAuxClick={(e) => e.button === 1 && actions.openTab(v.id)}
                 className={`flex h-[var(--row)] w-full items-center gap-2 rounded-md px-2 text-left ${current === v.id ? 'bg-accent-soft' : 'hover:bg-hover'}`}
               >
                 <v.icon size={16} className="text-accent" />
@@ -132,6 +133,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
                 <li key={n.id}>
                   <button
                     onClick={() => actions.open(n.id)}
+                    onAuxClick={(e) => e.button === 1 && actions.openTab(n.id)}
                     className={`flex h-[var(--row)] w-full items-center gap-2 rounded-md px-2 text-left ${current === n.id ? 'bg-accent-soft' : 'hover:bg-hover'}`}
                   >
                     <NodeIcon node={n} />
@@ -226,7 +228,8 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
           <MenuItem icon={Star} onClick={run(() => actions.save(m.id, { favorite: m.favorite ? 0 : 1 }))}>
             {m.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
           </MenuItem>
-          <MenuItem icon={PushPin} onClick={run(() => actions.toggleTab(m.id))}>{actions.tabs.includes(m.id) ? 'Reiter lösen' : 'Als Reiter oben anpinnen'}</MenuItem>
+          <MenuItem icon={Browsers} onClick={run(() => actions.openTab(m.id))}>In neuem Reiter öffnen</MenuItem>
+          <MenuItem icon={PushPin} onClick={run(() => actions.pinPage(m.id))}>{actions.isPinned(m.id) ? 'Reiter lösen' : 'Als Reiter anpinnen'}</MenuItem>
           {m.kind === 'notebook' && (
             <MenuItem icon={ArrowsLeftRight} onClick={run(() => actions.moveArea(m.id))}>{m.area === 'privat' ? 'In den Bereich Arbeit' : 'In den Bereich Privat'}</MenuItem>
           )}
@@ -321,6 +324,7 @@ function Row({ node, depth, ctx }) {
         ) : (
           <button
             onClick={() => actions.open(node.id)}
+            onAuxClick={(e) => e.button === 1 && actions.openTab(node.id)} // Mittelklick: neuer Reiter
             onDoubleClick={() => actions.startRename(node.id)}
             className="flex min-w-0 flex-1 items-center gap-2 text-left"
           >

@@ -136,8 +136,8 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
             )}
             {onWindow && <MenuItem icon={AppWindow} onClick={() => (flush(), setMenu(null), onWindow())}>In eigenem Fenster öffnen</MenuItem>}
             {windowed && <MenuItem icon={ArrowSquareIn} onClick={() => (setMenu(null), windowed.onMain())}>Im Hauptfenster öffnen</MenuItem>}
-            {app.tabs && (
-              <MenuItem icon={PushPin} onClick={() => (setMenu(null), app.toggleTab(node.id))}>{app.tabs.includes(node.id) ? 'Reiter lösen' : 'Als Reiter oben anpinnen'}</MenuItem>
+            {app.pinPage && (
+              <MenuItem icon={PushPin} onClick={() => (setMenu(null), app.pinPage(node.id))}>{app.isPinned(node.id) ? 'Reiter lösen' : 'Reiter anpinnen'}</MenuItem>
             )}
             <MenuItem icon={node.locked ? LockSimpleOpen : LockSimple} onClick={() => (flush(), setMenu(null), onSave(node.id, { locked: node.locked ? 0 : 1 }))}>
               {node.locked ? 'Seite entsperren' : 'Seite sperren'}

@@ -34,7 +34,8 @@ import { htmlToMarkdown } from './Editor.jsx'
 import { indexText } from './ocr.js'
 import { loadBackupSettings, maybeBackup, runBackup } from './backup.js'
 import { findUpdate, installUpdate } from './updates.js'
-import Tabs from './Tabs.jsx'
+import Tabs, { VIEWS } from './Tabs.jsx'
+import * as T from './tabs.js'
 import TitleBar from './TitleBar.jsx'
 import { peopleList } from './people.js'
 import { getLook, loadLook, motionOn, setLook, useLook } from './theme.js'
@@ -87,12 +88,24 @@ function buildTree(nodes) {
 
 export default function App() {
   const [nodes, setNodes] = useState(null)
-  const [current, setCurrentNow] = useState(null)
-  // Seitenwechsel weich: alte Seite blendet aus, neue gleitet leicht herein (View Transition, nur der Inhalt, index.css)
-  const setCurrent = useCallback((id) => {
-    if (!document.startViewTransition || !motionOn()) return setCurrentNow(id)
-    document.startViewTransition(() => flushSync(() => setCurrentNow(id)))
+  // Reiter wie im Browser (tabs.js); die offene Seite ist die des aktiven Reiters
+  const [tabState, setTabState] = useState({ tabs: [], active: null })
+  const tabsRef = useRef(tabState)
+  const tabKeys = useRef(null)
+  const current = windowPage ?? T.activeTab(tabState)?.view ?? null
+  // Reiter ändern; wechselt dabei die sichtbare Seite, blendet sie weich über (View Transition, nur der Inhalt, index.css).
+  // tabsRef gleich setzen, damit mehrere Änderungen hintereinander aufeinander aufbauen
+  const changeTabs = useCallback((fn) => {
+    const before = tabsRef.current
+    const next = fn(before)
+    if (next === before) return
+    tabsRef.current = next
+    const go = () => setTabState(tabsRef.current)
+    if (T.activeTab(next)?.view === T.activeTab(before)?.view || !document.startViewTransition || !motionOn()) return go()
+    document.startViewTransition(() => flushSync(go))
   }, [])
+  // Navigieren im aktiven Reiter (wie ein Link im Browser)
+  const setCurrent = useCallback((id) => changeTabs((s) => T.navigate(s, id)), [changeTabs])
   const [fresh, setFresh] = useState(null)
   const [renaming, setRenaming] = useState(null)
   const [expanded, setExpanded] = useState(loadExpanded)
@@ -102,7 +115,6 @@ export default function App() {
   const look = useLook()
   const [settingsTab, setSettingsTab] = useState('allgemein')
   const [area, setArea] = useState('arbeit') // aktiver Bereich: 'arbeit' | 'privat'
-  const [tabs, setTabs] = useState([]) // angepinnte Seiten (IDs in Reiter-Reihenfolge)
   const [peopleSaved, setPeopleSaved] = useState([]) // Personenliste mit Farben (Einstellung "personen")
   const areaValue = area === 'privat' ? 'privat' : null // so steht er am obersten Knoten
   const [notice, setNotice] = useState('')
@@ -188,7 +200,6 @@ export default function App() {
   useEffect(() => {
     if (windowPage) return
     db.getSetting('window-mode').then((m) => m && setWindowMode(m)).catch(() => {})
-    db.getSetting('reiter').then((t) => t && setTabs(JSON.parse(t))).catch(() => {})
     // Nach einem Update: war das Fenster vorher offen, wieder zeigen (auch wenn der Neustart mit --hidden kam)
     const after = JSON.parse(localStorage.getItem('nach-update') || 'null')
     localStorage.removeItem('nach-update')
@@ -313,6 +324,19 @@ export default function App() {
     const inArea = (n) => tree.areaOf(n.id) === area
     return { ...tree, alive: new Map([...tree.alive].filter(([, n]) => inArea(n))), roots: tree.roots.filter(inArea) }
   }, [tree, area])
+
+  // Reiter gelöschter Seiten schließen
+  useEffect(() => {
+    if (!nodes || windowPage) return
+    const dead = tabsRef.current.tabs.filter((t) => !VIEWS[t.view] && !tree.alive.has(t.view))
+    if (dead.length) changeTabs((s) => dead.reduce((x, t) => T.close(x, t.key), s))
+  }, [tree])
+  // offene Reiter merken, sie kommen beim nächsten Start wieder
+  useEffect(() => {
+    if (windowPage || !tabState.tabs.length) return
+    const t = setTimeout(() => db.setSetting('reiter', JSON.stringify(T.serialize(tabState))).catch(() => {}), 300)
+    return () => clearTimeout(t)
+  }, [tabState])
   useEffect(() => {
     db.getSetting('area').then((a) => a && setArea(a)).catch(() => {})
   }, [])
@@ -332,6 +356,13 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setSearching((s) => !s)
+      }
+      // Reiter wie im Browser: Strg+W schließt, Strg+T neu, Strg+Tab / Strg+Umschalt+Tab wechselt
+      if (!windowPage && e.ctrlKey && !e.altKey) {
+        const k = e.key.toLowerCase()
+        if (k === 'w' && !e.shiftKey) (e.preventDefault(), tabKeys.current?.close())
+        else if (k === 't' && !e.shiftKey) (e.preventDefault(), tabKeys.current?.add())
+        else if (e.key === 'Tab') (e.preventDefault(), tabKeys.current?.cycle(e.shiftKey ? -1 : 1))
       }
     }
     document.addEventListener('keydown', onKey, true)
@@ -413,12 +444,15 @@ export default function App() {
       .catch(() => {})
       .then(seedLop)
       .then(db.allNodes)
-      .then((all) => {
+      .then(async (all) => {
+        const saved = await db.getSetting('reiter').catch(() => null)
         setNodes(all)
         const pages = all.filter((n) => n.kind === 'page' && !n.deleted_at)
         const last = all.filter((n) => n.opened_at && !n.deleted_at).sort((a, b) => b.opened_at.localeCompare(a.opened_at))[0]
         const start = last ?? pages[0]
-        setCurrent(start?.id ?? 'today')
+        // offene Reiter vom letzten Mal; ohne die (oder bis 0.28 nur Angepinnte) dazu die zuletzt geöffnete Seite
+        tabsRef.current = T.restore(saved && JSON.parse(saved), start?.id ?? 'today')
+        setTabState(tabsRef.current)
         // Eltern der Startseite aufklappen, damit sie im Baum sichtbar ist
         const byId = new Map(all.map((n) => [n.id, n]))
         const up = []
@@ -827,15 +861,16 @@ export default function App() {
     return { parent_id: parent?.id ?? null, sort }
   }
 
-  const saveTabs = (next) => (setTabs(next), db.setSetting('reiter', JSON.stringify(next)).catch(fail))
   const actions = {
     fromTemplate,
-    tabs,
-    toggleTab: (id) => saveTabs(tabs.includes(id) ? tabs.filter((t) => t !== id) : [...tabs, id]),
-    moveTab(id, targetId, side) {
-      const list = tabs.filter((t) => t !== id)
-      list.splice(list.indexOf(targetId) + (side === 'after' ? 1 : 0), 0, id)
-      saveTabs(list)
+    // Seitenleiste, Seite: in neuem Reiter öffnen, als Reiter anpinnen oder lösen
+    openTab: (id) => actions.openHere(id, true),
+    isPinned: (id) => tabState.tabs.some((t) => t.view === id && t.pinned),
+    pinPage(id) {
+      changeTabs((s) => {
+        const t = s.tabs.find((x) => x.view === id)
+        return t ? T.pin(s, t.key, !t.pinned) : T.openTab(s, id, { pinned: true })
+      })
     },
     importFiles,
     exportTree,
@@ -858,15 +893,15 @@ export default function App() {
       if ((kind === 'page' || kind === 'row') && (windowMode === 'always' || (windowMode === 'ctrl' && modifier.current))) return actions.openWindow(id)
       actions.openHere(id)
     },
-    openWindow(id) {
+    openWindow(id, at) {
       setWindows((s) => new Set([...s, id]))
-      openPageWindow(id).catch((e) => {
+      openPageWindow(id, at ?? {}).catch((e) => {
         setError(`Fenster nicht geöffnet: ${e}`)
         setWindows((s) => new Set([...s].filter((x) => x !== id)))
       })
     },
-    openHere(id) {
-      setCurrent(id)
+    openHere(id, newTab = false) {
+      changeTabs((s) => T.show(s, id, newTab))
       setFresh(null)
       if (!['trash', 'today', 'inbox', 'settings', 'snippets', 'calendar', 'journal', 'stats'].includes(id)) {
         db.touch(id).catch(() => {})
@@ -942,7 +977,11 @@ export default function App() {
       setArea(next)
       db.setSetting('area', next).catch(fail)
       // offene Seite aus dem anderen Bereich nicht stehen lassen
-      if (tree.alive.has(current) && tree.areaOf(current) !== next) setCurrent('today')
+      if (tree.alive.has(current) && tree.areaOf(current) !== next) {
+        // zum letzten Reiter, den der Bereich zeigt; gibt es keinen, ein neuer mit Heute
+        const shown = (t) => VIEWS[t.view] || (tree.alive.has(t.view) && tree.areaOf(t.view) === next)
+        changeTabs((s) => (s.tabs.some(shown) ? { ...s, active: s.tabs.filter(shown).at(-1).key } : T.openTab(s, 'today', { atEnd: true })))
+      }
     },
     moveArea(id) {
       const n = tree.alive.get(id)
@@ -980,8 +1019,26 @@ export default function App() {
   const node = tree.alive.get(current)
   const favorites = nodes.filter((n) => n.favorite && tree.alive.has(n.id) && tree.areaOf(n.id) === area)
   // Reiter wie Favoriten nur im aktiven Bereich; gelöschte Seiten bleiben gemerkt und kommen mit dem Wiederherstellen zurück
-  const tabNodes = windowPage || focusMode ? [] : tabs.map((id) => tree.alive.get(id)).filter((n) => n && tree.areaOf(n.id) === area)
-  const loose = !windowPage && !focusMode && node && !tabs.includes(node.id) ? node : null
+  // Reiter wie Favoriten nur im aktiven Bereich; feste Ansichten (Heute, Eingang …) in beiden
+  const shownTab = (t) => VIEWS[t.view] || (tree.alive.has(t.view) && tree.areaOf(t.view) === area)
+  const tabItems = tabState.tabs.filter(shownTab).map((t) => ({ ...t, node: tree.alive.get(t.view) }))
+  const tabActions = {
+    select: (key) => changeTabs((s) => ({ ...s, active: key })),
+    close: (key) => changeTabs((s) => T.close(s, key)),
+    pin: (key, on) => changeTabs((s) => T.pin(s, key, on)),
+    move: (key, target, side) => changeTabs((s) => T.move(s, key, target, side)),
+    closeOthers: (key) => changeTabs((s) => T.closeOthers(s, key)),
+    closeRight: (key) => changeTabs((s) => T.closeRight(s, key)),
+    add: () => changeTabs((s) => T.openTab(s, 'today', { atEnd: true })),
+    // herausgezogen: die Seite wandert in ein eigenes Fenster
+    window(key, at) {
+      const t = tabState.tabs.find((x) => x.key === key)
+      if (!t) return
+      actions.openWindow(t.view, at)
+      changeTabs((s) => T.close(s, key))
+    },
+  }
+  tabKeys.current = { close: () => tabActions.close(tabsRef.current.active), add: tabActions.add, cycle: (dir) => changeTabs((s) => T.cycle(s, dir, s.tabs.filter(shownTab))) }
   const trashed = nodes.filter((n) => n.deleted_at)
   const allRows = [...tree.alive.values()].filter((n) => n.kind === 'row')
   const people = peopleList(peopleSaved, allRows)
@@ -1020,8 +1077,8 @@ export default function App() {
     savePeople,
     renamePerson,
     removePerson,
-    tabs: windowPage ? null : tabs,
-    toggleTab: actions.toggleTab,
+    pinPage: windowPage ? null : actions.pinPage,
+    isPinned: actions.isPinned,
     unlockVault,
     vaultCopy,
     lockVault,
@@ -1128,7 +1185,7 @@ export default function App() {
       />
     )
   } else if (current === 'stats') {
-    view = <Stats rows={liveRows} dbOf={dbOf} />
+    view = <Stats rows={liveRows} dbOf={dbOf} lists={databases} />
   } else if (current === 'snippets') {
     view = <Snippets alive={areaAlive} pathOf={pathOf} onOpen={actions.open} />
   } else if (current === 'today') {
@@ -1223,7 +1280,20 @@ export default function App() {
         {windowPage ? (
           <span data-tauri-drag-region className="min-w-0 self-center truncate text-sm text-muted">{windowTitle || 'Ohne Titel'}</span>
         ) : (
-          <Tabs nodes={tabNodes} current={current} loose={loose} onOpen={actions.open} onClose={actions.toggleTab} onMove={actions.moveTab} onPin={actions.toggleTab} />
+          !focusMode && (
+            <Tabs
+              tabs={tabItems}
+              active={tabState.active}
+              onSelect={tabActions.select}
+              onClose={tabActions.close}
+              onPin={tabActions.pin}
+              onMove={tabActions.move}
+              onCloseOthers={tabActions.closeOthers}
+              onCloseRight={tabActions.closeRight}
+              onNew={tabActions.add}
+              onWindow={tabActions.window}
+            />
+          )
         )}
         {focusMode && (
           <button onClick={() => setFocusMode(false)} className="my-1.5 ml-2 shrink-0 self-center rounded-md px-2 py-1 text-xs text-faint hover:bg-hover hover:text-text">
