@@ -106,7 +106,8 @@ export async function snapshot(id) {
 
 // Alle Texte, die auf Bilder verweisen können: Seiten (auch im Papierkorb), Titelbilder, alte Fassungen
 export async function imageReferences() {
-  const rows = await (await db()).select('SELECT body, cover FROM nodes UNION ALL SELECT body, NULL FROM versions')
+  // bild:<Name> merkt sich Original und Schritte eines bearbeiteten Bilds (ImageEditor.jsx); das Original bleibt so erhalten
+  const rows = await (await db()).select("SELECT body, cover FROM nodes UNION ALL SELECT body, NULL FROM versions UNION ALL SELECT value, NULL FROM settings WHERE substr(key, 1, 5) = 'bild:'")
   return rows.map((r) => `${r.body ?? ''}\n${r.cover ?? ''}`).join('\n')
 }
 

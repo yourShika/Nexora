@@ -82,7 +82,7 @@ export function buildExport(rootIds, src) {
       md
         .replace(/\[\[lop:([0-9a-f-]{36})(?:\|alle)?\]\]/g, (_, ref) => (paths.has(ref) ? `Liste: ${link(src.get(ref).title || 'Ohne Titel', relPath(path, paths.get(ref)))}` : 'Liste (nicht exportiert)'))
         .replace(/\[\[([^\]|\n]*)\|([0-9a-f-]{36})\]\]/g, (_, title, ref) => (paths.has(ref) ? link(src.get(ref).title || title, relPath(path, paths.get(ref))) : title))
-        .replace(/\[\[datei:([0-9a-f-]{36})\/([^\]|\n]+)\|\d+\]\]/g, (_, uuid, name) => {
+        .replace(/\[\[datei:([0-9a-f-]{36})\/([^\]|\n]+)\|\d+(?:\|vorschau)?\]\]/g, (_, uuid, name) => {
           const to = `anhaenge/${uuid}/${name}`
           copies.set(to, to)
           return `Anhang: ${link(name, relPath(path, to))}`

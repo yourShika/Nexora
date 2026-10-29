@@ -5,7 +5,7 @@ import Suggestion from '@tiptap/suggestion'
 import { pickAttachments } from './Attachment.jsx'
 import { pickVault } from './Vault.jsx'
 import {
-  CheckSquare, Code, FlowArrow, Key, Scribble, LinkSimple, ListBullets, ListChecks, ListNumbers, Minus, Paperclip, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
+  ChartBar, CheckSquare, Code, FlowArrow, Key, Scribble, LinkSimple, ListBullets, ListChecks, ListNumbers, Minus, Paperclip, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
 } from '@phosphor-icons/react'
 
 // `keys`: weitere Suchwörter, damit auch "todo", "h1" oder "pre" trifft
@@ -19,7 +19,8 @@ const ITEMS = [
   { title: 'Checkliste', keys: 'todo aufgabe task', icon: CheckSquare, run: (c) => c.toggleTaskList() },
   { title: 'Zitat', keys: 'quote', icon: Quotes, run: (c) => c.toggleBlockquote() },
   { title: 'Code', keys: 'codeblock pre skript script', icon: Code, run: (c) => c.toggleCodeBlock({ language: 'powershell' }) },
-  { title: 'Diagramm', keys: 'mermaid flussdiagramm ablauf flowchart sequenz', icon: FlowArrow, run: (c) => c.insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: 'flowchart LR\n  A[Start] --> B[Ende]' }] }) },
+  { title: 'Diagramm', keys: 'chart statistik zahlen balken torte linie kreis grafik', icon: ChartBar, run: (c) => c.insertContent({ type: 'codeBlock', attrs: { language: 'diagramm' }, content: [{ type: 'text', text: 'typ: balken\ntitel: Beispiel\nquelle: tabelle\n---\nMonat;Offen;Erledigt\nJan;4;10\nFeb;6;12\nMär;3;15' }] }) },
+  { title: 'Ablaufdiagramm', keys: 'mermaid flussdiagramm ablauf flowchart sequenz', icon: FlowArrow, run: (c) => c.insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: 'flowchart LR\n  A[Start] --> B[Ende]' }] }) },
   { title: 'Zeichnung', keys: 'zeichnen skizze stift ink drawing malen', icon: Scribble, run: (c) => c.insertContent({ type: 'drawing', attrs: { h: 240, ink: [] } }) },
   { title: 'Tabelle', keys: 'table', icon: Table, run: (c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
   { title: 'Trennlinie', keys: 'hr linie divider', icon: Minus, run: (c) => c.setHorizontalRule() },

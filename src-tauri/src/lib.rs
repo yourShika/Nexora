@@ -12,6 +12,7 @@ mod ocr;
 mod onenote;
 mod outlook;
 mod package;
+mod preview;
 mod vault;
 mod run;
 mod team;
@@ -136,11 +137,13 @@ pub fn run() {
             toggle_capture,
             files::save_image,
             files::import_image,
+            files::read_image,
             files::list_images,
             files::delete_images,
             ocr::ocr_image,
             doctext::list_text_attachments,
             doctext::attachment_text,
+            preview::attachment_preview,
             onenote::onenote,
             outlook::outlook_events,
             outlook::outlook_push,
@@ -184,6 +187,10 @@ pub fn run() {
             let images = app.path().app_config_dir()?.join("bilder");
             std::fs::create_dir_all(&images)?;
             app.asset_protocol_scope().allow_directory(&images, true)?;
+            // Vorschau-Seiten von Anhängen (preview.rs) ebenso
+            let previews = app.path().app_config_dir()?.join("vorschau");
+            std::fs::create_dir_all(&previews)?;
+            app.asset_protocol_scope().allow_directory(&previews, true)?;
             let open = MenuItem::with_id(app, "open", "Öffnen", true, None::<&str>)?;
             let quick = MenuItem::with_id(app, "capture", "Schnellerfassung", true, None::<&str>)?;
             let clip = MenuItem::with_id(app, "clip", "Zwischenablage in den Eingang", true, None::<&str>)?;

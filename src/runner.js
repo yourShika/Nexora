@@ -63,5 +63,5 @@ export function parseTable(lines) {
 export function codeBlocks(body) {
   return [...body.matchAll(/^```([\w-]*)[^\n]*\n([\s\S]*?)\n```/gm)]
     .map((m) => ({ lang: m[1] || 'plaintext', code: m[2] }))
-    .filter((b) => b.lang !== 'mermaid') // Diagramme sind keine Snippets
+    .filter((b) => b.lang !== 'mermaid' && b.lang !== 'diagramm') // Diagramme sind keine Snippets
 }

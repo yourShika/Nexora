@@ -2,7 +2,7 @@
 // Das Frontend bekommt so keine allgemeinen Dateirechte.
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::ipc::{InvokeBody, Request};
+use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::{AppHandle, Manager};
 
 const IMAGE_TYPES: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
@@ -46,6 +46,15 @@ pub fn save_image(app: AppHandle, request: Request) -> Result<String, String> {
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     fs::write(dir.join(&name), bytes).map_err(|e| format!("Bild nicht gespeichert: {e}"))?;
     Ok(name)
+}
+
+// Bilddaten für den Bild-Editor (über das asset-Protokoll geladen dürfte die Zeichenfläche nicht exportieren)
+#[tauri::command]
+pub fn read_image(app: AppHandle, name: String) -> Result<Response, String> {
+    if !valid_image_name(&name) {
+        return Err(format!("Ungültiger Bildname: {name}"));
+    }
+    Ok(Response::new(fs::read(data_dir(&app)?.join("bilder").join(&name)).map_err(|e| format!("Bild nicht gelesen: {e}"))?))
 }
 
 // Bilddatei vom Datenträger übernehmen (Titelbild aus dem Dateidialog); name wie bei save_image

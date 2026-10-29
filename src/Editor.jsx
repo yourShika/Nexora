@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLineDown, Copy } from '@phosphor-icons/react'
+import { ArrowLineDown, Copy, PencilSimple } from '@phosphor-icons/react'
 import { EditorContent, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
 import { Extension, generateJSON, resolveExtensions } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
@@ -32,10 +32,11 @@ import { imageText } from './ocr.js'
 import { maskSecrets, secretSpans } from './secrets.js'
 import { adminLinks } from './adminlinks.js'
 import SecretDialog from './SecretDialog.jsx'
+import ImageEditor from './ImageEditor.jsx'
 
 const lowlight = createLowlight(common)
 lowlight.register({ powershell, dos, dockerfile, nginx })
-lowlight.registerAlias({ plaintext: ['mermaid'] }) // Diagramm-Code nicht raten lassen
+lowlight.registerAlias({ plaintext: ['mermaid', 'diagramm'] }) // Diagramm-Code nicht raten lassen
 
 // Bild mit Breite im Obsidian-Format "![alt|400](bilder/x.png)"; Höhe folgt dem Seitenverhältnis
 const Bild = Image.extend({
@@ -157,6 +158,7 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
   const [error, setError] = useState('')
   const [zoom, setZoom] = useState(null)
   const [menu, setMenu] = useState(null)
+  const [editImage, setEditImage] = useState(null) // Bild im Bild-Editor ("bilder/…")
   // Passwort-Warnung: das abgefangene Einfügen wartet hier auf die Entscheidung
   const [secret, setSecret] = useState(null)
   const bypass = useRef(false)
@@ -255,6 +257,7 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
       {secret && <SecretDialog text={secret.text} spans={secret.spans} onChoose={pasteChosen} />}
       {menu && (
         <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+          {editable && <MenuItem icon={PencilSimple} onClick={() => (setMenu(null), setEditImage(menu.file))}>Bild bearbeiten …</MenuItem>}
           <MenuItem icon={Copy} onClick={() => copyText(menu.file)}>Text aus dem Bild kopieren</MenuItem>
           {editable && <MenuItem icon={ArrowLineDown} onClick={() => insertText(menu.file)}>Text unter dem Bild einfügen</MenuItem>}
         </Menu>
@@ -269,6 +272,22 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
         {editable && <BlockHandle editor={editor} wrapper={wrapper} />}
         <EditorContent editor={editor} />
       </div>
+      {editImage && (
+        <ImageEditor
+          file={editImage}
+          onClose={() => setEditImage(null)}
+          onSave={(next) => {
+            // das bearbeitete Bild ersetzt das alte an derselben Stelle (Breite bleibt)
+            let at = null
+            editor.state.doc.descendants((n, pos) => {
+              if (at === null && n.type.name === 'image' && n.attrs.src === editImage) at = pos
+              return at === null
+            })
+            if (at !== null) editor.view.dispatch(editor.state.tr.setNodeAttribute(at, 'src', next))
+            setEditImage(null)
+          }}
+        />
+      )}
       {zoom && (
         <div role="dialog" aria-label="Bild groß" onClick={() => setZoom(null)} className="anim-fade fixed inset-0 z-50 grid cursor-zoom-out place-items-center bg-[rgb(10_20_22/0.8)] p-8">
           <img src={zoom} alt="" className="anim-zoom max-h-full max-w-full rounded shadow-[var(--shadow)]" />

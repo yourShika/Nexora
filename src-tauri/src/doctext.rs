@@ -198,7 +198,7 @@ pub async fn attachment_text(app: AppHandle, rel: String) -> Result<Vec<String>,
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -233,18 +233,17 @@ mod tests {
         assert_eq!(text, vec!["Firewall Regel 42\n".to_string()]);
     }
 
-    // PDF mit Text über "Microsoft Print to PDF" erzeugen ist umständlich; Word fehlt eventuell.
-    // Darum: PDF von Hand bauen (eine Seite, Helvetica) und erkennen lassen.
-    #[test]
-    fn erkennt_pdf() {
-        let content = "BT /F1 36 Tf 60 700 Td (Switch Rack 3 tauschen) Tj ET";
-        let objs = [
-            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
-            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>".to_string(),
-            format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
-            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
-        ];
+    // PDF von Hand bauen (eine Zeile Helvetica je Seite): "Microsoft Print to PDF" ist umständlich, Word fehlt eventuell
+    pub(crate) fn sample_pdf(texts: &[&str]) -> String {
+        let n = texts.len();
+        let kids: Vec<String> = (0..n).map(|i| format!("{} 0 R", 3 + i * 2)).collect();
+        let mut objs = vec!["<< /Type /Catalog /Pages 2 0 R >>".to_string(), format!("<< /Type /Pages /Kids [{}] /Count {n} >>", kids.join(" "))];
+        for (i, t) in texts.iter().enumerate() {
+            let content = format!("BT /F1 36 Tf 60 700 Td ({t}) Tj ET");
+            objs.push(format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents {} 0 R /Resources << /Font << /F1 {} 0 R >> >> >>", 4 + i * 2, 3 + n * 2));
+            objs.push(format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()));
+        }
+        objs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string());
         let mut pdf = String::from("%PDF-1.4\n");
         let mut offsets = Vec::new();
         for (i, o) in objs.iter().enumerate() {
@@ -257,8 +256,13 @@ mod tests {
             pdf.push_str(&format!("{o:010} 00000 n \n"));
         }
         pdf.push_str(&format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1));
+        pdf
+    }
+
+    #[test]
+    fn erkennt_pdf() {
         let path = std::env::temp_dir().join(format!("nexora-pdf-{}.pdf", std::process::id()));
-        fs::write(&path, pdf).unwrap();
+        fs::write(&path, sample_pdf(&["Switch Rack 3 tauschen"])).unwrap();
         let text = pages(&path).expect("PDF nicht erkannt");
         let _ = fs::remove_file(&path);
         assert_eq!(text.len(), 1);

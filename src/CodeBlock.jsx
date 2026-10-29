@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NodeViewContent, NodeViewWrapper } from '@tiptap/react'
-import { Check, Code, Copy, FlowArrow, NotePencil, Play, ShieldCheck, Stop, Table, TextAlignLeft, X } from '@phosphor-icons/react'
+import { ChartBar, Check, Code, Copy, FlowArrow, SlidersHorizontal, NotePencil, Play, ShieldCheck, Stop, Table, TextAlignLeft, X } from '@phosphor-icons/react'
 import * as db from './db.js'
 import { useApp } from './ctx.js'
 import { RUNNABLE, fill, parseTable, placeholders, runCode } from './runner.js'
 import { isDark, useDark } from './theme.js'
+import { ChartBlock } from './Chart.jsx'
 
 // Auswahl statt aller ~40 lowlight-Sprachen: das, was im IT-Alltag vorkommt
 export const LANGUAGES = {
@@ -21,7 +22,8 @@ export const LANGUAGES = {
   nginx: 'Nginx',
   csharp: 'C#',
   javascript: 'JavaScript',
-  mermaid: 'Mermaid (Diagramm)',
+  mermaid: 'Mermaid (Ablauf)',
+  diagramm: 'Diagramm (Zahlen)',
   plaintext: 'Text',
 }
 
@@ -35,9 +37,23 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos }) {
   const lang = node.attrs.language || 'plaintext'
   const runnable = lang in RUNNABLE
   const diagram = lang === 'mermaid'
-  // Diagramm zeigt erst nur das Bild; der Code kommt auf Knopfdruck (oder solange er leer ist)
+  const chart = lang === 'diagramm'
+  const picture = diagram || chart
+  // Diagramme zeigen erst nur das Bild; der Code kommt auf Knopfdruck (oder solange er leer ist)
   const [showCode, setShowCode] = useState(false)
+  const [editing, setEditing] = useState(false)
   const empty = !node.textContent.trim()
+  // Text des Blocks ersetzen (Einstellungen des Zahlen-Diagramms)
+  const setCode = (text) =>
+    editor
+      .chain()
+      .command(({ tr, state }) => {
+        const pos = getPos()
+        const block = tr.doc.nodeAt(pos)
+        tr.replaceWith(pos + 1, pos + block.nodeSize - 1, text ? state.schema.text(text) : [])
+        return true
+      })
+      .run()
 
   async function copy() {
     await navigator.clipboard.writeText(node.textContent)
@@ -133,15 +149,19 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos }) {
             <BarButton onClick={() => start(true)} disabled={run?.running} title="Als Administrator ausführen (Windows fragt nach)" icon={ShieldCheck}>Als Admin</BarButton>
           </>
         )}
-        {diagram && !empty && (
+        {chart && editor.isEditable && (
+          <BarButton onClick={() => setEditing(!editing)} icon={editing ? ChartBar : SlidersHorizontal}>{editing ? 'Fertig' : 'Bearbeiten'}</BarButton>
+        )}
+        {picture && !empty && (
           <BarButton onClick={() => setShowCode(!showCode)} icon={showCode ? FlowArrow : Code}>{showCode ? 'Nur Diagramm' : 'Code'}</BarButton>
         )}
         <BarButton onClick={copy} icon={copied ? Check : Copy}>{copied ? 'Kopiert' : 'Kopieren'}</BarButton>
       </div>
-      <pre className={diagram && !showCode && !empty ? 'hidden' : ''}>
+      <pre className={picture && !showCode && !empty ? 'hidden' : ''}>
         <NodeViewContent as="code" className={`hljs language-${lang}`} />
       </pre>
       {diagram && !empty && <Diagram code={node.textContent} />}
+      {chart && <ChartBlock code={node.textContent} editor={editor} editable={editor.isEditable} editing={editing || empty} onChange={setCode} />}
       {ask && <AskValues ask={ask} onRun={(values) => go(node.textContent, ask.admin, values)} onCancel={() => setAsk(null)} />}
       {run && <Output run={run} onClose={() => setRun(null)} onProtocol={toProtocol} />}
     </NodeViewWrapper>
