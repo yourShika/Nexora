@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import * as db from './db.js'
-import { addDays, dayOf, fieldsOf, formatNr, isDone, timeOf, today } from './fields.js'
+import { addDays, dayOf, fieldsOf, formatDate, formatNr, isDone, timeOf, today } from './fields.js'
 import { hash } from './onenote.js'
 
 // Outlook-Brücke (outlook.rs): offene Fälligkeiten → eigener Kalender "Nexora", Outlook-Termine → Anzeige.
@@ -28,6 +28,9 @@ export function desiredEvents(rows, dbOf) {
   return out
 }
 
+// "v2": bis 0.18 kamen Umlaute falsch in Outlook an; der neue Stand schreibt solche Termine einmal neu
+const version = (e) => hash(`v2${JSON.stringify(e)}`)
+
 // map: { Punkt-ID: { id: Outlook-EntryID, hash } } → was anzulegen, zu ändern, zu entfernen ist
 export function pushPlan(desired, map) {
   const create = []
@@ -35,7 +38,7 @@ export function pushPlan(desired, map) {
   for (const [key, e] of desired) {
     const m = map[key]
     if (!m) create.push(e)
-    else if (m.hash !== hash(JSON.stringify(e))) update.push({ ...e, id: m.id })
+    else if (m.hash !== version(e)) update.push({ ...e, id: m.id })
   }
   const remove = Object.keys(map).filter((k) => !desired.has(k)).map((k) => map[k].id)
   return { create, update, delete: remove }
@@ -51,7 +54,7 @@ export async function pushDue(rows, dbOf) {
   for (const [key, e] of desired) {
     // Fehlgeschlagene neue Termine fehlen hier und werden beim nächsten Mal wieder versucht
     const id = res.created?.[key] ?? map[key]?.id
-    if (id) next[key] = { id, hash: hash(JSON.stringify(e)) }
+    if (id) next[key] = { id, hash: version(e) }
   }
   await db.setSetting(MAP_KEY, JSON.stringify(next))
   return { neu: plan.create.length - (res.failed?.length ?? 0), geaendert: plan.update.length, entfernt: plan.delete.length, fehler: res.failed ?? [] }
@@ -75,3 +78,14 @@ export function eventDays(e) {
 }
 
 export const eventTime = (e) => (e.allDay ? 'ganztägig' : `${e.start.slice(11, 16)}–${e.end.slice(11, 16)}`)
+
+// Nachhaken zu einem wartenden Punkt: Betreff und Text; den Empfänger trägt man in Outlook ein
+export function followUpMail(row, list) {
+  const name = [formatNr(list, row.props?.nr), row.title || 'Ohne Titel'].filter(Boolean).join(' ')
+  const since = row.created_at ? new Date(row.created_at).toLocaleDateString('de-DE') : null
+  const due = row.props?.due ? formatDate(row.props.due) : null
+  const lines = [row.props?.person ? `Hallo ${row.props.person},` : 'Hallo,', '', `kurze Nachfrage zu: ${name}`]
+  if (since || due) lines.push([since && `offen seit ${since}`, due && `fällig ${due}`].filter(Boolean).join(', '))
+  lines.push('', 'Gibt es dazu schon einen Stand?', '', 'Viele Grüße')
+  return { subject: `Nachfrage: ${name}`, body: lines.join('\r\n') }
+}

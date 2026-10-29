@@ -1,6 +1,7 @@
 import Database from '@tauri-apps/plugin-sql'
 import { emit } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { taskCount, today } from './fields.js'
 
 let conn
 const db = async () => (conn ??= await Database.load('sqlite:nexora.db'))
@@ -26,9 +27,14 @@ function parse(row) {
 
 export async function allNodes() {
   const rows = await (await db()).select(
-    'SELECT id, parent_id, kind, title, icon, color, cover, locked, template, props, config, sort, favorite, created_at, opened_at, updated_at, deleted_at FROM nodes ORDER BY sort',
+    // Text nur bei Punkten, für den Fortschritt ihrer Checkliste; danach wieder weg
+    "SELECT id, parent_id, kind, title, icon, color, cover, locked, template, props, config, sort, favorite, created_at, opened_at, updated_at, deleted_at, CASE WHEN kind = 'row' THEN body END AS row_body FROM nodes ORDER BY sort",
   )
-  return rows.map(parse)
+  return rows.map((row) => {
+    if (row.kind === 'row') row.tasks = taskCount(row.row_body)
+    delete row.row_body
+    return parse(row)
+  })
 }
 
 export async function loadBody(id) {
@@ -168,6 +174,22 @@ export async function pagesWithCode() {
 export async function getSetting(key) {
   const [row] = await (await db()).select('SELECT value FROM settings WHERE key = $1', [key])
   return row?.value ?? null
+}
+
+// Arbeitstagebuch: erledigt | angelegt | bearbeitet (einmal je Tag und Seite) | ausgefuehrt | nachgehakt | notiz
+export async function journal(kind, nodeId, text = '') {
+  const c = await db()
+  const day = today()
+  if (kind === 'bearbeitet' && (await c.select('SELECT 1 FROM journal WHERE day = $1 AND kind = $2 AND node_id = $3', [day, kind, nodeId])).length) return
+  await c.execute('INSERT INTO journal (day, at, kind, node_id, text) VALUES ($1, $2, $3, $4, $5)', [day, now(), kind, nodeId, text])
+}
+
+export async function journalBetween(from, to) {
+  return (await db()).select('SELECT id, day, at, kind, node_id, text FROM journal WHERE day BETWEEN $1 AND $2 ORDER BY at', [from, to])
+}
+
+export async function deleteJournal(id) {
+  await (await db()).execute("DELETE FROM journal WHERE id = $1 AND kind = 'notiz'", [id])
 }
 
 export async function settingsLike(prefix) {

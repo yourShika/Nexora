@@ -82,6 +82,9 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos }) {
       onExit: (x) => {
         cancelAnimationFrame(frame)
         flush()
+        // Arbeitstagebuch: welche Seite, welche Sprache, wie ausgegangen
+        const pageId = editor.view.dom.closest('[data-page-id]')?.dataset.pageId
+        db.journal('ausgefuehrt', pageId ?? null, `${RUNNABLE[lang] ?? lang}${admin ? ' als Admin' : ''}, ${x.error ? 'Fehler' : `Exit ${x.code}`}`).catch(() => {})
         setRun((r) => r && { ...r, running: false, exit: x.code, ms: x.ms, error: x.error })
       },
     })

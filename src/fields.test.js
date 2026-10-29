@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { addDays, daysBetween, nextDate } from './fields.js'
+import { addDays, taskCount, daysBetween, nextDate } from './fields.js'
 import { parseQuick } from './quick.js'
 
 test('nächster Termin einer Wiederholung', () => {
@@ -22,4 +22,9 @@ test('Kurzsyntax für Wiederholungen', () => {
   assert.deepEqual(parseQuick('Zertifikate prüfen *monatlich 1.11.', now), { title: 'Zertifikate prüfen', props: { repeat: 'm1', due: '2026-11-01' } })
   assert.equal(parseQuick('Backup testen *quartal', now).props.repeat, 'm3')
   assert.deepEqual(parseQuick('3 * 4 rechnen', now), { title: '3 * 4 rechnen', props: {} })
+})
+
+test('Unterpunkte: Checkliste im Text des Punkts', () => {
+  assert.equal(taskCount('Nur Text'), null)
+  assert.deepEqual(taskCount('- [x] a\n- [ ] b\n  - [X] b1\n* [ ]\nText - [ ] mitten im Satz\n- \\[x\\] maskiert'), { done: 2, total: 4 })
 })

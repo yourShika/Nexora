@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowSquareOut, CalendarBlank, ChartBarHorizontal, Kanban, ListBullets, Plus, SlidersHorizontal, SortAscending, SortDescending, Table, X } from '@phosphor-icons/react'
 import { Chip, FieldEditor, FieldValue } from './Props.jsx'
-import { QuickAdd, RowItem } from './Rows.jsx'
+import { Progress, QuickAdd, RowItem } from './Rows.jsx'
 import { ConfirmButton } from './Overview.jsx'
 import { Cover, IconRow } from './PageHead.jsx'
 import CalendarView from './Calendar.jsx'
@@ -197,6 +197,7 @@ function TitleCell({ row, onOpen, onTitle }) {
         onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
         className="w-full min-w-0 rounded bg-transparent px-1.5 py-1 font-medium outline-none placeholder:text-faint hover:bg-hover focus:bg-raised focus:ring-1 focus:ring-accent"
       />
+      <Progress tasks={row.tasks} />
       <button
         aria-label="Als Seite öffnen"
         title="Als Seite öffnen"
@@ -267,6 +268,7 @@ function KanbanView({ db, rows, fields, onOpen, onRow }) {
               <p className={`mb-1.5 font-medium ${o.done ? 'text-muted line-through' : ''}`}>{r.title || 'Ohne Titel'}</p>
               <div className="flex flex-wrap items-center gap-1.5">
                 {r.props?.nr && <FieldValue field={{ type: 'nr' }} value={r.props.nr} db={db} />}
+                <Progress tasks={r.tasks} />
                 {cards.map((f) => <FieldValue key={f.id} field={f} value={r.props?.[f.id]} db={db} done={o.done} />)}
               </div>
             </article>

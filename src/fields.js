@@ -143,3 +143,9 @@ export function describe(field, value) {
 export const option = (field, id) => field?.options?.find((o) => o.id === id) ?? (id ? { id, name: id, color: 'grau' } : null)
 
 export const newId = () => crypto.randomUUID().slice(0, 8)
+
+// Unterpunkte eines LOP-Punkts = Checkliste in seinem Text ("- [ ]" / "- [x]", auch eingerückt)
+export function taskCount(md) {
+  const all = [...(md ?? '').matchAll(/^\s*[-*+] \[([ xX])\](?: |$)/gm)]
+  return all.length ? { done: all.filter((m) => m[1] !== ' ').length, total: all.length } : null
+}

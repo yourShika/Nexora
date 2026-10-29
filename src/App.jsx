@@ -20,7 +20,8 @@ import { DEFAULT_HOTKEY, bindHotkey, hotkeyLabel } from './hotkey.js'
 import { checkReminders } from './notify.js'
 import { initImages, saveImageBytes } from './images.js'
 import { describeReport, hash, link as oneNoteLink, syncNotebook } from './onenote.js'
-import { desiredEvents, pushDue, readEvents } from './outlook.js'
+import { desiredEvents, followUpMail, pushDue, readEvents } from './outlook.js'
+import Journal from './Journal.jsx'
 import OneNoteConnect from './OneNote.jsx'
 import { VaultPicker, VaultUnlock, setVaultPicker, vault } from './Vault.jsx'
 import { htmlToMarkdown } from './Editor.jsx'
@@ -436,6 +437,8 @@ export default function App() {
     if (node?.kind === 'row' && fields.props) {
       logChanges(node, fields.props)
       repeatIfDone(node, fields.props)
+      const fs = fieldsOf(dbOf(node))
+      if (!isDone(node, fs) && isDone({ props: fields.props }, fs)) db.journal('erledigt', id, node.title).catch(() => {})
     }
     patch(id, { ...fields, updated_at: new Date().toISOString() })
     db.update(id, fields).catch(fail)
@@ -497,8 +500,34 @@ export default function App() {
       const full = list ? numbered(list, props) : { status: 'offen', ...props }
       const node = await db.create('row', parentId, title, { props: full })
       setNodes((ns) => [...ns, node])
+      db.journal('angelegt', node.id, title).catch(() => {})
       if (open) actions.open(node.id), setFresh(node.id)
       return node
+    } catch (e) {
+      fail(e)
+    }
+  }
+
+  // Nachhaken: Mail-Entwurf im installierten Outlook; Nexora sendet nie selbst
+  async function followUp(row) {
+    try {
+      await invoke('outlook_draft', followUpMail(row, dbOf(row)))
+      db.addActivity(row.id, 'change', 'Nachgehakt per Mail-Entwurf').catch(() => {})
+      db.journal('nachgehakt', row.id, row.title).catch(() => {})
+      setNotice('Mail-Entwurf in Outlook geöffnet.')
+    } catch (e) {
+      setError(`Outlook: ${e}`)
+    }
+  }
+
+  // Wochenrückblick als Seite ablegen
+  async function savePage(parentId, title, body) {
+    try {
+      const node = await db.create('page', parentId, title)
+      await db.update(node.id, { body })
+      setNodes((ns) => [...ns, node])
+      db.journal('angelegt', node.id, title).catch(() => {})
+      actions.openHere(node.id)
     } catch (e) {
       fail(e)
     }
@@ -535,6 +564,7 @@ export default function App() {
       const extra = { body: sub(await db.loadBody(templateId)), icon: t.icon ?? null, cover: t.cover ?? null }
       await db.update(node.id, extra)
       setNodes((ns) => [...ns, { ...node, icon: extra.icon, cover: extra.cover }])
+      db.journal('angelegt', node.id, node.title).catch(() => {})
       setExpanded((s) => new Set([...s, parentId]))
       setCurrent(node.id)
     } catch (e) {
@@ -642,7 +672,7 @@ export default function App() {
     openHere(id) {
       setCurrent(id)
       setFresh(null)
-      if (!['trash', 'today', 'inbox', 'settings', 'snippets', 'calendar'].includes(id)) {
+      if (!['trash', 'today', 'inbox', 'settings', 'snippets', 'calendar', 'journal'].includes(id)) {
         db.touch(id).catch(() => {})
         const node = tree.alive.get(id)
         setExpanded((s) => new Set([...s, ...pathOf(id).slice(0, -1).map((n) => n.id), ...(['notebook', 'section'].includes(node?.kind) ? [id] : [])]))
@@ -697,6 +727,7 @@ export default function App() {
         const node = await db.create(kind, parentId, title, { config })
         if (template === 'frei') await db.update(node.id, { body: CANVAS })
         setNodes((ns) => [...ns, node])
+        if (kind === 'page') db.journal('angelegt', node.id, title).catch(() => {})
         if (parentId) setExpanded((s) => new Set([...s, parentId]))
         if (kind === 'page') {
           setCurrent(node.id)
@@ -770,6 +801,7 @@ export default function App() {
     { label: 'Eingang', run: () => actions.open('inbox') },
     { label: 'Kalender', run: () => actions.open('calendar') },
     { label: 'Snippets', run: () => actions.open('snippets') },
+    { label: 'Tagebuch', run: () => actions.open('journal') },
     { label: 'Schnellerfassung', run: () => invoke('toggle_capture') },
     { label: 'Neues Notizbuch', run: () => actions.add('notebook', null) },
     { label: 'Einstellungen', run: () => actions.open('settings') },
@@ -829,10 +861,21 @@ export default function App() {
         <CalendarView rows={liveRows} dbOf={dbOf} events={events} field="due" hideDone onOpen={actions.open} onRow={save} onAdd={(title, props) => addRow(null, title, props)} />
       </div>
     )
+  } else if (current === 'journal') {
+    view = (
+      <Journal
+        alive={tree.alive}
+        rows={liveRows}
+        dbOf={dbOf}
+        sections={[...tree.alive.values()].filter((n) => n.kind === 'section').map((s) => ({ id: s.id, title: pathOf(s.id).map((p) => p.title || 'Ohne Titel').join(' / ') }))}
+        onOpen={actions.open}
+        onSavePage={savePage}
+      />
+    )
   } else if (current === 'snippets') {
     view = <Snippets alive={tree.alive} pathOf={pathOf} onOpen={actions.open} />
   } else if (current === 'today') {
-    view = <Today rows={liveRows} dbOf={dbOf} events={events} onOpen={actions.open} onToggle={toggleRow} />
+    view = <Today rows={liveRows} dbOf={dbOf} events={events} onOpen={actions.open} onToggle={toggleRow} onFollowUp={followUp} />
   } else if (current === 'inbox') {
     view = (
       <Inbox
@@ -883,6 +926,7 @@ export default function App() {
         fields={fieldsOf(list)}
         db={list}
         onAddOption={list && ((fieldId, name) => save(list.id, { config: withTags(list, [name]) }))}
+        onFollowUp={followUp}
         flushRef={windowPage ? flushRef : undefined}
         onWindow={windowPage ? undefined : () => actions.openWindow(node.id)}
         windowed={

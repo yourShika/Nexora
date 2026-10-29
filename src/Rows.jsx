@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowBendUpRight, CalendarBlank, Lightning, Tray } from '@phosphor-icons/react'
+import { ArrowBendUpRight, CalendarBlank, EnvelopeSimple, Lightning, Tray } from '@phosphor-icons/react'
 import { eventDays, eventTime } from './outlook.js'
 import Menu, { MenuItem } from './Menu.jsx'
 import { Chip, DateText, FieldValue } from './Props.jsx'
@@ -7,6 +7,19 @@ import { LOP_FIELDS, dayOf, fieldsOf, formatNr, isDone, isLate, isToday, option,
 import { parseQuick } from './quick.js'
 
 // Eine Zeile mit Erledigt-Haken; für Liste, Eingang und Heute
+// Fortschritt der Checkliste im Text eines Punkts: Balken und "3/5"
+export function Progress({ tasks }) {
+  if (!tasks?.total) return null
+  return (
+    <span title={`${tasks.done} von ${tasks.total} Unterpunkten erledigt`} className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted">
+      <span className="h-1 w-8 overflow-hidden rounded-full bg-line">
+        <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.round((tasks.done / tasks.total) * 100)}%` }} />
+      </span>
+      {tasks.done}/{tasks.total}
+    </span>
+  )
+}
+
 export function RowItem({ row, db, onOpen, onToggle, showDb, actions }) {
   const fields = fieldsOf(db)
   const done = isDone(row, fields)
@@ -28,6 +41,7 @@ export function RowItem({ row, db, onOpen, onToggle, showDb, actions }) {
         {row.title || 'Ohne Titel'}
       </button>
       <span className="flex shrink-0 items-center gap-1.5">
+        <Progress tasks={row.tasks} />
         {showDb && <span className="text-xs text-faint">{db?.title ?? 'Eingang'}</span>}
         {shown.map((f) => <FieldValue key={f.id} field={f} value={row.props?.[f.id]} db={db} done={done} />)}
         {row.props?.followup && !done && <span className="text-xs text-muted">WV <DateText value={row.props.followup} /></span>}
@@ -117,7 +131,7 @@ export function Inbox({ rows, databases, onOpen, onToggle, onAdd, onAssign, hotk
   )
 }
 
-export function Today({ rows, dbOf, events = [], onOpen, onToggle }) {
+export function Today({ rows, dbOf, events = [], onOpen, onToggle, onFollowUp }) {
   const t = today()
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString()
   const open = rows.filter((r) => !isDone(r, fieldsOf(dbOf(r))))
@@ -126,7 +140,7 @@ export function Today({ rows, dbOf, events = [], onOpen, onToggle }) {
     { title: 'Überfällig', items: open.filter((r) => isLate(r.props?.due)).sort(byTime) },
     { title: 'Heute fällig', items: open.filter((r) => isToday(r.props?.due) && !isLate(r.props.due)).sort(byTime) },
     { title: 'Wiedervorlage', items: open.filter((r) => r.props?.followup && dayOf(r.props.followup) <= t) },
-    { title: 'Wartet seit über 7 Tagen', items: open.filter((r) => r.props?.status === 'wartet' && r.updated_at < weekAgo) },
+    { title: 'Wartet seit über 7 Tagen', items: open.filter((r) => r.props?.status === 'wartet' && r.updated_at < weekAgo), followUp: true },
   ].filter((g) => g.items.length)
   const meetings = events.filter((e) => eventDays(e).includes(t))
 
@@ -155,7 +169,24 @@ export function Today({ rows, dbOf, events = [], onOpen, onToggle }) {
             {g.title} <span className="text-sm font-normal text-faint">{g.items.length}</span>
           </h2>
           <ul className="divide-y divide-line border-y border-line">
-            {g.items.map((r) => <RowItem key={r.id} row={r} db={dbOf(r)} onOpen={onOpen} onToggle={onToggle} showDb />)}
+            {g.items.map((r) => (
+              <RowItem
+                key={r.id}
+                row={r}
+                db={dbOf(r)}
+                onOpen={onOpen}
+                onToggle={onToggle}
+                showDb
+                actions={
+                  g.followUp &&
+                  onFollowUp && (
+                    <button onClick={() => onFollowUp(r)} className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted hover:bg-raised hover:text-text">
+                      <EnvelopeSimple size={14} /> Nachhaken
+                    </button>
+                  )
+                }
+              />
+            ))}
           </ul>
         </section>
       )) : !meetings.length && (

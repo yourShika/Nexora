@@ -2,10 +2,13 @@
 # NEXORA_OP events: Termine zwischen NEXORA_FROM und NEXORA_TO lesen (Standardkalender, oder Unterkalender NEXORA_FOLDER)
 # NEXORA_OP push:   JSON von stdin { create:[{key,subject,start,end,allDay,body}], update:[{id,…}], delete:[id] }
 #                   nur im Unterkalender NEXORA_FOLDER; Antwort { created:{key:id}, failed:[…] }
+# NEXORA_OP draft:  Mail-Entwurf { subject, body } von stdin öffnen (nie senden)
 # NEXORA_OP drop:   Unterkalender NEXORA_FOLDER samt Inhalt löschen (nur für Tests)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false
+# stdin kommt von Nexora als UTF-8; PowerShell 5.1 liest sonst in der alten Konsolen-Codepage (ü wird zu ├╝)
+[Console]::InputEncoding = New-Object Text.UTF8Encoding $false
 $culture = [Globalization.CultureInfo]::InvariantCulture
 $ol = $null
 try {
@@ -82,6 +85,15 @@ try {
                 catch { [void]$failed.Add($e.key + ': ' + $_.Exception.Message) }
             }
             [Console]::Out.Write((ConvertTo-Json -InputObject ([ordered]@{ created = $created; failed = @($failed) }) -Depth 3 -Compress))
+        }
+        'draft' {
+            # Nur ein Entwurf zum Bearbeiten; gesendet wird nie von hier
+            $m = [Console]::In.ReadToEnd() | ConvertFrom-Json
+            $mail = $ol.CreateItem(0)
+            $mail.Subject = $m.subject
+            $mail.Body = $m.body
+            $mail.Display()
+            [Console]::Out.Write('{}')
         }
         'drop' {
             $f = Sub $false

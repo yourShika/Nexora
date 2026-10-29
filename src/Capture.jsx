@@ -35,7 +35,8 @@ export default function Capture() {
     if (!parsed.title || saving) return
     setSaving(true)
     try {
-      await db.create('row', null, parsed.title, { props: { status: 'offen', ...parsed.props } })
+      const node = await db.create('row', null, parsed.title, { props: { status: 'offen', ...parsed.props } })
+      db.journal('angelegt', node.id, parsed.title).catch(() => {})
       await emit('nodes-changed')
       setText('')
       await win.hide()

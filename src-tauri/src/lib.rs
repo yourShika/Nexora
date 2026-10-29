@@ -89,6 +89,12 @@ pub fn run() {
             sql: include_str!("../migrations/008_texterkennung.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 9,
+            description: "tagebuch",
+            sql: include_str!("../migrations/009_tagebuch.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -120,6 +126,7 @@ pub fn run() {
             onenote::onenote,
             outlook::outlook_events,
             outlook::outlook_push,
+            outlook::outlook_draft,
             outlook::outlook_drop_test,
             team::team_login,
             team::team_status,

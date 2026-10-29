@@ -61,6 +61,13 @@ pub async fn outlook_push(folder: String, job: String) -> Result<String, String>
     blocking(move || call("push", &[("NEXORA_FOLDER", &folder)], Some(job))).await
 }
 
+// Nachhaken: Mail-Entwurf öffnen; Empfänger trägt man selbst ein, gesendet wird nie von hier
+#[tauri::command]
+pub async fn outlook_draft(subject: String, body: String) -> Result<String, String> {
+    let job = serde_json::json!({ "subject": subject, "body": body }).to_string();
+    blocking(move || call("draft", &[], Some(job))).await
+}
+
 // Nur der Testkalender lässt sich ganz löschen (landet in "Gelöschte Elemente")
 #[tauri::command]
 pub async fn outlook_drop_test() -> Result<String, String> {

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AppWindow, Article, ArrowBendDownRight, ArrowSquareIn, ClockCounterClockwise, DotsThree, FrameCorners, ListChecks, LockSimple, LockSimpleOpen, PushPin, Stamp, Star, Trash, WarningCircle } from '@phosphor-icons/react'
+import { AppWindow, Article, ArrowBendDownRight, ArrowSquareIn, ClockCounterClockwise, DotsThree, FrameCorners, ListChecks, LockSimple, LockSimpleOpen, PushPin, Stamp, EnvelopeSimple, Star, Trash, WarningCircle } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { NodeIcon } from './Sidebar.jsx'
 import { useApp } from './ctx.js'
-import { today } from './fields.js'
+import { taskCount, today } from './fields.js'
 import { Cover, IconRow } from './PageHead.jsx'
 import History from './History.jsx'
 import * as db from './db.js'
@@ -13,7 +13,7 @@ import { hasInk, isFree, toFlow, toFree } from './free.js'
 import { IconButton } from './Sidebar.jsx'
 import { PropsPanel } from './Props.jsx'
 
-export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove, fields, db: parentDb, onAddOption, flushRef, onWindow, windowed }) {
+export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove, fields, db: parentDb, onAddOption, flushRef, onWindow, windowed, onFollowUp }) {
   const [body, setBody] = useState(null)
   const [loadError, setLoadError] = useState(false)
   const [title, setTitle] = useState(node.title)
@@ -36,6 +36,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
     try {
       await db.update(node.id, fields)
       if (!Object.keys(pending.current).length) setStatus('saved')
+      if ('body' in fields || 'title' in fields) db.journal('bearbeitet', node.id, fields.title ?? node.title).catch(() => {})
     } catch {
       pending.current = { ...fields, ...pending.current }
       setStatus('error')
@@ -81,6 +82,12 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
   }
   const free = isFree(body)
 
+  // Fortschritt der Checkliste gleich in Listen und Kanban zeigen (nur bei Änderung)
+  function patchTasks(md) {
+    const t = taskCount(md)
+    if (JSON.stringify(t) !== JSON.stringify(node.tasks ?? null)) onPatch(node.id, { tasks: t })
+  }
+
   return (
     <div className="flex h-full">
     <div className={`h-full min-w-0 flex-1 ${free ? 'overflow-auto' : 'overflow-y-auto'}`}>
@@ -118,6 +125,9 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
         </IconButton>
         {menu && (
           <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+            {node.kind === 'row' && node.props?.status === 'wartet' && onFollowUp && (
+              <MenuItem icon={EnvelopeSimple} onClick={() => (setMenu(null), onFollowUp(node))}>Nachhaken (Mail-Entwurf)</MenuItem>
+            )}
             {onWindow && <MenuItem icon={AppWindow} onClick={() => (flush(), setMenu(null), onWindow())}>In eigenem Fenster öffnen</MenuItem>}
             {windowed && <MenuItem icon={ArrowSquareIn} onClick={() => (setMenu(null), windowed.onMain())}>Im Hauptfenster öffnen</MenuItem>}
             <MenuItem icon={node.locked ? LockSimpleOpen : LockSimple} onClick={() => (flush(), setMenu(null), onSave(node.id, { locked: node.locked ? 0 : 1 }))}>
@@ -143,7 +153,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
       </header>
 
       <Cover node={node} onSave={onSave} />
-      <article className={`${free ? '' : 'mx-auto max-w-[760px]'} px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-8'}`}>
+      <article data-page-id={node.id} className={`${free ? '' : 'mx-auto max-w-[760px]'} px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-8'}`}>
         <IconRow node={node} onSave={onSave} />
         <input
           autoFocus={autoFocus}
@@ -184,7 +194,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
         ) : free ? (
           <FreeCanvas key={reload} body={body} editable={!node.locked} onChange={(md) => (setLatest(md), queue({ body: md }))} />
         ) : (
-          <Editor key={reload} markdown={body} editable={!node.locked} onChange={(md) => (setLatest(md), queue({ body: md }))} onReady={onReady} />
+          <Editor key={reload} markdown={body} editable={!node.locked} onChange={(md) => (setLatest(md), queue({ body: md }), node.kind === 'row' && patchTasks(md))} onReady={onReady} />
         )}
       </article>
     </div>

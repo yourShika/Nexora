@@ -26,7 +26,7 @@ test('Outlook: anlegen, ändern, entfernen', () => {
   const desired = desiredEvents([row('a', { due: '2026-10-30' }), row('b', { due: '2026-11-02' })], () => list)
   assert.equal(pushPlan(desired, {}).create.length, 2)
   // a unverändert, b verschoben, c nicht mehr offen
-  const map = Object.fromEntries([...desired].map(([k, e]) => [k, { id: `id-${k}`, hash: hash(JSON.stringify(e)) }]))
+  const map = Object.fromEntries([...desired].map(([k, e]) => [k, { id: `id-${k}`, hash: hash(`v2${JSON.stringify(e)}`) }]))
   map.c = { id: 'id-c', hash: 'x' }
   const plan = pushPlan(desiredEvents([row('a', { due: '2026-10-30' }), row('b', { due: '2026-11-03' })], () => list), map)
   assert.deepEqual(plan.create, [])
