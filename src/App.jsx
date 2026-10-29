@@ -8,7 +8,7 @@ import { AppWindow, X } from '@phosphor-icons/react'
 import { closeWindow, label, openWindow as openPageWindow, restoreWindows, windowKey, windowPage } from './windows.js'
 import * as db from './db.js'
 import { CANVAS } from './free.js'
-import Sidebar from './Sidebar.jsx'
+import Sidebar, { Rail } from './Sidebar.jsx'
 import Page from './Page.jsx'
 import DatabaseView from './Database.jsx'
 import { Overview, TrashView } from './Overview.jsx'
@@ -33,7 +33,7 @@ import { htmlToMarkdown } from './Editor.jsx'
 import { indexText } from './ocr.js'
 import { loadBackupSettings, maybeBackup, runBackup } from './backup.js'
 import { findUpdate, installUpdate } from './updates.js'
-import { applyTheme } from './theme.js'
+import { getLook, loadLook, setLook, useLook } from './theme.js'
 import { dayOf, daysBetween, describe, emptyConfig, fieldsOf, formatDate, isDone, lopConfig, nextDate, shiftDate, statusField, today, toggleDone } from './fields.js'
 import CalendarView from './Calendar.jsx'
 import { CalendarBlank } from '@phosphor-icons/react'
@@ -90,6 +90,8 @@ export default function App() {
   const [error, setError] = useState('')
   const [focusMode, setFocusMode] = useState(false)
   const [printing, setPrinting] = useState(null) // { ask: Seite, count } oder { pages }
+  const look = useLook()
+  const [settingsTab, setSettingsTab] = useState('allgemein')
   const [area, setArea] = useState('arbeit') // aktiver Bereich: 'arbeit' | 'privat'
   const areaValue = area === 'privat' ? 'privat' : null // so steht er am obersten Knoten
   const [notice, setNotice] = useState('')
@@ -282,6 +284,10 @@ export default function App() {
   }, [])
 
   const tree = useMemo(() => buildTree(nodes ?? []), [nodes])
+  // Aussehen aus der Datenbank (gilt vor dem Zwischenspeicher dieses PCs)
+  useEffect(() => {
+    if (!windowPage) loadLook().catch(() => {})
+  }, [])
   // Baum nur mit dem aktiven Bereich (Seitenleiste, Suche, Snippets); stabil, solange sich nichts ändert
   const areaTree = useMemo(() => {
     const inArea = (n) => tree.areaOf(n.id) === area
@@ -297,6 +303,11 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         setFocusMode((f) => !f)
+      }
+      // Seitenleiste: Strg+Umschalt+L (auf deutscher Tastatur bequemer als Strg+\, das auch geht)
+      if ((e.ctrlKey || e.metaKey) && ((e.shiftKey && e.key.toLowerCase() === 'l') || e.key === '\\')) {
+        e.preventDefault()
+        setLook({ sidebarHidden: !getLook().sidebarHidden })
       }
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
@@ -976,9 +987,11 @@ export default function App() {
     { label: 'Nexora-Datei importieren …', run: () => actions.importNexora() },
     { label: 'Einstellungen', run: () => actions.open('settings') },
     { label: 'Papierkorb', run: () => actions.open('trash') },
-    { label: 'Darstellung: Hell', run: () => applyTheme('light') },
-    { label: 'Darstellung: Dunkel', run: () => applyTheme('dark') },
-    { label: 'Darstellung: Wie Windows', run: () => applyTheme('system') },
+    { label: 'Darstellung: Hell', run: () => setLook({ mode: 'light' }) },
+    { label: 'Darstellung: Dunkel', run: () => setLook({ mode: 'dark' }) },
+    { label: 'Darstellung: Wie Windows', run: () => setLook({ mode: 'system' }) },
+    { label: 'Seitenleiste ein-/ausklappen (Strg+Umschalt+L)', run: () => setLook({ sidebarHidden: !look.sidebarHidden }) },
+    { label: 'Aussehen anpassen', run: () => (setSettingsTab('aussehen'), actions.open('settings')) },
   ]
   const t = today()
   const counts = {
@@ -1029,6 +1042,8 @@ export default function App() {
         onOutlook={setOutlookOption}
         onOutlookSync={outlookSync}
         onWindowMode={(m) => (setWindowMode(m), db.setSetting('window-mode', m).catch(fail))}
+        tab={settingsTab}
+        onTab={setSettingsTab}
       />
     )
   } else if (current === 'calendar') {
@@ -1150,7 +1165,8 @@ export default function App() {
           Fokus beenden (Esc)
         </button>
       )}
-      {!windowPage && !focusMode && <Sidebar
+      {!windowPage && !focusMode && look.sidebarHidden && <Rail current={current} counts={counts} actions={actions} onSearch={() => setSearching(true)} />}
+      {!windowPage && !focusMode && !look.sidebarHidden && <Sidebar
         tree={areaTree}
         area={area}
         favorites={favorites}
@@ -1166,7 +1182,7 @@ export default function App() {
         onLockVault={lockVault}
       />}
       {/* key: bei jedem Seitenwechsel neu einblenden */}
-      <main key={current} className="anim-page min-w-0 flex-1">{view}</main>
+      <main key={current} className="anim-page min-w-0 flex-1 bg-bg">{view}</main>
 
       {printing?.ask && <PrintAsk node={printing.ask} count={printing.count} onChoose={(kids) => (kids === null ? setPrinting(null) : printPage(printing.ask, kids))} />}
       {printing?.pages && <Print pages={printing.pages} onDone={(err) => (setPrinting(null), err && setError(err))} />}

@@ -199,7 +199,7 @@ export function Today({ rows, dbOf, events = [], onOpen, onToggle, onFollowUp })
 export function View({ title, icon: Icon, sub, children }) {
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-[860px] px-6 pb-24 pt-14 md:px-12">
+      <div className="mx-auto max-w-[max(860px,var(--page))] px-6 pb-24 pt-14 md:px-12">
         <h1 className="flex items-center gap-3 text-[32px] font-semibold leading-tight tracking-tight">
           {Icon && <Icon size={28} className="text-accent" />} {title}
         </h1>

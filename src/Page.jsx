@@ -156,7 +156,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
       </header>
 
       <Cover node={node} onSave={onSave} />
-      <article data-page-id={node.id} className={`${free ? '' : 'mx-auto max-w-[760px]'} px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-8'}`}>
+      <article data-page-id={node.id} className={`${free ? '' : 'mx-auto max-w-[var(--page)]'} px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-8'}`}>
         <IconRow node={node} onSave={onSave} />
         <input
           autoFocus={autoFocus}

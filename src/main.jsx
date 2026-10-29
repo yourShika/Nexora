@@ -3,9 +3,9 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import '@fontsource-variable/geist'
 import '@fontsource-variable/geist-mono'
 import './index.css'
-import { applyTheme } from './theme.js'
+import { applyLook } from './theme.js'
 
-applyTheme()
+applyLook()
 // Das Schnellerfassungs-Fenster lädt nur sein Eingabefeld, nicht Editor und Baum
 // Snippet-Picker ebenso nur seine Liste
 const label = getCurrentWindow().label

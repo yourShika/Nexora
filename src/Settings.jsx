@@ -4,7 +4,7 @@ import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
 import { open } from '@tauri-apps/plugin-dialog'
-import { FolderOpen, GearSix, Keyboard, Monitor, Moon, Sun } from '@phosphor-icons/react'
+import { ArrowCircleUp, Bell, ClockCounterClockwise, Database, EnvelopeSimple, FolderOpen, GearSix, Key, Keyboard, MagnifyingGlass, Monitor, Moon, Palette, SlidersHorizontal, Sun, TerminalWindow, UsersThree } from '@phosphor-icons/react'
 import { BACKUP_DEFAULTS, loadBackupSettings } from './backup.js'
 import { deleteImages, unusedImages } from './images.js'
 import { shells } from './runner.js'
@@ -12,16 +12,10 @@ import { useApp } from './ctx.js'
 import { vault } from './Vault.jsx'
 import { FOLDER as OUTLOOK_FOLDER } from './outlook.js'
 import { ConfirmButton } from './Overview.jsx'
-import { View } from './Rows.jsx'
 import { HOTKEYS, accelFromEvent, hotkeyLabel } from './hotkey.js'
-import { applyTheme, getTheme } from './theme.js'
+import { DEFAULT_LOOK, setLook, useDark, useLook } from './theme.js'
+import { THEMES, palette } from './colors.js'
 import * as db from './db.js'
-
-const THEMES = [
-  { id: 'system', label: 'Wie Windows', icon: Monitor },
-  { id: 'light', label: 'Hell', icon: Sun },
-  { id: 'dark', label: 'Dunkel', icon: Moon },
-]
 
 const INTERVALS = [
   { hours: 1, label: 'jede Stunde' },
@@ -373,12 +367,28 @@ function HotkeyRow({ item, accel, busy, onChange }) {
   )
 }
 
-export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBackupNow, updates, windowMode, onWindowMode, outlook, onOutlook, onOutlookSync }) {
+// Kategorien links, Suche oben; keys: weitere Suchwörter
+const CATEGORIES = [
+  { id: 'allgemein', label: 'Allgemein', icon: SlidersHorizontal, keys: 'fenster autostart windows start tray eigenes fenster' },
+  { id: 'aussehen', label: 'Aussehen', icon: Palette, keys: 'farbe farbschema schema theme hell dunkel modus darstellung verlauf gradient akzent discord schrift schriftart schriftgröße größe zoom dichte zeilenabstand kompakt breite seitenbreite ecken rund eckig seitenleiste' },
+  { id: 'tasten', label: 'Tastenkürzel', icon: Keyboard, keys: 'hotkey kürzel tastatur schnellerfassung zwischenablage snippet picker' },
+  { id: 'erinnerungen', label: 'Erinnerungen', icon: Bell, keys: 'meldung sammelmeldung benachrichtigung fällig uhrzeit morgen' },
+  { id: 'outlook', label: 'Outlook', icon: EnvelopeSimple, keys: 'kalender termine mail fälligkeiten' },
+  { id: 'tresor', label: 'Tresor', icon: Key, keys: 'vaultwarden bitwarden passwort bw cli' },
+  { id: 'team', label: 'Team-Server', icon: UsersThree, keys: 'server entra anmelden online geteilt' },
+  { id: 'sicherung', label: 'Sicherung', icon: ClockCounterClockwise, keys: 'backup sichern ordner netzlaufwerk' },
+  { id: 'runbooks', label: 'Runbooks', icon: TerminalWindow, keys: 'powershell skript ausführen code cmd python admin' },
+  { id: 'updates', label: 'Updates', icon: ArrowCircleUp, keys: 'version aktualisieren neue version' },
+  { id: 'daten', label: 'Daten', icon: Database, keys: 'ordner export markdown bilder speicherort ungenutzt' },
+]
+const norm = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+
+export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBackupNow, updates, windowMode, onWindowMode, outlook, onOutlook, onOutlookSync, tab, onTab }) {
   const [message, setMessage] = useState('')
-  const [theme, setTheme] = useState(getTheme)
   const [dir, setDir] = useState('')
   const [digestTime, setDigestTime] = useState('08:00')
   const [autostart, setAutostart] = useState(null)
+  const [q, setQ] = useState('')
   useEffect(() => {
     appConfigDir().then(setDir).catch(() => {})
     db.getSetting('digestTime').then((v) => v && setDigestTime(v)).catch(() => {})
@@ -394,24 +404,71 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
     }
   }
 
-  return (
-    <View title="Einstellungen" icon={GearSix}>
+  const words = norm(q).split(/\s+/).filter(Boolean)
+  const found = CATEGORIES.filter((c) => words.every((w) => norm(`${c.label} ${c.keys}`).includes(w)))
+  const shown = words.length ? found : CATEGORIES.filter((c) => c.id === tab)
+
+  const content = {
+    allgemein: (
+      <>
+        <section className="mb-10">
+          <h2 className="mb-1 font-semibold">Fenster</h2>
+          <p className="mb-3 text-muted">
+            Wann ein Klick auf eine Seite oder einen Punkt ein eigenes Fenster öffnet. Über Rechtsklick und das „…“-Menü geht es immer.
+            Offene Fenster kommen beim nächsten Start an derselben Stelle wieder.
+          </p>
+          <div role="radiogroup" aria-label="Seite in eigenem Fenster öffnen" className="flex flex-wrap gap-2">
+            {WINDOW_MODES.map(([id, name]) => (
+              <button
+                key={id}
+                role="radio"
+                aria-checked={windowMode === id}
+                onClick={() => onWindowMode(id)}
+                className={`rounded-md border px-3 py-2 ${windowMode === id ? 'border-accent bg-accent-soft' : 'border-line bg-raised hover:border-faint'}`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="mb-10">
+          <h2 className="mb-1 font-semibold">Start</h2>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={!!autostart}
+              disabled={autostart === null || import.meta.env.DEV}
+              onChange={(e) => toggleAutostart(e.target.checked)}
+              className="size-4 accent-[var(--accent)]"
+            />
+            Mit Windows starten (versteckt im Tray)
+            {import.meta.env.DEV && <span className="text-xs text-faint">im Testmodus abgeschaltet</span>}
+          </label>
+          {message && <p className="mt-2 text-danger">{message}</p>}
+        </section>
+      </>
+    ),
+    aussehen: <AppearanceSection />,
+    tasten: (
       <section className="mb-10">
         <h2 className="mb-1 font-semibold">Tastenkürzel</h2>
         <p className="mb-3 text-muted">Gelten überall in Windows, solange Nexora läuft (auch im Tray). Klicken, dann die neue Kombination drücken.</p>
         {HOTKEYS.map((h) => (
           <HotkeyRow key={h.id} item={h} accel={hotkeys[h.id]} busy={hotkeyBusy.includes(h.id)} onChange={onHotkey} />
         ))}
-        {message && <p className="mt-2 text-danger">{message}</p>}
+        <p className="mt-4 text-sm text-muted">
+          In Nexora: Strg+K Suche, Strg+Umschalt+F Fokus-Modus, Strg+Umschalt+L Seitenleiste ein-/ausklappen, / im Text fügt Blöcke ein.
+        </p>
       </section>
-
+    ),
+    erinnerungen: (
       <section className="mb-10">
         <h2 className="mb-1 font-semibold">Erinnerungen</h2>
         <p className="mb-3 text-muted">
           Jeden Morgen eine Sammelmeldung mit Überfälligem, heute Fälligem und Wiedervorlagen. Punkte mit Uhrzeit melden sich zusätzlich genau dann.
           Das klappt nur, solange Nexora läuft, auch versteckt im Tray.
         </p>
-        <label className="mb-3 flex items-center gap-3">
+        <label className="flex items-center gap-3">
           Sammelmeldung um
           <input
             type="time"
@@ -423,69 +480,15 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
             className="rounded-md border border-line bg-raised px-2 py-1 focus:border-accent focus:outline-none"
           />
         </label>
-        <label className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            checked={!!autostart}
-            disabled={autostart === null || import.meta.env.DEV}
-            onChange={(e) => toggleAutostart(e.target.checked)}
-            className="size-4 accent-[var(--accent)]"
-          />
-          Mit Windows starten (versteckt im Tray)
-          {import.meta.env.DEV && <span className="text-xs text-faint">im Testmodus abgeschaltet</span>}
-        </label>
       </section>
-
-      <section className="mb-10">
-        <h2 className="mb-3 font-semibold">Darstellung</h2>
-        <div role="radiogroup" aria-label="Darstellung" className="flex gap-2">
-          {THEMES.map((t) => (
-            <button
-              key={t.id}
-              role="radio"
-              aria-checked={theme === t.id}
-              onClick={() => (applyTheme(t.id), setTheme(t.id))}
-              className={`flex items-center gap-2 rounded-md border px-3 py-2 ${theme === t.id ? 'border-accent bg-accent-soft' : 'border-line bg-raised hover:border-faint'}`}
-            >
-              <t.icon size={16} /> {t.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="mb-10">
-        <h2 className="mb-1 font-semibold">Fenster</h2>
-        <p className="mb-3 text-muted">
-          Wann ein Klick auf eine Seite oder einen Punkt ein eigenes Fenster öffnet. Über Rechtsklick und das „…“-Menü geht es immer.
-          Offene Fenster kommen beim nächsten Start an derselben Stelle wieder.
-        </p>
-        <div role="radiogroup" aria-label="Seite in eigenem Fenster öffnen" className="flex flex-wrap gap-2">
-          {WINDOW_MODES.map(([id, name]) => (
-            <button
-              key={id}
-              role="radio"
-              aria-checked={windowMode === id}
-              onClick={() => onWindowMode(id)}
-              className={`rounded-md border px-3 py-2 ${windowMode === id ? 'border-accent bg-accent-soft' : 'border-line bg-raised hover:border-faint'}`}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <TeamSection />
-
-      <OutlookSection state={outlook} onChange={onOutlook} onSync={onOutlookSync} />
-
-      <VaultSection />
-
-      <BackupSection status={backup} onBackupNow={onBackupNow} />
-
-      <RunbookSection />
-
-      <UpdateSection updates={updates} />
-
+    ),
+    outlook: <OutlookSection state={outlook} onChange={onOutlook} onSync={onOutlookSync} />,
+    tresor: <VaultSection />,
+    team: <TeamSection />,
+    sicherung: <BackupSection status={backup} onBackupNow={onBackupNow} />,
+    runbooks: <RunbookSection />,
+    updates: <UpdateSection updates={updates} />,
+    daten: (
       <section>
         <h2 className="mb-1 font-semibold">Daten</h2>
         <p className="text-muted">
@@ -494,7 +497,183 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
         <ImageCleanup />
         <ExportAll />
       </section>
-    </View>
+    ),
+  }
+
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto flex max-w-[1100px] gap-10 px-6 pb-24 pt-14 md:px-12">
+        <nav aria-label="Kategorien" className="sticky top-14 w-52 shrink-0 self-start">
+          <h1 className="mb-4 flex items-center gap-2.5 text-[26px] font-semibold leading-tight tracking-tight">
+            <GearSix size={24} className="text-accent" /> Einstellungen
+          </h1>
+          <div className="mb-3 flex items-center gap-2 rounded-md border border-line bg-raised px-2 focus-within:border-accent">
+            <MagnifyingGlass size={15} className="shrink-0 text-faint" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Einstellung suchen" aria-label="Einstellung suchen" className="w-full bg-transparent py-1.5 outline-none placeholder:text-faint" />
+          </div>
+          <ul>
+            {CATEGORIES.map((c) => {
+              const active = words.length ? found.includes(c) : tab === c.id
+              return (
+                <li key={c.id}>
+                  <button
+                    onClick={() => (setQ(''), onTab(c.id))}
+                    aria-current={active && !words.length ? 'page' : undefined}
+                    className={`flex h-[var(--row)] w-full items-center gap-2.5 rounded-md px-2 text-left ${active ? 'bg-accent-soft text-text' : words.length ? 'text-faint hover:bg-hover' : 'text-muted hover:bg-hover hover:text-text'}`}
+                  >
+                    <c.icon size={16} className={active ? 'text-accent' : ''} /> {c.label}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
+        <div className="min-w-0 flex-1 pt-1">
+          {shown.length ? (
+            shown.map((c) => (
+              <div key={c.id}>
+                {words.length > 0 && <div className="mb-2 text-xs font-medium uppercase tracking-wide text-faint">{c.label}</div>}
+                {content[c.id]}
+              </div>
+            ))
+          ) : (
+            <p className="text-muted">Keine Einstellung zu „{q}“.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Choice({ label, value, options, onChange, styleOf }) {
+  return (
+    <div className="mb-5">
+      <div className="mb-1.5 text-sm text-muted">{label}</div>
+      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
+        {options.map(([id, name, Icon]) => (
+          <button
+            key={id}
+            role="radio"
+            aria-checked={value === id}
+            onClick={() => onChange(id)}
+            style={styleOf?.(id)}
+            className={`flex items-center gap-2 rounded-md border px-3 py-1.5 ${value === id ? 'border-accent bg-accent-soft' : 'border-line bg-raised hover:border-faint'}`}
+          >
+            {Icon && <Icon size={16} />} {name}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const FONTS = { geist: '"Geist Variable", sans-serif', segoe: '"Segoe UI Variable Text", "Segoe UI", sans-serif', arial: 'Arial, sans-serif', georgia: 'Georgia, serif' }
+const ANGLES = [[90, '→'], [135, '↘'], [180, '↓'], [45, '↗']]
+
+// Kleine Vorschau eines Schemas im gerade aktiven Hell/Dunkel
+function Swatch({ theme, active, dark, onClick }) {
+  const p = palette({ theme: theme.id }, dark)
+  const ground = p.gradient ? `linear-gradient(135deg, ${p.gradient.join(', ')})` : p.bg
+  return (
+    <button
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      title={theme.name}
+      className={`overflow-hidden rounded-lg border-2 text-left ${active ? 'border-accent' : 'border-transparent hover:border-line'}`}
+    >
+      <div className="flex h-14 w-28" style={{ background: ground }}>
+        <div className="w-8" style={{ background: p.side }} />
+        <div className="flex flex-1 flex-col justify-center gap-1.5 px-2">
+          <span className="h-1.5 w-12 rounded-full" style={{ background: p.text, opacity: 0.8 }} />
+          <span className="h-1.5 w-8 rounded-full" style={{ background: p.muted, opacity: 0.6 }} />
+          <span className="h-2.5 w-10 rounded" style={{ background: p.accent }} />
+        </div>
+      </div>
+      <div className="bg-raised px-2 py-1 text-xs">{theme.name}</div>
+    </button>
+  )
+}
+
+function AppearanceSection() {
+  const look = useLook()
+  const dark = useDark()
+  const solid = THEMES.filter((t) => !t.stops)
+  const gradients = THEMES.filter((t) => t.stops)
+  const current = palette(look, dark)
+  const [mine, setMine] = useState(() => look.gradient ?? { colors: ['#ff9f6b', '#e0569a', '#6d5bd6'], angle: 135 })
+  const useMine = (g) => (setMine(g), setLook({ theme: 'custom', gradient: g }))
+  return (
+    <section className="mb-10">
+      <h2 className="mb-1 font-semibold">Aussehen</h2>
+      <p className="mb-5 text-muted">Gilt für alle Fenster und wird in der Datenbank gespeichert, kommt also mit Sicherungen mit. Gedruckt wird immer im Standard.</p>
+
+      <Choice
+        label="Modus"
+        value={look.mode}
+        onChange={(mode) => setLook({ mode })}
+        options={[['system', 'Wie Windows', Monitor], ['light', 'Hell', Sun], ['dark', 'Dunkel', Moon]]}
+      />
+
+      <div className="mb-1.5 text-sm text-muted">Farbschema</div>
+      <div role="radiogroup" aria-label="Farbschema" className="mb-4 flex flex-wrap gap-2">
+        {solid.map((t) => <Swatch key={t.id} theme={t} dark={dark} active={look.theme === t.id} onClick={() => setLook({ theme: t.id })} />)}
+      </div>
+      <div className="mb-1.5 text-sm text-muted">Mit Verlauf</div>
+      <div role="radiogroup" aria-label="Farbschema mit Verlauf" className="mb-5 flex flex-wrap gap-2">
+        {gradients.map((t) => <Swatch key={t.id} theme={t} dark={dark} active={look.theme === t.id} onClick={() => setLook({ theme: t.id })} />)}
+      </div>
+
+      <div className="mb-5 rounded-lg border border-line bg-raised p-3">
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          <span className="text-sm text-muted">Eigener Verlauf</span>
+          {mine.colors.map((c, i) => (
+            <input key={i} type="color" value={c} aria-label={`Farbe ${i + 1}`} onChange={(e) => useMine({ ...mine, colors: mine.colors.map((x, j) => (j === i ? e.target.value : x)) })} className="h-7 w-9 cursor-pointer rounded border border-line bg-transparent" />
+          ))}
+          <button onClick={() => useMine({ ...mine, colors: mine.colors.length === 3 ? mine.colors.slice(0, 2) : [...mine.colors, '#5bc0be'] })} className="rounded-md px-2 py-1 text-sm text-muted hover:bg-hover hover:text-text">
+            {mine.colors.length === 3 ? 'Nur zwei Farben' : '+ dritte Farbe'}
+          </button>
+          <span className="flex gap-0.5" role="radiogroup" aria-label="Richtung">
+            {ANGLES.map(([a, arrow]) => (
+              <button key={a} role="radio" aria-checked={mine.angle === a} title={`Richtung ${arrow}`} onClick={() => useMine({ ...mine, angle: a })} className={`grid size-7 place-items-center rounded-md ${mine.angle === a ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-hover'}`}>
+                {arrow}
+              </button>
+            ))}
+          </span>
+          {look.theme !== 'custom' && <button onClick={() => useMine(mine)} className="rounded-md bg-accent px-3 py-1 text-sm font-medium text-white dark:text-bg">Verwenden</button>}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm text-muted">Eigene Akzentfarbe</span>
+          <input type="color" value={look.accent ?? current.accent.slice(0, 7)} aria-label="Akzentfarbe" onChange={(e) => setLook({ accent: e.target.value })} className="h-7 w-9 cursor-pointer rounded border border-line bg-transparent" />
+          <span className="rounded px-2 py-0.5 text-sm font-medium text-white dark:text-bg" style={{ background: current.accent }}>So sieht ein Knopf aus</span>
+          {look.accent && <button onClick={() => setLook({ accent: null })} className="rounded-md px-2 py-1 text-sm text-muted hover:bg-hover hover:text-text">Vom Schema nehmen</button>}
+        </div>
+        <p className="mt-2 text-xs text-faint">Nexora passt die Helligkeit eigener Farben an, damit Text darauf lesbar bleibt.</p>
+      </div>
+
+      <Choice label="Schriftgröße" value={look.size} onChange={(size) => setLook({ size })} options={[['klein', 'Klein'], ['normal', 'Normal'], ['gross', 'Groß'], ['sehrgross', 'Sehr groß']]} />
+      <Choice label="Schriftart" value={look.font} onChange={(font) => setLook({ font })} options={[['geist', 'Geist'], ['segoe', 'Segoe UI'], ['arial', 'Arial'], ['georgia', 'Georgia']]} styleOf={(id) => ({ fontFamily: FONTS[id] })} />
+      <Choice label="Dichte" value={look.density} onChange={(density) => setLook({ density })} options={[['kompakt', 'Kompakt'], ['normal', 'Normal'], ['luftig', 'Luftig']]} />
+      <Choice label="Seitenbreite" value={look.width} onChange={(width) => setLook({ width })} options={[['schmal', 'Schmal'], ['breit', 'Breit'], ['voll', 'Volle Breite']]} />
+      <Choice label="Ecken" value={look.radius} onChange={(radius) => setLook({ radius })} options={[['eckig', 'Eckig'], ['normal', 'Normal'], ['rund', 'Rund']]} />
+
+      <div className="mb-5">
+        <div className="mb-1.5 text-sm text-muted">Seitenleiste</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => setLook({ sidebarHidden: !look.sidebarHidden })} className="rounded-md border border-line bg-raised px-3 py-1.5 hover:border-faint">
+            {look.sidebarHidden ? 'Seitenleiste zeigen' : 'Seitenleiste einklappen'}
+          </button>
+          <button onClick={() => setLook({ sidebar: DEFAULT_LOOK.sidebar })} disabled={look.sidebar === DEFAULT_LOOK.sidebar} className="rounded-md border border-line bg-raised px-3 py-1.5 hover:border-faint disabled:opacity-50">
+            Breite zurücksetzen
+          </button>
+          <span className="text-sm text-faint">Breite am rechten Rand ziehen; Strg+Umschalt+L klappt ein und aus.</span>
+        </div>
+      </div>
+
+      <button onClick={() => (setMine({ colors: ['#ff9f6b', '#e0569a', '#6d5bd6'], angle: 135 }), setLook({ ...DEFAULT_LOOK, mode: look.mode }))} className="rounded-md px-3 py-1.5 text-muted hover:bg-hover hover:text-text">
+        Aussehen auf Standard zurücksetzen
+      </button>
+    </section>
   )
 }
 

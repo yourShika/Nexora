@@ -12,7 +12,7 @@ export function Overview({ node, kids, onOpen, onAdd, onSave }) {
   return (
     <div className="h-full overflow-y-auto">
     <Cover node={node} onSave={onSave} />
-    <div className={`mx-auto max-w-[760px] px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-14'}`}>
+    <div className={`mx-auto max-w-[var(--page)] px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-14'}`}>
       <IconRow node={node} onSave={onSave} />
       <div className="mb-8 flex items-center gap-3">
         {!node.icon && <NodeIcon node={node} size={26} />}

@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
 import {
   AppWindow, ArrowCircleUp, ArrowsLeftRight, FileArrowDown, FileArrowUp, FolderSimplePlus, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
-  Stamp, Star, Table, Trash, Tray, Warning,
+  SidebarSimple, Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { useApp } from './ctx.js'
+import { DEFAULT_LOOK, setLook, useLook } from './theme.js'
 import logo from '../src-tauri/icons/icon.svg'
 
 export const COLORS = {
@@ -39,14 +40,45 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
   const ctx = { tree, expanded, current, renaming, actions, openMenu, drag, over, setOver }
 
   const m = menu?.node
+  const look = useLook()
+  const [width, setWidth] = useState(null) // während des Ziehens
+
+  // Breite am rechten Rand ziehen; Doppelklick stellt die Standardbreite her
+  function resize(e) {
+    e.preventDefault()
+    const startX = e.clientX
+    const start = look.sidebar
+    let next = start
+    const move = (ev) => setWidth((next = Math.min(440, Math.max(200, Math.round(start + ev.clientX - startX)))))
+    const up = () => {
+      removeEventListener('pointermove', move)
+      removeEventListener('pointerup', up)
+      setWidth(null)
+      if (next !== start) setLook({ sidebar: next })
+    }
+    addEventListener('pointermove', move)
+    addEventListener('pointerup', up)
+  }
+
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-line bg-side">
+    <aside style={{ width: width ?? look.sidebar }} className="relative flex h-full shrink-0 flex-col border-r border-line bg-side">
+      <div
+        role="separator"
+        aria-label="Breite der Seitenleiste ändern"
+        title="Breite ziehen, Doppelklick setzt zurück"
+        onPointerDown={resize}
+        onDoubleClick={() => setLook({ sidebar: DEFAULT_LOOK.sidebar })}
+        className="absolute right-0 top-0 z-20 h-full w-1.5 cursor-col-resize hover:bg-accent/30"
+      />
       <div className="flex h-12 items-center gap-2 px-4">
         <img src={logo} alt="" className="size-5" />
         <span className="font-semibold tracking-tight">Nexora</span>
         <span className="flex-1" />
         <IconButton label="Einstellungen" onClick={() => actions.open('settings')}>
           <GearSix size={16} />
+        </IconButton>
+        <IconButton label="Seitenleiste einklappen (Strg+Umschalt+L)" onClick={() => setLook({ sidebarHidden: true })}>
+          <SidebarSimple size={16} />
         </IconButton>
       </div>
 
@@ -65,7 +97,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
-        <button onClick={onSearch} className="mb-1 flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-muted hover:bg-hover hover:text-text">
+        <button onClick={onSearch} className="mb-1 flex h-[var(--row)] w-full items-center gap-2 rounded-md px-2 text-left text-muted hover:bg-hover hover:text-text">
           <MagnifyingGlass size={16} />
           <span className="flex-1">Suchen</span>
           <kbd className="rounded border border-line px-1 font-sans text-[11px] text-faint">Strg K</kbd>
@@ -82,7 +114,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
             <li key={v.id}>
               <button
                 onClick={() => actions.open(v.id)}
-                className={`flex h-7 w-full items-center gap-2 rounded-md px-2 text-left ${current === v.id ? 'bg-accent-soft' : 'hover:bg-hover'}`}
+                className={`flex h-[var(--row)] w-full items-center gap-2 rounded-md px-2 text-left ${current === v.id ? 'bg-accent-soft' : 'hover:bg-hover'}`}
               >
                 <v.icon size={16} className="text-accent" />
                 <span className="flex-1">{v.label}</span>
@@ -100,7 +132,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
                 <li key={n.id}>
                   <button
                     onClick={() => actions.open(n.id)}
-                    className={`flex h-7 w-full items-center gap-2 rounded-md px-2 text-left ${current === n.id ? 'bg-accent-soft' : 'hover:bg-hover'}`}
+                    className={`flex h-[var(--row)] w-full items-center gap-2 rounded-md px-2 text-left ${current === n.id ? 'bg-accent-soft' : 'hover:bg-hover'}`}
                   >
                     <NodeIcon node={n} />
                     <span className="truncate">{n.title || 'Ohne Titel'}</span>
@@ -150,13 +182,13 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
           </button>
         )}
         {vaultOpen && (
-          <button onClick={onLockVault} title="Tresor jetzt sperren" className="mb-1 flex h-7 w-full items-center gap-2 rounded-md px-2 text-accent hover:bg-hover">
+          <button onClick={onLockVault} title="Tresor jetzt sperren" className="mb-1 flex h-[var(--row)] w-full items-center gap-2 rounded-md px-2 text-accent hover:bg-hover">
             <LockSimpleOpen size={16} /> Tresor offen, sperren
           </button>
         )}
         <button
           onClick={() => actions.open('trash')}
-          className={`flex h-7 w-full items-center gap-2 rounded-md px-2 text-muted ${current === 'trash' ? 'bg-accent-soft text-text' : 'hover:bg-hover hover:text-text'}`}
+          className={`flex h-[var(--row)] w-full items-center gap-2 rounded-md px-2 text-muted ${current === 'trash' ? 'bg-accent-soft text-text' : 'hover:bg-hover hover:text-text'}`}
         >
           <Trash size={16} />
           Papierkorb
@@ -273,7 +305,7 @@ function Row({ node, depth, ctx }) {
         }}
         onContextMenu={(e) => openMenu(e, node)}
         style={{ paddingLeft: 6 + depth * 14 }}
-        className={`group flex h-7 items-center gap-1 rounded-md pr-1 ${active || mark === 'inside' ? 'bg-accent-soft text-text' : 'hover:bg-hover'} ${mark === 'before' ? 'shadow-[inset_0_2px_0_var(--accent)]' : mark === 'after' ? 'shadow-[inset_0_-2px_0_var(--accent)]' : ''}`}
+        className={`group flex h-[var(--row)] items-center gap-1 rounded-md pr-1 ${active || mark === 'inside' ? 'bg-accent-soft text-text' : 'hover:bg-hover'} ${mark === 'before' ? 'shadow-[inset_0_2px_0_var(--accent)]' : mark === 'after' ? 'shadow-[inset_0_-2px_0_var(--accent)]' : ''}`}
       >
         <button
           tabIndex={-1}
@@ -321,6 +353,28 @@ function Heading({ children, action }) {
       {children}
       {action}
     </div>
+  )
+}
+
+// Eingeklappte Seitenleiste: schmale Leiste mit dem Nötigsten
+export function Rail({ current, counts, actions, onSearch }) {
+  const item = (label, Icon, run, active, count) => (
+    <button key={label} aria-label={label} title={label} onClick={run} className={`relative grid size-8 place-items-center rounded-md ${active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-hover hover:text-text'}`}>
+      <Icon size={17} />
+      {count > 0 && <span className="absolute -right-0.5 -top-0.5 rounded-full bg-accent px-1 text-[10px] leading-4 text-white dark:text-bg">{count}</span>}
+    </button>
+  )
+  return (
+    <aside className="flex h-full w-11 shrink-0 flex-col items-center gap-1 border-r border-line bg-side py-2">
+      {item('Seitenleiste zeigen (Strg+Umschalt+L)', SidebarSimple, () => setLook({ sidebarHidden: false }))}
+      <span className="my-1 h-px w-6 bg-line" />
+      {item('Suchen (Strg+K)', MagnifyingGlass, onSearch)}
+      {item('Heute', Lightning, () => actions.open('today'), current === 'today', counts.today)}
+      {item('Eingang', Tray, () => actions.open('inbox'), current === 'inbox', counts.inbox)}
+      {item('Kalender', CalendarBlank, () => actions.open('calendar'), current === 'calendar')}
+      <span className="flex-1" />
+      {item('Einstellungen', GearSix, () => actions.open('settings'), current === 'settings')}
+    </aside>
   )
 }
 
