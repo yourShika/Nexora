@@ -3,7 +3,7 @@
 Eine schlanke Desktop-App: Notion + Notepad + Code + OneNote, ohne Ballast.
 Name: Nexora.
 
-Stand: 2026-10-28.
+Stand: 2026-10-29.
 
 ## Rahmen
 
@@ -87,6 +87,50 @@ Die neuen Nummern 52–71 werden beim Bau der passenden Stufe eingeordnet.
 - **0.16.0 (Stufe 4, Vaultwarden):** Tresor über die Bitwarden-CLI (bw, per winget): Anmelden einmal im Terminal, Nexora entsperrt mit dem Master-Passwort (nur per Umgebungsvariable an bw), Sitzung nur im Speicher, sperrt sich nach 15 Minuten (einstellbar) und beim Beenden; „/Tresor-Eintrag“ fügt einen Verweis `[[vault:id|Name]]` ein (nur ID und Name gespeichert) mit Knöpfen Benutzer/Passwort kopieren; Passwort in der Zwischenablage nach 30 s gelöscht und vom Windows-Verlauf und Cloud-Abgleich ausgenommen; Runbooks: `{{vault:Name}}` (Passwort) und `{{vault:Name:benutzer}}`, eingesetzt in Rust, Passwörter in Ausgabe und Protokoll als ••••••; Passwörter erreichen die Oberfläche nie
 - **0.17.0 (Stufe 4, Outlook):** über das installierte klassische Outlook (COM, festes PowerShell-Skript), in den Einstellungen einzuschalten: offene Punkte mit Fälligkeit als Termine im eigenen Kalender „Nexora“ (ohne Uhrzeit ganztägig, mit Uhrzeit 30 Minuten, ohne Erinnerung, als frei, Kategorie „Nexora“); Änderungen und Erledigt werden nachgezogen, andere Kalender fasst Nexora nicht an; Outlook-Termine (eine Woche zurück bis zwei Monate voraus) in Heute und im Gesamtkalender, nur angezeigt, nicht gespeichert; Abgleich alle 15 Minuten, 10 s nach Änderungen und per Knopf. Testversion arbeitet nur mit „Nexora-Test“
 - Offen in Stufe 4: OneNote zurückschreiben (nach Test des Lesens durch den Nutzer); Outlook-Termine in der Zeitleiste; bei Umstieg auf das neue Outlook auf Graph wechseln
+
+## Stufe 5 – Team (Plan, abgestimmt am 2026-10-29)
+
+### Entscheidungen
+
+- **Nutzerkreis:** erst das IT-Team; mehr Abteilungen später ohne Umbau
+- **Daten auf dem Server:** nur ausdrücklich geteilte Team-Notizbücher. Alles Private bleibt nur auf dem eigenen PC
+- **Bearbeiten:** gleichzeitig wie Google Docs (Cursor der anderen sichtbar) für normale Seiten, Codeblöcke und eingebettete Listen. Freie Seiten und Zeichnungen erst nacheinander („wird bearbeitet von X“), gleichzeitig später
+- **Offline:** Team-Bereiche auch offline lesen und bearbeiten. Text führt Yjs beim nächsten Kontakt automatisch zusammen (keine Konflikt-Kopien); bei LOP-Feldern gewinnt die letzte Änderung, der Verlauf zeigt wer
+- **Zuweisen:** Personenfeld = echte Kollegen aus Entra. Hinweis per Windows-Meldung von Nexora (sonst beim nächsten Start im Eingang); keine Mail, kein Teams
+- **Fremder Code:** wurde ein Codeblock seit deinem letzten Lauf von jemand anderem geändert, zeigt Nexora vor dem Ausführen wer und den Unterschied und fragt nach
+- **Server-Code:** Ordner `server/` im Nexora-Repo auf GitHub (keine Firmendaten, alles über `.env`); Arcane baut direkt von GitHub
+
+### Aufbau
+
+- **Nexora-Server:** ein Container wie das Intranet (Node 24, eingebautes SQLite, Express), Yjs-Abgleich über Hocuspocus (WebSocket), Daten im Volume `/data` (Datenbank, Yjs-Dokumente, Bilder, Anhänge), tägliche Sicherung. Hinter dem Nginx Proxy Manager, z. B. `https://nexora.firma.local`
+- **Anmeldung:** eigene Entra-App „Nexora“ (Desktop-App, Anmeldung einmal im Browser mit PKCE über `http://localhost`), Token im Windows-Anmeldespeicher; der Server prüft jedes Entra-Token und die Gruppen
+- **Rechte:** je Team-Notizbuch Lesen, Bearbeiten, Verwalten für Personen oder Entra-Gruppen (z. B. die IT-Gruppe); geprüft auf dem Server bei jedem Zugriff
+- **Abgleich:** Baum, Titel, Symbole und LOP-Felder über die Server-API mit Versionsnummer je Eintrag (UUID und `updated_at` gibt es seit Stufe 1); live über dieselbe Verbindung. Seiteninhalt als Yjs-Dokument; Nexora schreibt daneben weiter Markdown, damit Suche, Verlauf, Export, Sicherung und Texterkennung unverändert laufen
+- **Lokale Kopie:** Team-Notizbücher liegen zusätzlich in der lokalen Datenbank (Yjs-Stand je Seite), Änderungen ohne Verbindung warten in einer Warteschlange
+
+### Teilschritte (je ein Release)
+
+1. **Server und Anmeldung:** Server-Grundgerüst mit Gesundheitsseite, Entra-Prüfung, Dockerfile und `compose.yaml`, Anleitung für Arcane; in Nexora „Mit Team-Server verbinden“ (Anmelden, angemeldet als …, Abmelden)
+2. **Team-Notizbücher:** neues Team-Notizbuch anlegen oder vorhandenes teilen, Rechte vergeben; Baum und LOP-Punkte abgleichen, live und offline mit Warteschlange
+3. **Gemeinsam schreiben:** normale Seiten gleichzeitig (Yjs, Cursor mit Namen und Farben), offline zusammenführen, Versionsverlauf mit Namen; freie Seiten „wird bearbeitet von X“
+4. **Bilder und Anhänge** in Team-Notizbüchern über den Server, lokal zwischengespeichert
+5. **Zuweisen:** Kollegen aus Entra im Personenfeld, zugewiesene Punkte in Heute und Eingang des Kollegen, Windows-Meldung, Verlauf mit Namen
+6. **Runbooks im Team:** Nachfrage mit Unterschied bei fremd geändertem Code
+7. Später: freie Seiten und Zeichnungen gleichzeitig; weitere Abteilungen
+
+### Was du einrichten musst (Anleitung kommt mit Schritt 1)
+
+- Entra: App-Registrierung „Nexora“ (Plattform „Mobile und Desktop“, Umleitung `http://localhost`), eine API-Berechtigung für den Server, Gruppenansprüche im Token
+- Server: DNS-Eintrag für den Server (z. B. `nexora.firma.local`), Proxy-Host im Nginx Proxy Manager mit WebSocket-Unterstützung, freier Port (vorher prüfen), Arcane-Projekt mit `compose.yaml` und `.env`
+- Prüfen, ob Arcane github.com erreicht (Firewall); sonst Spiegel im eigenen Git-Server
+
+### Risiken und Hinweise
+
+- Yjs ist ein zweites Speicherformat: beim Teilen wird eine vorhandene Seite einmalig aus Markdown umgewandelt. Eigene Bausteine (Seitenlinks, LOP-Einbettung, Tresor-Verweis, Anhang, Bild, Codeblock) sind ProseMirror-Knoten und gehen mit
+- Tresor-Verweise zeigen auf den persönlichen Tresor: Kollegen sehen den Eintrag nur, wenn er in einer gemeinsamen Vaultwarden-Sammlung liegt
+- Outlook: aus Team-Listen gehen nur Punkte in den eigenen Kalender, die einem selbst zugewiesen sind (Vorschlag, noch zu bestätigen)
+- Der Server ist nur im Firmennetz erreichbar; unterwegs ohne VPN arbeitet Nexora offline weiter
+- Auf dem Dev-PC gibt es kein Docker: den Container-Build sehe ich erst auf eurem Server
 
 ## Offen
 
