@@ -93,7 +93,7 @@ export function QuickAdd({ onAdd, placeholder = 'Neuer Punkt: Text #tag @person 
   }
   const track = (e) => setCaret(e.target.selectionStart ?? e.target.value.length)
   return (
-    <div className="relative mb-3">
+    <div data-tour="neuer-punkt" className="relative mb-3">
       <input
         ref={input}
         value={text}

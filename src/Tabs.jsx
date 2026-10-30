@@ -50,7 +50,7 @@ export default function Tabs({ tabs, active, onSelect, onClose, onPin, onMove, o
   }
 
   return (
-    <nav aria-label="Reiter" data-tauri-drag-region className="flex min-w-0 items-stretch gap-0.5 pt-1.5">
+    <nav aria-label="Reiter" data-tour="reiter" data-tauri-drag-region className="flex min-w-0 items-stretch gap-0.5 pt-1.5">
       {tabs.map((t) => {
         const on = t.key === active
         const mark = over?.key !== t.key ? '' : over.side === 'before' ? 'shadow-[inset_2px_0_0_var(--accent)]' : 'shadow-[inset_-2px_0_0_var(--accent)]'

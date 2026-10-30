@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import {
   AppWindow, ArrowCircleUp, ArrowsLeftRight, FileArrowDown, FileArrowUp, FolderSimplePlus, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
-  Browsers, LockSimple, PushPin, SidebarSimple, Sparkle, Stamp, Star, Table, Trash, Tray, Warning,
+  Browsers, Compass, LockSimple, PushPin, SidebarSimple, Sparkle, Stamp, Star, Table, Trash, Tray, Warning, Wrench,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { useApp } from './ctx.js'
@@ -100,12 +100,12 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
-        <button onClick={onSearch} className="mb-1 flex h-[var(--row)] w-full items-center gap-2 rounded-md px-2 text-left text-muted hover:bg-hover hover:text-text">
+        <button onClick={onSearch} data-tour="suche" className="mb-1 flex h-[var(--row)] w-full items-center gap-2 rounded-md px-2 text-left text-muted hover:bg-hover hover:text-text">
           <MagnifyingGlass size={16} />
           <span className="flex-1">Suchen</span>
           <kbd className="rounded border border-line px-1 font-sans text-[11px] text-faint">Strg K</kbd>
         </button>
-        <ul className="mb-3">
+        <ul data-tour="ansichten" className="mb-3">
           {[
             { id: 'today', label: 'Heute', icon: Lightning, count: counts.today },
             { id: 'inbox', label: 'Eingang', icon: Tray, count: counts.inbox },
@@ -168,11 +168,11 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
           Notizbücher
         </Heading>
         {tree.roots.length ? (
-          <ul role="tree" aria-label="Notizbücher">
+          <ul role="tree" aria-label="Notizbücher" data-tour="baum">
             {tree.roots.map((n) => <Row key={n.id} node={n} depth={0} ctx={ctx} />)}
           </ul>
         ) : (
-          <button onClick={() => actions.add('notebook', null)} className="w-full rounded-md px-2 py-2 text-left text-muted hover:bg-hover">
+          <button onClick={() => actions.add('notebook', null)} data-tour="baum" className="w-full rounded-md px-2 py-2 text-left text-muted hover:bg-hover">
             Erstes Notizbuch anlegen
           </button>
         )}
@@ -412,7 +412,7 @@ function UserButton({ current, actions }) {
   const open = (e) => {
     e.preventDefault()
     const r = e.currentTarget.getBoundingClientRect()
-    setMenu({ x: r.left, y: r.top - 168 }) // darüber; Menu schiebt es sonst ins Fenster
+    setMenu({ x: r.left, y: r.top - 214 }) // darüber; Menu schiebt es sonst ins Fenster
   }
   const run = (fn) => () => (close(), fn())
   return (
@@ -422,6 +422,7 @@ function UserButton({ current, actions }) {
         onContextMenu={open}
         aria-haspopup="menu"
         aria-label={`${profile.name || 'Benutzer'}: Neuigkeiten, Papierkorb, Einstellungen`}
+        data-tour="benutzer"
         className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-left ${current === 'trash' || menu ? 'bg-accent-soft' : 'hover:bg-hover'}`}
       >
         <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold text-white" style={{ background: COLORS[profile.color] ?? COLORS.petrol }}>
@@ -436,6 +437,8 @@ function UserButton({ current, actions }) {
           <MenuItem icon={Trash} onClick={run(() => actions.open('trash'))}>Papierkorb</MenuItem>
           <MenuItem icon={GearSix} onClick={run(() => actions.open('settings'))}>Einstellungen</MenuItem>
           <MenuItem icon={ArrowsClockwise} onClick={run(actions.checkUpdates)}>Nach Updates suchen</MenuItem>
+          <MenuItem icon={Wrench} onClick={run(actions.startSetup)}>Einrichtung …</MenuItem>
+          <MenuItem icon={Compass} onClick={run(actions.startTour)}>Rundgang</MenuItem>
         </Menu>
       )}
     </>

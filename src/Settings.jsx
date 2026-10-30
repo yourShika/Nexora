@@ -165,7 +165,7 @@ function RunbookSection() {
 }
 
 // Anmeldung am Team-Server (Stufe 5): Microsoft-Anmeldung im Browser, Token bleibt verschlüsselt auf diesem PC
-function TeamSection() {
+export function TeamSection() {
   const [status, setStatus] = useState(null)
   const [server, setServer] = useState('')
   const [busy, setBusy] = useState('')
@@ -382,7 +382,7 @@ function UpdateSection({ updates }) {
 const WINDOW_MODES = [['never', 'Nie'], ['ctrl', 'Mit Strg+Klick'], ['always', 'Immer']]
 
 // Ein Tastenkürzel aufnehmen: klicken, Kombination drücken; belegt ein anderes Programm sie, bleibt die alte
-function HotkeyRow({ item, accel, busy, onChange }) {
+export function HotkeyRow({ item, accel, busy, onChange }) {
   const [recording, setRecording] = useState(false)
   const [message, setMessage] = useState('')
   async function onKey(e) {
@@ -432,15 +432,11 @@ const CATEGORIES = [
 ]
 const norm = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 
-export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBackupNow, updates, windowMode, onWindowMode, outlook, onOutlook, onOutlookSync, tab, onTab }) {
+// Mit Windows starten; auch in der Einrichtung
+export function AutostartToggle() {
   const [message, setMessage] = useState('')
-  const [dir, setDir] = useState('')
-  const [digestTime, setDigestTime] = useState('08:00')
   const [autostart, setAutostart] = useState(null)
-  const [q, setQ] = useState('')
   useEffect(() => {
-    appConfigDir().then(setDir).catch(() => {})
-    db.getSetting('digestTime').then((v) => v && setDigestTime(v)).catch(() => {})
     isEnabled().then(setAutostart).catch(() => setAutostart(false))
   }, [])
 
@@ -452,6 +448,33 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
       setMessage(`Autostart nicht geändert: ${e}`)
     }
   }
+
+  return (
+    <>
+      <label className="flex items-center gap-3">
+        <input
+          type="checkbox"
+          checked={!!autostart}
+          disabled={autostart === null || import.meta.env.DEV}
+          onChange={(e) => toggleAutostart(e.target.checked)}
+          className="size-4 accent-[var(--accent)]"
+        />
+        Mit Windows starten (versteckt im Tray)
+        {import.meta.env.DEV && <span className="text-xs text-faint">im Testmodus abgeschaltet</span>}
+      </label>
+      {message && <p className="mt-2 text-danger">{message}</p>}
+    </>
+  )
+}
+
+export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBackupNow, updates, windowMode, onWindowMode, outlook, onOutlook, onOutlookSync, tab, onTab }) {
+  const [dir, setDir] = useState('')
+  const [digestTime, setDigestTime] = useState('08:00')
+  const [q, setQ] = useState('')
+  useEffect(() => {
+    appConfigDir().then(setDir).catch(() => {})
+    db.getSetting('digestTime').then((v) => v && setDigestTime(v)).catch(() => {})
+  }, [])
 
   const words = norm(q).split(/\s+/).filter(Boolean)
   const found = CATEGORIES.filter((c) => words.every((w) => norm(`${c.label} ${c.keys}`).includes(w)))
@@ -483,18 +506,7 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
         </section>
         <section className="mb-10">
           <h2 className="mb-1 font-semibold">Start</h2>
-          <label className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={!!autostart}
-              disabled={autostart === null || import.meta.env.DEV}
-              onChange={(e) => toggleAutostart(e.target.checked)}
-              className="size-4 accent-[var(--accent)]"
-            />
-            Mit Windows starten (versteckt im Tray)
-            {import.meta.env.DEV && <span className="text-xs text-faint">im Testmodus abgeschaltet</span>}
-          </label>
-          {message && <p className="mt-2 text-danger">{message}</p>}
+          <AutostartToggle />
         </section>
       </>
     ),
@@ -648,7 +660,7 @@ function Swatch({ theme, active, dark, onClick }) {
 }
 
 // Name und Farbe unten links in der Seitenleiste (später mit dem Team-Server das Microsoft-Konto)
-function ProfileSection() {
+export function ProfileSection() {
   const app = useApp()
   const p = app.profile
   const [name, setName] = useState(p.name)
@@ -736,20 +748,14 @@ function PeopleSection() {
   )
 }
 
-function AppearanceSection() {
+// Modus und Farbschema; auch in der Einrichtung
+export function ThemeChoice() {
   const look = useLook()
-  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
   const dark = useDark()
   const solid = THEMES.filter((t) => !t.stops)
   const gradients = THEMES.filter((t) => t.stops)
-  const current = palette(look, dark)
-  const [mine, setMine] = useState(() => look.gradient ?? { colors: ['#ff9f6b', '#e0569a', '#6d5bd6'], angle: 135 })
-  const useMine = (g) => (setMine(g), setLook({ theme: 'custom', gradient: g }))
   return (
-    <section className="mb-10">
-      <h2 className="mb-1 font-semibold">Aussehen</h2>
-      <p className="mb-5 text-muted">Gilt für alle Fenster und wird in der Datenbank gespeichert, kommt also mit Sicherungen mit. Gedruckt wird immer im Standard.</p>
-
+    <>
       <Choice
         label="Modus"
         value={look.mode}
@@ -765,6 +771,23 @@ function AppearanceSection() {
       <div role="radiogroup" aria-label="Farbschema mit Verlauf" className="mb-5 flex flex-wrap gap-2">
         {gradients.map((t) => <Swatch key={t.id} theme={t} dark={dark} active={look.theme === t.id} onClick={() => setLook({ theme: t.id })} />)}
       </div>
+    </>
+  )
+}
+
+function AppearanceSection() {
+  const look = useLook()
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
+  const dark = useDark()
+  const current = palette(look, dark)
+  const [mine, setMine] = useState(() => look.gradient ?? { colors: ['#ff9f6b', '#e0569a', '#6d5bd6'], angle: 135 })
+  const useMine = (g) => (setMine(g), setLook({ theme: 'custom', gradient: g }))
+  return (
+    <section className="mb-10">
+      <h2 className="mb-1 font-semibold">Aussehen</h2>
+      <p className="mb-5 text-muted">Gilt für alle Fenster und wird in der Datenbank gespeichert, kommt also mit Sicherungen mit. Gedruckt wird immer im Standard.</p>
+
+      <ThemeChoice />
 
       <div className="mb-5 rounded-lg border border-line bg-raised p-3">
         <div className="mb-2 flex flex-wrap items-center gap-3">

@@ -39,6 +39,8 @@ import * as T from './tabs.js'
 import TitleBar from './TitleBar.jsx'
 import { useWindowIcon } from './AppIcon.jsx'
 import News from './News.jsx'
+import Setup, { Tour } from './Setup.jsx'
+import { EXAMPLE_ROWS, HELP_PAGE, HELP_TITLE, SEED_BOOK, SEED_SECTION, WELCOME, tourStations } from './setup.js'
 import { getVersion } from '@tauri-apps/api/app'
 import { appConfigDir, homeDir, join } from '@tauri-apps/api/path'
 import { peopleList, personsOf } from './people.js'
@@ -58,7 +60,6 @@ const DEFAULT_TITLE = { notebook: 'Neues Notizbuch', section: 'Neuer Abschnitt',
 // Abschnitte dürfen in Abschnitten liegen (wie Abschnittsgruppen in OneNote)
 // Seiten und Listen dürfen auch direkt im Notizbuch liegen (ohne Abschnitt)
 const PARENTS = { notebook: [null], section: ['notebook', 'section'], page: ['notebook', 'section', 'page'], database: ['notebook', 'section', 'page'] }
-const SEED_SECTION = '7d1f3c2a-0b6e-4c55-9a1e-3f0d2b8c4e02'
 
 function loadExpanded() {
   try {
@@ -129,6 +130,8 @@ export default function App() {
   const [peopleSaved, setPeopleSaved] = useState([]) // Personenliste mit Farben (Einstellung "personen")
   const [profile, setProfile] = useState({ name: '', color: 'petrol' }) // Benutzer-Anzeige unten links (Einstellung "profil")
   const [news, setNews] = useState(null) // Version, deren Neuigkeiten gerade offen sind
+  const [setup, setSetup] = useState(null) // Einrichtung offen: { first } (first = neue Installation)
+  const [tour, setTour] = useState(null) // Rundgang läuft: { stations, back } (back = Ansicht davor)
   const [appVersion, setAppVersion] = useState('')
   const areaValue = area === 'privat' ? 'privat' : null // so steht er am obersten Knoten
   const [notice, setNotice] = useState('')
@@ -510,6 +513,8 @@ export default function App() {
         const up = []
         for (let n = byId.get(start?.parent_id); n; n = byId.get(n.parent_id)) up.push(n.id)
         setExpanded((s) => new Set([...s, ...up]))
+        // Neue Installation: Einrichtung zeigen, bis sie beendet ist (auch wenn Nexora zwischendurch zugeht)
+        db.getSetting('einrichtung').then((v) => v === 'offen' && setSetup({ first: true })).catch(() => {})
         // Text in Bildern und Anhängen erst, wenn die App steht; läuft still im Hintergrund
         setTimeout(indexText, 5000)
         return restoreWindows((id) => all.some((n) => n.id === id && !n.deleted_at)).then((ids) => setWindows(new Set(ids)))
@@ -1013,7 +1018,9 @@ export default function App() {
         const n = list.filter((x) => x.kind === k).length
         return `${n} ${n === 1 ? one : many}`
       }
-      setNotice(`„${book.title}“ importiert: ${count('page', 'Seite', 'Seiten')}, ${count('database', 'Liste', 'Listen')} mit ${count('row', 'Punkt', 'Punkten')}, ${assets.size} ${assets.size === 1 ? 'Bild oder Datei' : 'Bilder und Dateien'}${failed ? `; ${failed} nicht übernommen` : ''}.`)
+      const lists = list.some((n) => n.kind === 'database') ? `, ${count('database', 'Liste', 'Listen')} mit ${count('row', 'Punkt', 'Punkten')}` : ''
+      const copied = assets.size ? `, ${assets.size} ${assets.size === 1 ? 'Bild oder Datei' : 'Bilder und Dateien'}` : ''
+      setNotice(`„${book.title}“ importiert: ${count('page', 'Seite', 'Seiten')}${lists}${copied}${failed ? `; ${failed} nicht übernommen` : ''}.`)
     } catch (e) {
       setError(`Import: ${e.message ?? e}`)
     } finally {
@@ -1040,6 +1047,47 @@ export default function App() {
   const actions = {
     fromTemplate,
     showNews: () => setNews(appVersion),
+    startSetup: () => setSetup({ first: false }),
+    // Rundgang: Seitenleiste muss sichtbar sein; Seite und Liste aus dem aktiven Bereich, die Hilfeseite zuerst
+    startTour() {
+      setLook({ sidebarHidden: false })
+      setFocusMode(false)
+      const of = (kind) => [...areaTree.alive.values()].filter((n) => n.kind === kind && !n.template)
+      const pages = of('page')
+      setTour({ stations: tourStations({ page: (pages.find((n) => n.title === HELP_TITLE) ?? pages[0])?.id, list: of('database')[0]?.id }), back: current })
+    },
+    // Notizbuch aus der Einrichtung. Beim ersten Start ist das Beispiel-Notizbuch schon da: umbenennen oder in den Papierkorb
+    // (nicht endgültig löschen, falls doch schon etwas darin steht). Gibt den Text für den Assistenten zurück, bei Fehlern null
+    async setupNotebook(first, name, choice) {
+      try {
+        const title = name.trim() || 'Mein Notizbuch'
+        let open = null
+        if (first) {
+          if (choice === 'keins') await db.trash(SEED_BOOK)
+          else {
+            await db.update(SEED_BOOK, { title })
+            if (choice === 'leer') await db.trash(SEED_SECTION)
+            open = choice === 'leer' ? SEED_BOOK : null
+          }
+        } else if (choice !== 'keins') {
+          const book = await db.create('notebook', null, title, { area: areaValue, sort: (tree.roots.at(-1)?.sort ?? 0) + 1000 })
+          if (choice === 'beispiele') {
+            const section = await db.create('section', book.id, 'Erste Schritte')
+            const page = await db.create('page', section.id, 'Willkommen')
+            await db.update(page.id, { body: WELCOME })
+            await addExamples(section.id)
+            setExpanded((s) => new Set([...s, book.id, section.id]))
+          }
+          open = book.id
+        }
+        setNodes(await db.allNodes())
+        if (open) setCurrent(open)
+        return choice === 'keins' ? 'Das Beispiel-Notizbuch liegt im Papierkorb.' : `Notizbuch „${title}“ ist eingerichtet.`
+      } catch (e) {
+        fail(e)
+        return null
+      }
+    },
     // Benutzer-Anzeige → Nach Updates suchen
     async checkUpdates() {
       const found = await updates.check()
@@ -1323,6 +1371,8 @@ export default function App() {
     { label: 'Schnellerfassung', run: () => invoke('toggle_capture') },
     { label: 'Fokus-Modus (Strg+Umschalt+F)', run: () => setFocusMode((f) => !f) },
     { label: 'Neues Notizbuch', run: () => actions.add('notebook', null) },
+    { label: 'Einrichtung starten', run: () => actions.startSetup() },
+    { label: 'Rundgang durch Nexora', run: () => actions.startTour() },
     { label: 'Nexora-Datei importieren …', run: () => actions.importNexora() },
     { label: 'Obsidian-Vault importieren …', run: () => actions.importForeign('obsidian') },
     { label: 'Notion-Export importieren (Zip) …', run: () => actions.importForeign('notion') },
@@ -1542,7 +1592,7 @@ export default function App() {
         onLockVault={lockVault}
       />}
       {/* key: jede Seite frisch; das Einblenden macht setCurrent */}
-      <main key={current} className="page-main min-w-0 flex-1 bg-bg">{view}</main>
+      <main key={current} data-tour="inhalt" className="page-main min-w-0 flex-1 bg-bg">{view}</main>
       </div>
 
       {printing?.ask && <PrintAsk node={printing.ask} count={printing.count} onChoose={(kids) => (kids === null ? setPrinting(null) : printPage(printing.ask, kids))} />}
@@ -1575,6 +1625,21 @@ export default function App() {
           }}
         />
       )}
+      {setup && (
+        // vor dem OneNote-Dialog, der aus dem Assistenten heraus darüber aufgeht
+        <Setup
+          first={setup.first}
+          actions={actions}
+          hotkeys={hotkeys}
+          hotkeyBusy={hotkeyBusy}
+          onHotkey={changeHotkey}
+          onClose={(withTour) => {
+            if (setup.first) db.setSetting('einrichtung', 'fertig').catch(fail)
+            setSetup(null)
+            if (withTour) actions.startTour()
+          }}
+        />
+      )}
       {oneNote && (
         <OneNoteConnect
           connected={new Set(nodes.filter((n) => n.kind === 'notebook' && !n.deleted_at && oneNoteLink(n)?.id).map((n) => oneNoteLink(n).id))}
@@ -1584,6 +1649,16 @@ export default function App() {
         />
       )}
       {news && <News version={news} onClose={() => setNews(null)} />}
+      {tour && (
+        <Tour
+          stations={tour.stations}
+          onOpen={setCurrent}
+          onClose={() => {
+            setCurrent(tour.back)
+            setTour(null)
+          }}
+        />
+      )}
       {searching && <Search tree={areaTree} pathOf={pathOf} commands={commands} onOpen={actions.open} onClose={() => setSearching(false)} />}
 
       {oneNoteRun && !oneNoteRun.silent && <OneNoteProgress run={oneNoteRun} onStop={() => (stopSync.current = true)} onClose={() => setOneNoteRun(null)} />}
@@ -1620,16 +1695,21 @@ function isBelow(nodes, n, ancestorId) {
   return false
 }
 
-// Einmalig eine LOP-Liste mit zwei Beispielpunkten in "Erste Schritte" anlegen
+// Beispielinhalt: LOP-Liste mit zwei Punkten und die Hilfeseite zum Nachlesen
+async function addExamples(sectionId) {
+  const config = lopConfig()
+  config.nextNr = EXAMPLE_ROWS.length + 1
+  const list = await db.create('database', sectionId, 'Offene Punkte', { config })
+  for (const [title, props, dueToday] of EXAMPLE_ROWS) await db.create('row', list.id, title, { props: dueToday ? { ...props, due: today() } : props })
+  const help = await db.create('page', sectionId, HELP_TITLE)
+  await db.update(help.id, { body: HELP_PAGE })
+}
+
+// Einmalig die Beispiele in "Erste Schritte" anlegen. Dass das hier noch nicht lief, heißt: neue Installation, also Einrichtung zeigen
 async function seedLop() {
   if (await db.getSetting('seed-lop')) return
   const all = await db.allNodes()
-  if (all.some((n) => n.id === SEED_SECTION && !n.deleted_at)) {
-    const config = lopConfig()
-    config.nextNr = 3
-    const list = await db.create('database', SEED_SECTION, 'Offene Punkte', { config })
-    await db.create('row', list.id, 'Schnellerfassung ausprobieren (Tasten unter Einstellungen)', { props: { nr: 1, status: 'offen', prio: 'hoch', due: today() } })
-    await db.create('row', list.id, 'Eigene Felder unter „Felder“ anlegen', { props: { nr: 2, status: 'offen', prio: 'niedrig' } })
-  }
+  if (all.some((n) => n.id === SEED_SECTION && !n.deleted_at)) await addExamples(SEED_SECTION)
   await db.setSetting('seed-lop', '1')
+  await db.setSetting('einrichtung', 'offen')
 }

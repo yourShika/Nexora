@@ -2,6 +2,17 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.34.0',
+    date: '2026-10-30',
+    title: 'Einrichtung & Rundgang',
+    items: [
+      '**Einrichtung**: Bei einer neuen Installation führt Nexora durch Name und Farbe (oder Team-Server), Aussehen, das erste Notizbuch und die Schnellerfassung. Dein Bestand bleibt unberührt; du kannst sie von Hand starten: Klick auf deinen Namen unten links.',
+      '**Rundgang**: sieben kurze Stationen zeigen direkt in der Oberfläche, wo was liegt. Ebenfalls über deinen Namen unten links oder die Suche (Strg+K).',
+      'Das erste Notizbuch kann **Beispiele** enthalten oder **leer** sein; OneNote, Obsidian, Notion und Nexora-Dateien lassen sich gleich dort übernehmen.',
+      'Neu im Beispielinhalt: die Seite **„Nexora kennenlernen“** zum Nachlesen. In einer bestehenden Installation bekommst du sie über Einrichtung → Notizbücher → „Mit Beispielen“.',
+    ],
+  },
+  {
     version: '0.33.0',
     date: '2026-10-30',
     title: 'Felder & Import',
