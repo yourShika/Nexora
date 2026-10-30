@@ -40,6 +40,8 @@ import TitleBar from './TitleBar.jsx'
 import { useWindowIcon } from './AppIcon.jsx'
 import News from './News.jsx'
 import Setup, { Tour } from './Setup.jsx'
+import Jobs from './Jobs.jsx'
+import { useJobs } from './useJobs.js'
 import { EXAMPLE_ROWS, HELP_PAGE, HELP_TITLE, SEED_BOOK, SEED_SECTION, WELCOME, tourStations } from './setup.js'
 import { getVersion } from '@tauri-apps/api/app'
 import { appConfigDir, homeDir, join } from '@tauri-apps/api/path'
@@ -588,8 +590,10 @@ export default function App() {
       }
       const at = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
       setOutlook((o) => ({ ...o, busy: false, last: `${at} Uhr: ${parts.join(', ')}` }))
+      return { text: parts.join(', ') }
     } catch (e) {
       setOutlook((o) => ({ ...o, busy: false, error: String(e.message ?? e) }))
+      return { error: String(e.message ?? e) }
     } finally {
       outlookRunning.current = false
     }
@@ -616,6 +620,41 @@ export default function App() {
     const every = setInterval(outlookSync, 15 * 60e3)
     return () => clearInterval(every)
   }, [outlook.push, outlook.read, outlookSync])
+  // Aufgaben (zeitgesteuert): Aktualisieren nutzt die vorhandenen Abläufe, Fehler kommen als Ausnahme zurück in den Verlauf
+  const [mainBump, setMainBump] = useState(0) // Neuaufbau der offenen Seite, wenn eine Aufgabe sie neu geschrieben hat
+  const jobState = useJobs(loaded && !windowPage, {
+    async outlook() {
+      const r = await outlookSync()
+      if (!r) throw new Error('Unter Einstellungen → Outlook ist nichts eingeschaltet, oder der Abgleich läuft gerade.')
+      if (r.error) throw new Error(r.error)
+      return r.text
+    },
+    async onenote(which) {
+      const linked = [...tree.alive.values()].filter((n) => n.kind === 'notebook' && oneNoteLink(n)?.id)
+      const books = which && which !== 'alle' ? linked.filter((n) => n.id === which) : linked
+      if (!books.length) throw new Error('Kein verbundenes OneNote-Notizbuch gefunden.')
+      const texts = []
+      for (const nb of books) {
+        const r = await oneNoteSyncRef.current(nb.id, { silent: true })
+        if (!r) throw new Error('Es läuft gerade schon ein OneNote-Abgleich.')
+        if (r.error) throw new Error(`${nb.title}: ${r.error}`)
+        texts.push(`${nb.title}: ${r.text}`)
+      }
+      return texts.join('; ')
+    },
+    async backup() {
+      const s = await loadBackupSettings()
+      if (!s.dir) throw new Error('Kein Sicherungsordner eingestellt (Einstellungen → Sicherung).')
+      const dest = await runBackup(s)
+      if (!dest) throw new Error('Es läuft gerade schon eine Sicherung.')
+      setBackup({ busy: false, error: '', dest })
+      return `Gesichert nach ${dest}`
+    },
+    alive: (id) => tree.alive.has(id),
+    reload,
+    pageWritten: (id) => id === current && setMainBump((k) => k + 1),
+  })
+
   function setOutlookOption(key, on) {
     setOutlook((o) => ({ ...o, [key]: on }))
     db.setSetting(`outlook-${key}`, on ? '1' : '0').catch(fail)
@@ -1135,7 +1174,7 @@ export default function App() {
     openHere(id, newTab = false) {
       changeTabs((s) => T.show(s, id, newTab))
       setFresh(null)
-      if (!['trash', 'today', 'inbox', 'settings', 'snippets', 'calendar', 'journal', 'stats'].includes(id)) {
+      if (!['trash', 'today', 'inbox', 'settings', 'snippets', 'jobs', 'calendar', 'journal', 'stats'].includes(id)) {
         db.touch(id).catch(() => {})
         const node = tree.alive.get(id)
         setExpanded((s) => new Set([...s, ...pathOf(id).slice(0, -1).map((n) => n.id), ...(['notebook', 'section'].includes(node?.kind) ? [id] : [])]))
@@ -1156,7 +1195,7 @@ export default function App() {
     // Abgleich im Hintergrund. Von Hand: Fenster unten rechts mit Fortschritt; silent (automatisch): still, nur ein
     // Hinweis, wenn sich etwas geändert hat. Läuft schon einer, wird er nur sichtbar gemacht
     async oneNoteSync(id, { silent = false } = {}) {
-      if (syncing.current) return !silent && setOneNoteRun((r) => r && { ...r, silent: false })
+      if (syncing.current) return void (silent || setOneNoteRun((r) => r && { ...r, silent: false }))
       syncing.current = true
       stopSync.current = false
       const all = await db.allNodes()
@@ -1191,10 +1230,12 @@ export default function App() {
         const changed = report.neu + report.geaendert + report.konflikte
         if (silent) (setOneNoteRun((r) => (r?.silent ? null : { ...r, finished: true, text: describeReport(report) })), changed && setNotice(describeReport(report)))
         else show({ finished: true, text: describeReport(report) })
+        return { text: describeReport(report) }
       } catch (e) {
         await reload()
         // automatisch und nicht angesehen: Fehler still (OneNote zu, kein Netz …), beim nächsten Mal wieder
         setOneNoteRun((r) => (r?.silent ? null : { ...r, finished: true, error: `Abgleich ${stopSync.current ? 'abgebrochen' : `fehlgeschlagen: ${e.message ?? e}`}` }))
+        return { error: String(e.message ?? e) }
       } finally {
         syncing.current = false
       }
@@ -1366,6 +1407,7 @@ export default function App() {
     { label: 'Eingang', run: () => actions.open('inbox') },
     { label: 'Kalender', run: () => actions.open('calendar') },
     { label: 'Snippets', run: () => actions.open('snippets') },
+    { label: 'Aufgaben', run: () => actions.open('jobs') },
     { label: 'Tagebuch', run: () => actions.open('journal') },
     { label: 'Statistik', run: () => actions.open('stats') },
     { label: 'Schnellerfassung', run: () => invoke('toggle_capture') },
@@ -1459,6 +1501,9 @@ export default function App() {
     )
   } else if (current === 'stats') {
     view = <Stats rows={liveRows} dbOf={dbOf} lists={databases} />
+  } else if (current === 'jobs') {
+    const notebooks = [...tree.alive.values()].filter((n) => n.kind === 'notebook')
+    view = <Jobs state={jobState} notebooks={notebooks} oneNoteBooks={notebooks.filter((n) => oneNoteLink(n)?.id)} alive={tree.alive} />
   } else if (current === 'snippets') {
     view = <Snippets alive={areaAlive} pathOf={pathOf} onOpen={actions.open} />
   } else if (current === 'today') {
@@ -1592,7 +1637,7 @@ export default function App() {
         onLockVault={lockVault}
       />}
       {/* key: jede Seite frisch; das Einblenden macht setCurrent */}
-      <main key={current} data-tour="inhalt" className="page-main min-w-0 flex-1 bg-bg">{view}</main>
+      <main key={`${current}/${mainBump}`} data-tour="inhalt" className="page-main min-w-0 flex-1 bg-bg">{view}</main>
       </div>
 
       {printing?.ask && <PrintAsk node={printing.ask} count={printing.count} onChoose={(kids) => (kids === null ? setPrinting(null) : printPage(printing.ask, kids))} />}

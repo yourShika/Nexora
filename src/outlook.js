@@ -60,7 +60,8 @@ export async function pushDue(rows, dbOf) {
   return { neu: plan.create.length - (res.failed?.length ?? 0), geaendert: plan.update.length, entfernt: plan.delete.length, fehler: res.failed ?? [] }
 }
 
-// Termine eine Woche zurück bis zwei Monate voraus; nur im Speicher, nie in der Datenbank
+// Termine eine Woche zurück bis zwei Monate voraus; nur im Speicher. In die Datenbank kommen sie nur, wenn man
+// selbst eine Aufgabe dafür anlegt (Terminübersicht, Vergleich), siehe useJobs.js
 export async function readEvents() {
   const from = `${addDays(today(), -7)}T00:00:00`
   const to = `${addDays(today(), 62)}T00:00:00`

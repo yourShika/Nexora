@@ -56,6 +56,10 @@ Oben wechselst du zwischen Tabelle, Liste, Kanban, Kalender und Zeitleiste. Spal
 - **Kalender** zeigt Punkte mit Datum und, wenn eingerichtet, Outlook-Termine.
 - **Schnellerfassung**: Die Tastenkombination unter Einstellungen → Tastenkürzel funktioniert überall in Windows, solange Nexora läuft.
 
+## Aufgaben
+
+Unter **Aufgaben** in der Seitenleiste laufen Dinge von selbst zu festen Zeiten: Termine aktualisieren, OneNote abgleichen, sichern, eine Terminübersicht schreiben oder Termine mit dem letzten Stand vergleichen.
+
 ## Übernehmen und sichern
 
 - Das Pfeil-Symbol neben „Notizbücher“ importiert Nexora-Dateien, Obsidian-Ordner und Notion-Exporte; das Stecker-Symbol verbindet OneNote.

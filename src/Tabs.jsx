@@ -1,12 +1,12 @@
 import { useCallback, useRef, useState } from 'react'
-import { AppWindow, BookOpenText, CalendarBlank, ChartBar, Code, GearSix, Lightning, Plus, PushPin, PushPinSlash, Trash, Tray, X } from '@phosphor-icons/react'
+import { AppWindow, BookOpenText, CalendarBlank, ChartBar, Code, GearSix, Lightning, Plus, PushPin, PushPinSlash, Timer, Trash, Tray, X } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { NodeIcon } from './Sidebar.jsx'
 
 // Feste Ansichten, die ein Reiter zeigen kann; alles andere ist eine Seiten-ID
 export const VIEWS = {
   today: ['Heute', Lightning], inbox: ['Eingang', Tray], calendar: ['Kalender', CalendarBlank], journal: ['Tagebuch', BookOpenText],
-  stats: ['Statistik', ChartBar], snippets: ['Snippets', Code], settings: ['Einstellungen', GearSix], trash: ['Papierkorb', Trash],
+  stats: ['Statistik', ChartBar], snippets: ['Snippets', Code], jobs: ['Aufgaben', Timer], settings: ['Einstellungen', GearSix], trash: ['Papierkorb', Trash],
 }
 const titleOf = (t) => (t.node ? t.node.title || 'Ohne Titel' : VIEWS[t.view]?.[0] ?? '…')
 function TabIcon({ tab, size = 14 }) {

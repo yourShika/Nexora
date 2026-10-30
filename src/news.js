@@ -2,6 +2,19 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.35.0',
+    date: '2026-10-30',
+    title: 'Aufgaben',
+    items: [
+      'Neu in der Seitenleiste: **Aufgaben** laufen von selbst zu festen Zeiten, solange Nexora läuft, auch im Tray. Verpasstes läuft beim nächsten Start einmal nach.',
+      '**Aktualisieren**: Outlook-Termine lesen, OneNote abgleichen oder eine Sicherung anlegen, wann du willst.',
+      '**Terminübersicht**: eine eigene Seite mit deinen Outlook-Terminen, wann, wo und wie viele je Tag. Sie wird bei jedem Lauf neu geschrieben.',
+      '**Termine vergleichen**: meldet per Windows-Meldung, was seit dem letzten Lauf neu, verschoben, geändert oder abgesagt ist.',
+      'Den **Zeitplan** klickst du zusammen: feste Uhrzeiten, regelmäßig mit Zeitfenster oder einmal im Monat, dazu die Wochentage. Nexora zeigt in Klartext, wann die nächsten Läufe sind.',
+      'Terminübersicht und Vergleich speichern dafür Termine in deiner Datenbank. Sonst liegen Outlook-Termine weiterhin nur im Speicher.',
+    ],
+  },
+  {
     version: '0.34.0',
     date: '2026-10-30',
     title: 'Einrichtung & Rundgang',

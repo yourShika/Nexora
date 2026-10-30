@@ -7,7 +7,7 @@ import { useApp } from './ctx.js'
 import { HELP_TITLE, SEED_BOOK, placeTip } from './setup.js'
 
 // Tab bleibt im Dialog (Strg+Tab wechselt weiter die Reiter)
-function trapTab(e, box) {
+export function trapTab(e, box) {
   if (e.key !== 'Tab' || e.ctrlKey || !box) return
   const all = [...box.querySelectorAll('button:not(:disabled), input:not(:disabled), select, summary, [tabindex="0"]')].filter((x) => x.offsetParent !== null)
   if (!all.length) return
@@ -21,7 +21,7 @@ function trapTab(e, box) {
 
 const STEPS = ['benutzer', 'aussehen', 'notizbuch', 'schnell', 'fertig']
 
-function Option({ value, choice, onChoice, title, text }) {
+export function Option({ value, choice, onChoice, title, text }) {
   return (
     <button
       role="radio"

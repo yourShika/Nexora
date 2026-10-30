@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import {
   AppWindow, ArrowCircleUp, ArrowsLeftRight, FileArrowDown, FileArrowUp, FolderSimplePlus, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
-  Browsers, Compass, LockSimple, PushPin, SidebarSimple, Sparkle, Stamp, Star, Table, Trash, Tray, Warning, Wrench,
+  Browsers, Compass, LockSimple, PushPin, SidebarSimple, Sparkle, Stamp, Star, Table, Timer, Trash, Tray, Warning, Wrench,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { useApp } from './ctx.js'
@@ -113,6 +113,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
             { id: 'journal', label: 'Tagebuch', icon: BookOpenText },
             { id: 'stats', label: 'Statistik', icon: ChartBar },
             { id: 'snippets', label: 'Snippets', icon: Code },
+            { id: 'jobs', label: 'Aufgaben', icon: Timer },
           ].map((v) => (
             <li key={v.id}>
               <button

@@ -609,7 +609,7 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
   )
 }
 
-function Choice({ label, value, options, onChange, styleOf }) {
+export function Choice({ label, value, options, onChange, styleOf }) {
   return (
     <div className="mb-5">
       <div className="mb-1.5 text-sm text-muted">{label}</div>
