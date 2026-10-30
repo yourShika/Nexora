@@ -86,6 +86,9 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
     }
   }
   const free = isFree(body)
+  // Lesemodus je Seite: freie Seite (z. B. aus OneNote) als fließender Text, nur zum Lesen; gespeichert bleibt die Anordnung
+  const reading = free && node.config?.view === 'fluss'
+  const toggleReading = () => (setMenu(null), flush(), onSave(node.id, { config: { ...node.config, view: reading ? null : 'fluss' } }))
 
   // Fortschritt der Checkliste gleich in Listen und Kanban zeigen (nur bei Änderung)
   function patchTasks(md) {
@@ -144,6 +147,9 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
             <MenuItem icon={node.locked ? LockSimpleOpen : LockSimple} onClick={() => (flush(), setMenu(null), onSave(node.id, { locked: node.locked ? 0 : 1 }))}>
               {node.locked ? 'Seite entsperren' : 'Seite sperren'}
             </MenuItem>
+            {free && (
+              <MenuItem icon={reading ? FrameCorners : Article} onClick={toggleReading}>{reading ? 'Original-Anordnung zeigen' : 'Als fließende Seite lesen'}</MenuItem>
+            )}
             {node.kind === 'page' && !node.locked && body !== null && (
               <MenuItem icon={free ? Article : FrameCorners} onClick={() => (setMenu(null), replace(free ? toFlow(latest ?? body) : toFree(latest ?? body)))}>
                 {free ? `In normale Seite umwandeln${hasInk(latest ?? body) ? ' (Zeichnung entfällt)' : ''}` : 'In freie Seite umwandeln'}
@@ -164,7 +170,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
       </header>
 
       <Cover node={node} onSave={onSave} />
-      <article data-page-id={node.id} className={`${free ? '' : 'mx-auto max-w-[var(--page)]'} px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-8'}`}>
+      <article data-page-id={node.id} className={`${free && !reading ? '' : 'mx-auto max-w-[var(--page)]'} px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-8'}`}>
         <IconRow node={node} onSave={onSave} />
         <input
           autoFocus={autoFocus}
@@ -202,6 +208,14 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
             <div className="h-4 w-1/2 rounded bg-hover" />
             <div className="h-4 w-2/3 rounded bg-hover" />
           </div>
+        ) : reading ? (
+          <>
+            <p className="mb-4 flex flex-wrap items-center gap-2 rounded-md bg-hover px-3 py-1.5 text-sm text-muted">
+              Lesemodus: die Kästen der Seite untereinander.
+              <button onClick={toggleReading} className="font-medium text-accent hover:underline">Original-Anordnung zeigen</button>
+            </p>
+            <Editor key={`fluss${reload}`} markdown={toFlow(latest ?? body)} editable={false} />
+          </>
         ) : free ? (
           <FreeCanvas key={reload} body={body} editable={!node.locked} onChange={(md) => (setLatest(md), queue({ body: md }))} />
         ) : (

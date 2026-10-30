@@ -18,6 +18,7 @@ import dos from 'highlight.js/lib/languages/dos'
 import dockerfile from 'highlight.js/lib/languages/dockerfile'
 import nginx from 'highlight.js/lib/languages/nginx'
 import Image from '@tiptap/extension-image'
+import { BackgroundColor, Color, FontFamily, FontSize, TextStyle } from '@tiptap/extension-text-style'
 import { SlashCommand } from './SlashMenu.jsx'
 import { CodeBlockView } from './CodeBlock.jsx'
 import BlockHandle from './BlockHandle.jsx'
@@ -120,8 +121,23 @@ function adminLinkAt(view, pos) {
   return adminLinks(text).find((l) => l.from <= $pos.parentOffset && $pos.parentOffset <= l.to)
 }
 
+// Farbe, Hervorhebung, Schrift und Größe (z. B. aus OneNote) stehen im Markdown als <span style>; beim Laden liest
+// der Editor sie über dieselben Erweiterungen wieder ein
+const STYLE = [['color', 'color'], ['backgroundColor', 'background-color'], ['fontFamily', 'font-family'], ['fontSize', 'font-size']]
+const Stil = TextStyle.extend({
+  renderMarkdown: (node, h) => {
+    const css = STYLE.filter(([k]) => node.attrs?.[k]).map(([k, prop]) => `${prop}: ${node.attrs[k]}`).join('; ')
+    return css ? `<span style="${css}">${h.renderChildren(node)}</span>` : h.renderChildren(node)
+  },
+})
+
 const extensions = [
   StarterKit.configure({ codeBlock: false, link: { openOnClick: false, autolink: true } }),
+  Stil,
+  Color,
+  BackgroundColor,
+  FontFamily,
+  FontSize,
   CodeBlockLowlight.extend({ addNodeView: () => ReactNodeViewRenderer(CodeBlockView) }).configure({ lowlight }),
   TaskList,
   TaskItem.configure({
@@ -168,7 +184,7 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
     extensions,
     content: markdown,
     contentType: 'markdown',
-    onUpdate: ({ editor }) => change.current(editor.getMarkdown()),
+    onUpdate: ({ editor }) => change.current?.(editor.getMarkdown()), // ohne onChange: nur lesen (Lesemodus)
     editorProps: {
       handlePaste: (view, event) => {
         if (insertFiles(view, pastedFiles(event.clipboardData), null, setError)) return true

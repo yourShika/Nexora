@@ -145,6 +145,7 @@ pub fn run() {
             doctext::attachment_text,
             preview::attachment_preview,
             onenote::onenote,
+            onenote::onenote_ink,
             outlook::outlook_events,
             outlook::outlook_push,
             outlook::outlook_draft,

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::{AppHandle, Manager};
 
-const IMAGE_TYPES: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
+const IMAGE_TYPES: [&str; 6] = ["png", "jpg", "jpeg", "gif", "webp", "svg"]; // svg: Freihand aus OneNote
 const MAX_IMAGE: usize = 50 * 1024 * 1024;
 
 fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {

@@ -4,7 +4,7 @@ import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
 import { open } from '@tauri-apps/plugin-dialog'
-import { ArrowCircleUp, Bell, ClockCounterClockwise, Database, EnvelopeSimple, FolderOpen, GearSix, Key, Keyboard, MagnifyingGlass, Monitor, Moon, Palette, SlidersHorizontal, Sun, TerminalWindow, Users, UsersThree } from '@phosphor-icons/react'
+import { ArrowCircleUp, ArrowsClockwise, Bell, ClockCounterClockwise, Database, EnvelopeSimple, FolderOpen, GearSix, Key, Keyboard, MagnifyingGlass, Monitor, Moon, Palette, SlidersHorizontal, Sun, TerminalWindow, Users, UsersThree } from '@phosphor-icons/react'
 import { BACKUP_DEFAULTS, loadBackupSettings } from './backup.js'
 import { deleteImages, unusedImages } from './images.js'
 import { shells } from './runner.js'
@@ -227,6 +227,48 @@ function TeamSection() {
 }
 
 // Über das installierte (klassische) Outlook; Nexora schreibt nur in den eigenen Kalender
+// Verbundene OneNote-Notizbücher: wie oft von selbst abgleichen, Stand, jetzt abgleichen
+const ONENOTE_AUTO = [['0', 'Nur von Hand'], ['15', 'Alle 15 Minuten'], ['30', 'Alle 30 Minuten'], ['60', 'Jede Stunde']]
+function OneNoteSection() {
+  const app = useApp()
+  const [auto, setAuto] = useState('30')
+  useEffect(() => {
+    db.getSetting('onenote-auto').then((v) => v != null && setAuto(v), () => {})
+  }, [])
+  const books = [...app.alive.values()].filter((n) => n.kind === 'notebook' && n.config?.onenote?.id)
+  const run = app.oneNoteRun
+  return (
+    <section>
+      <h2 className="mb-1 font-semibold">OneNote</h2>
+      <p className="mb-3 text-muted">
+        Nexora liest verbundene Notizbücher aus dem installierten OneNote, kurz nach dem Start und dann im gewählten Abstand, still im Hintergrund.
+        Von Hand (Rechtsklick auf das Notizbuch oder hier) zeigt ein kleines Fenster unten rechts den Fortschritt.
+      </p>
+      <label className="mb-4 flex items-center gap-3">
+        Automatisch abgleichen
+        <Select value={auto} onChange={(e) => (setAuto(e.target.value), db.setSetting('onenote-auto', e.target.value).catch(() => {}))} className="rounded-md border border-line bg-raised px-2 py-1">
+          {ONENOTE_AUTO.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+        </Select>
+      </label>
+      {books.length ? (
+        <ul className="divide-y divide-line border-y border-line">
+          {books.map((b) => (
+            <li key={b.id} className="flex items-center gap-3 py-2">
+              <span className="min-w-0 flex-1 truncate">{b.title || 'Ohne Titel'}</span>
+              <span className="text-xs text-faint">
+                {run?.id === b.id && !run.finished ? 'wird abgeglichen …' : b.config.onenote.synced ? `abgeglichen ${new Date(b.config.onenote.synced).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}` : 'noch nie abgeglichen'}
+              </span>
+              <button onClick={() => app.oneNoteSync(b.id)} className="rounded-md border border-line px-2.5 py-1 text-sm hover:bg-hover">Jetzt abgleichen</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted">Noch kein Notizbuch verbunden. In der Seitenleiste neben „Notizbücher“: OneNote-Notizbuch verbinden.</p>
+      )}
+    </section>
+  )
+}
+
 function OutlookSection({ state, onChange, onSync }) {
   if (!state) return null
   const box = (key, label) => (
@@ -378,6 +420,7 @@ const CATEGORIES = [
   { id: 'aussehen', label: 'Aussehen', icon: Palette, keys: 'farbe farbschema schema theme hell dunkel modus darstellung verlauf gradient akzent discord schrift schriftart schriftgröße größe zoom bewegung animation übergang dichte zeilenabstand kompakt breite seitenbreite ecken rund eckig seitenleiste' },
   { id: 'tasten', label: 'Tastenkürzel', icon: Keyboard, keys: 'hotkey kürzel tastatur schnellerfassung zwischenablage snippet picker' },
   { id: 'erinnerungen', label: 'Erinnerungen', icon: Bell, keys: 'meldung sammelmeldung benachrichtigung fällig uhrzeit morgen' },
+  { id: 'onenote', label: 'OneNote', icon: ArrowsClockwise, keys: 'abgleich automatisch notizbuch sync onenote' },
   { id: 'outlook', label: 'Outlook', icon: EnvelopeSimple, keys: 'kalender termine mail fälligkeiten' },
   { id: 'tresor', label: 'Tresor', icon: Key, keys: 'vaultwarden bitwarden passwort bw cli' },
   { id: 'personen', label: 'Personen', icon: Users, keys: 'zuständig person name kollegen farbe initialen' },
@@ -489,6 +532,7 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
         </label>
       </section>
     ),
+    onenote: <OneNoteSection />,
     outlook: <OutlookSection state={outlook} onChange={onOutlook} onSync={onOutlookSync} />,
     tresor: <VaultSection />,
     personen: <PeopleSection />,

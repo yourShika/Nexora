@@ -2,6 +2,19 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.31.0',
+    date: '2026-10-30',
+    title: 'OneNote',
+    items: [
+      'OneNote wird **im Hintergrund** abgeglichen: von Hand zeigt ein kleines Fenster unten rechts den **Fortschritt** mit Abbrechen, Nexora bleibt bedienbar.',
+      '**Automatisch** kurz nach dem Start und dann alle 30 Minuten, still; einstellbar unter Einstellungen → OneNote.',
+      'Abschnittsgruppen werden **Ordner in Ordnern**. Früher flach übernommene Notizbücher („Gruppe / Abschnitt“) baut der erste Abgleich um, vorher legt Nexora eine **Sicherung** im Datenordner an.',
+      'Seiten **näher am Original**: Schriftfarbe, Hervorhebung, Schriftart und -größe, **eingefügte Dateien** als Anhang, **Freihand** als Zeichnung. Alle Seiten werden dafür einmal neu übernommen.',
+      '**Lesemodus** je Seite: „…“ → „Als fließende Seite lesen“ stellt die Kästen untereinander.',
+      'In der Seitenleiste: **Abschnittsfarben** wie in OneNote, Stand des Abgleichs am Notizbuch, Schloss bei kennwortgeschützten Abschnitten.',
+    ],
+  },
+  {
     version: '0.30.0',
     date: '2026-10-29',
     title: 'Bedienung & Verlauf',

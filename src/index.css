@@ -137,6 +137,11 @@ body {
 }
 
 /* ---------- Editor ---------- */
+/* Übernommene Farben (OneNote) im dunklen Modus: Freihand-SVGs umkehren (schwarze Tinte wird hell), dunkle Schrift
+   aufhellen, auf Hervorhebungen dunkle Schrift */
+[data-theme='dark'] .tiptap img[src$='.svg'] { filter: invert(1) hue-rotate(180deg); }
+[data-theme='dark'] .tiptap span[style^='color'] { filter: brightness(1.7); }
+[data-theme='dark'] .tiptap span[style*='background-color'] { color: #1b1b1b; }
 /* Drucken: Print.jsx baut die Seiten in #print-root auf (unsichtbar, in Blattbreite), gedruckt wird nur das */
 #print-root { position: fixed; left: -10000px; top: 0; width: 680px; visibility: hidden; }
 #print-root .free-canvas { padding: 0; min-height: 0; }

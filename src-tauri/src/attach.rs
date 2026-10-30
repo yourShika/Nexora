@@ -65,14 +65,14 @@ pub fn save_attachment(app: AppHandle, request: Request) -> Result<String, Strin
     store(&app, &header("x-id"), &name, |p| fs::write(p, bytes))
 }
 
-// Datei aus dem Dateidialog übernehmen
+// Datei aus dem Dateidialog übernehmen; name: anderer Dateiname (OneNote legt Dateien als .bin im Zwischenspeicher ab)
 #[tauri::command]
-pub fn import_attachment(app: AppHandle, source: String, id: String) -> Result<(String, u64), String> {
+pub fn import_attachment(app: AppHandle, source: String, id: String, name: Option<String>) -> Result<(String, u64), String> {
     let size = fs::metadata(&source).map_err(|e| e.to_string())?.len();
     if size > MAX_ATTACHMENT {
         return Err("Datei ist größer als 200 MB".into());
     }
-    let rel = store(&app, &id, &source, |p| fs::copy(&source, p).map(|_| ()))?;
+    let rel = store(&app, &id, name.as_deref().unwrap_or(&source), |p| fs::copy(&source, p).map(|_| ()))?;
     Ok((rel, size))
 }
 

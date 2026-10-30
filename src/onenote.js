@@ -14,6 +14,57 @@ export const link = (node) => node?.config?.onenote ?? null
 
 // Bildformat an den ersten Bytes (OneNote gibt keins an); andere Formate (EMF, BMP …) bleiben draußen
 const IMAGE_TYPES = [['iVBOR', 'png'], ['/9j/', 'jpg'], ['R0lGOD', 'gif'], ['UklGR', 'webp']]
+// Stand der Umwandlung: steigt er, übernimmt der nächste Abgleich alle Seiten neu (2: Format, Dateien, Freihand)
+export const CONVERT = 2
+
+// OneNote-Format (CSS im Text) auf das, was Nexora behält: Farbe, Hintergrund, Schrift und Größe, sofern sie vom
+// Absatzformat abweichen; fett, kursiv, unterstrichen erkennt der Editor selbst
+const KEEP = { color: 'color', background: 'background-color', 'background-color': 'background-color', 'mso-highlight': 'background-color', 'font-family': 'font-family', 'font-size': 'font-size', 'font-weight': 'font-weight', 'font-style': 'font-style', 'text-decoration': 'text-decoration' }
+export function css(style, base) {
+  const out = []
+  for (const part of (style ?? '').split(';')) {
+    const [k, ...rest] = part.split(':')
+    const prop = KEEP[k?.trim().toLowerCase()]
+    const value = rest.join(':').trim().replace(/^['"]|['"]$/g, '')
+    if (!prop || !value || out.some(([p]) => p === prop)) continue
+    if (prop === 'color' && /^(automatic|#?0{6}|black|windowtext)$/i.test(value)) continue
+    if (prop === 'background-color' && /^(automatic|transparent|none|white|#?f{6})$/i.test(value)) continue
+    if (prop === 'font-family' && value.toLowerCase() === base.font?.toLowerCase()) continue
+    if (prop === 'font-size' && parseFloat(value) === base.size) continue
+    out.push([prop, value])
+  }
+  return out.map(([p, v]) => `${p}:${v}`).join(';')
+}
+// Text eines Absatzes: Stile bereinigen, Absatzstil (OE style) als Hülle
+function tidy(html, oeStyle, base) {
+  const body = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html').body
+  for (const el of body.querySelectorAll('[style]')) {
+    const s = css(el.getAttribute('style'), base)
+    if (s) el.setAttribute('style', s)
+    else el.removeAttribute('style')
+  }
+  const outer = css(oeStyle, base)
+  return outer ? `<span style="${outer}">${body.innerHTML}</span>` : body.innerHTML
+}
+
+// Freihand als Bild: Striche (DIPs, von onenote_ink) → SVG, so groß wie gezeichnet. Im dunklen Modus kehrt index.css
+// die Farben um (sonst wäre schwarze Tinte unsichtbar)
+export function inkSvg(strokes, pad = 4) {
+  const pts = strokes.flatMap((s) => s.points)
+  if (!pts.length) return null
+  const [x0, y0] = [Math.min(...pts.map((p) => p[0])) - pad, Math.min(...pts.map((p) => p[1])) - pad]
+  const w = Math.ceil(Math.max(...pts.map((p) => p[0])) - x0 + pad)
+  const h = Math.ceil(Math.max(...pts.map((p) => p[1])) - y0 + pad)
+  const n = (v) => Math.round(v * 10) / 10
+  const paths = strokes.map((s) => {
+    const d = s.points.map((p, i) => `${i ? 'L' : 'M'}${n(p[0] - x0)} ${n(p[1] - y0)}`).join('') + (s.points.length === 1 ? `l0.1 0` : '')
+    return `<path d="${d}" stroke="${s.color}" stroke-width="${n(Math.max(1, s.width))}"${s.marker ? ' stroke-opacity="0.4"' : ''}/>`
+  })
+  return { width: w, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" fill="none" stroke-linecap="round" stroke-linejoin="round">${paths.join('')}</svg>` }
+}
+const INK = ['InkDrawing', 'InkWord', 'InkParagraph', 'InkLine']
+// alle Freihand-Daten eines Elements (InkParagraph enthält InkLine/InkWord mit je eigenen Daten)
+const inkData = (el) => [el, ...el.querySelectorAll('*')].filter((x) => x.localName === 'Data' && INK.includes(x.parentElement?.localName)).map((d) => d.textContent.replace(/\s/g, ''))
 
 export async function listNotebooks() {
   const root = parseXml(await invoke('onenote', { op: 'notebooks', id: '' })).documentElement
@@ -37,6 +88,7 @@ export function parseNotebook(source) {
         id: c.getAttribute('ID'),
         name: c.getAttribute('name'),
         group,
+        color: /^#[0-9a-f]{6}$/i.test(c.getAttribute('color') ?? '') ? c.getAttribute('color').toLowerCase() : null, // Reiterfarbe in OneNote
         locked: c.getAttribute('locked') === 'true' || c.getAttribute('encrypted') === 'true',
         pages: kids(c, 'Page')
           .filter((p) => p.getAttribute('isInRecycleBin') !== 'true')
@@ -66,9 +118,18 @@ function block(el, ctx) {
     case 'InkDrawing':
     case 'InkWord':
     case 'InkParagraph':
-      return note('Freihand aus OneNote nicht übernommen')
-    case 'InsertedFile':
-      return note(`Datei „${el.getAttribute('preferredName') ?? ''}“ aus OneNote nicht übernommen`)
+    case 'InkLine': {
+      // Platzhalter nximg-Art: pageBody macht daraus ein SVG-Bild
+      const data = inkData(el)
+      if (!data.length) return ''
+      ctx.ink.push(data)
+      return `<img src="nxink:${ctx.ink.length - 1}" alt="Freihand">`
+    }
+    case 'InsertedFile': {
+      // OneNote hält eine Kopie im Zwischenspeicher (pathCache); pageBody übernimmt sie als Anhang
+      ctx.files.push({ path: el.getAttribute('pathCache') || el.getAttribute('pathSource'), name: el.getAttribute('preferredName') || 'Datei' })
+      return `<div data-attachment="nxfile:${ctx.files.length - 1}" data-size="0" data-preview="0"></div>`
+    }
     case 'MediaFile':
       return note('Audio oder Video aus OneNote nicht übernommen')
     default:
@@ -78,17 +139,28 @@ function block(el, ctx) {
 
 const cellText = (cell) => [...cell.getElementsByTagNameNS(NS, 'T')].map((t) => t.textContent).join(' ')
 
-// Inhalt eines Absatzes (OE): Text mit Absatzformat, Tabellen, Bilder
+// Inhalt eines Absatzes (OE): Text mit Absatzformat, Tabellen, Bilder, Freihand. Mehrere Freihand-Wörter
+// hintereinander (eine Zeile Handschrift) werden ein Bild
 function content(oe, ctx) {
-  const style = ctx.styles.get(oe.getAttribute('quickStyleIndex'))
-  return [...oe.children]
-    .map((c) => {
-      if (c.localName !== 'T') return block(c, ctx)
-      if (/^h[1-6]$/.test(style)) return `<${style}>${c.textContent}</${style}>`
-      if (style === 'code') return `<pre><code>${esc(plain(c.textContent))}</code></pre>`
-      return `<p>${c.textContent}</p>`
-    })
-    .join('')
+  const def = ctx.styles.get(oe.getAttribute('quickStyleIndex')) ?? ctx.base
+  const style = def.name
+  const parts = []
+  for (const c of oe.children) {
+    if (INK.includes(c.localName) && INK.includes(parts.at(-1)?.el?.localName)) {
+      ctx.ink[parts.at(-1).ink].push(...inkData(c))
+      continue
+    }
+    if (c.localName !== 'T') {
+      const html = block(c, ctx)
+      parts.push({ el: c, html, ink: INK.includes(c.localName) ? ctx.ink.length - 1 : null })
+      continue
+    }
+    const text = tidy(c.textContent, oe.getAttribute('style'), def)
+    if (/^h[1-6]$/.test(style)) parts.push({ el: c, html: `<${style}>${text}</${style}>` })
+    else if (style === 'code') parts.push({ el: c, html: `<pre><code>${esc(plain(c.textContent))}</code></pre>` })
+    else parts.push({ el: c, html: `<p>${text}</p>` })
+  }
+  return parts.map((p) => p.html).join('')
 }
 
 function listKind(oe, ctx) {
@@ -120,8 +192,12 @@ function children(el, ctx) {
 // Seite → Titel, Kästen (HTML mit Platzhaltern nximg:N) und Bilddaten
 export function convertPage(source) {
   const page = parseXml(source).documentElement
+  const defs = kids(page, 'QuickStyleDef').map((s) => ({ index: s.getAttribute('index'), name: s.getAttribute('name'), font: s.getAttribute('font'), size: Number(s.getAttribute('fontSize')) || 11 }))
   const ctx = {
-    styles: new Map(kids(page, 'QuickStyleDef').map((s) => [s.getAttribute('index'), s.getAttribute('name')])),
+    styles: new Map(defs.map((d) => [d.index, d])),
+    base: defs.find((d) => d.name === 'p') ?? { name: 'p', font: 'Calibri', size: 11 }, // Standard-Absatz der Seite
+    files: [],
+    ink: [],
     // Aufgaben-Kästchen: Symbol 3 oder ein Name wie "Aufgabe"/"To Do"
     todos: new Set(kids(page, 'TagDef').filter((t) => t.getAttribute('symbol') === '3' || /aufgabe|to ?do|erledig/i.test(t.getAttribute('name') ?? '')).map((t) => t.getAttribute('index'))),
     images: [],
@@ -139,7 +215,7 @@ export function convertPage(source) {
   // Titelbereich von OneNote fällt weg: Kästen nach links oben rücken
   const minX = Math.min(...boxes.map((b) => b.x))
   const minY = Math.min(...boxes.map((b) => b.y))
-  return { title: page.getAttribute('name') || 'Ohne Titel', images: ctx.images, boxes: boxes.map((b) => ({ ...b, x: b.x - minX, y: b.y - minY + 20 })) }
+  return { title: page.getAttribute('name') || 'Ohne Titel', images: ctx.images, files: ctx.files, ink: ctx.ink, boxes: boxes.map((b) => ({ ...b, x: b.x - minX, y: b.y - minY + 20 })) }
 }
 
 // FNV-1a: erkennt, ob eine Seite seit dem letzten Abgleich in Nexora geändert wurde
@@ -149,29 +225,57 @@ export function hash(text) {
   return (h >>> 0).toString(16)
 }
 
+// Platzhalter auflösen: Bilder speichern, Dateien als Anhänge übernehmen, Freihand als SVG-Bild.
+// api: saveImage(bytes, ext), importFile(path, name) → [rel, size], ink([base64]) → Striche je Stück
 async function pageBody(source, api) {
-  const { boxes, images } = convertPage(source)
+  const { boxes, images, files, ink } = convertPage(source)
   const srcs = await Promise.all(images.map((img) => api.saveImage(Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0)), img.ext)))
-  const md = boxes.map((b) => ({ ...b, md: api.toMarkdown(b.html.replace(/nximg:(\d+)/g, (_, i) => srcs[i])) }))
-  return serializeBoxes(md)
+  const kept = await Promise.all(files.map((f) => (f.path ? api.importFile(f.path, f.name).catch(() => null) : null)))
+  // ink: je Platzhalter eine Liste von Stücken; die Striche kommen flach in derselben Reihenfolge zurück
+  const strokes = ink.length ? await api.ink(ink.flat()).catch(() => ink.flat().map(() => null)) : []
+  let at = 0
+  const drawn = await Promise.all(
+    ink.map((group) => {
+      const svg = inkSvg(strokes.slice(at, (at += group.length)).flatMap((x) => x ?? []))
+      return svg ? api.saveImage(new TextEncoder().encode(svg.svg), 'svg').then((src) => ({ src, width: svg.width })) : null
+    }),
+  )
+  const html = (b) =>
+    b.html
+      .replace(/nximg:(\d+)/g, (_, i) => srcs[i])
+      .replace(/<img src="nxink:(\d+)"[^>]*>/g, (_, i) => (drawn[i] ? `<img src="${drawn[i].src}" width="${drawn[i].width}" alt="Freihand">` : note('Freihand aus OneNote nicht lesbar')))
+      .replace(/<div data-attachment="nxfile:(\d+)"[^>]*><\/div>/g, (_, i) =>
+        kept[i] ? `<div data-attachment="${esc(kept[i][0])}" data-size="${kept[i][1]}" data-preview="0"></div>` : note(`Datei „${files[i].name}“ ist in OneNote nicht zwischengespeichert`),
+      )
+  return serializeBoxes(boxes.map((b) => ({ ...b, md: api.toMarkdown(html(b)) })))
 }
 
 // Abgleich OneNote → Nexora. Nie löschen: Seiten, die in OneNote fehlen, bleiben und werden nur gezählt.
 // Geändert in OneNote und unverändert in Nexora: ersetzen (alte Fassung in den Verlauf).
 // Geändert in beiden: OneNote-Fassung als eigene Seite daneben.
-// api: create, update, loadBody, snapshot, saveImage(bytes, ext), toMarkdown(html), progress(text)
+// api: create, update, loadBody, snapshot, saveImage(bytes, ext), importFile, ink, toMarkdown(html),
+// progress({ text, done, total }), stopped() → true bricht ab, before() einmal vor dem ersten Umbau (Sicherung)
 export async function syncNotebook(nb, all, api) {
+  const step = (text, done, total) => {
+    if (api.stopped?.()) throw new Error('Abgleich abgebrochen')
+    api.progress({ text, done, total })
+  }
+  step('OneNote wird gelesen …', 0, 0)
   const book = parseNotebook(await invoke('onenote', { op: 'notebook', id: link(nb).id }))
   const known = new Map(all.filter((n) => !n.deleted_at && link(n)?.id).map((n) => [link(n).id, n]))
   const report = { neu: 0, geaendert: 0, konflikte: 0, gesperrt: 0, fehlt: 0 }
   const pages = book.sections.flatMap((s) => (s.locked ? [] : s.pages))
 
   // Änderungen am Inhalt erkennen: OneNote setzt den Zeitstempel der Seite nicht bei jeder Änderung.
-  // Erst alle Seiten ohne Bilddaten (schnell), dann nur neue und geänderte mit Bildern
-  const versions = await fetchPages('pageinfo', pages, 40, (i) => api.progress(`OneNote: ${i} von ${pages.length} Seiten geprüft …`))
+  // Erst alle Seiten ohne Bilddaten (schnell), dann nur neue, geänderte und mit älterer Umwandlung übernommene
+  const versions = await fetchPages('pageinfo', pages, 40, (i) => step('Seiten werden geprüft', i, pages.length))
   for (const p of pages) p.version = versions.get(p.id) ? hash(versions.get(p.id)) : null
-  const stale = pages.filter((p) => p.version && link(known.get(p.id))?.version !== p.version)
-  const sources = await fetchPages('pages', stale, 10, (i) => api.progress(`OneNote: Seite ${i} von ${stale.length} wird übernommen …`))
+  const stale = pages.filter((p) => p.version && (link(known.get(p.id))?.version !== p.version || (link(known.get(p.id))?.conv ?? 1) < CONVERT))
+
+  // Umbau (Abschnittsgruppen als Ordner) oder viele Seiten neu: vorher sichern
+  // nur wenn schon Abschnitte da sind (beim ersten Verbinden gibt es nichts umzubauen)
+  const regroup = book.sections.some((s) => known.has(s.id)) && (book.groups.some((g) => !known.has(g.id)) || book.sections.some((s) => known.has(s.id) && known.get(s.id).title !== s.name))
+  if (regroup || stale.some((p) => known.has(p.id) && (link(known.get(p.id)).conv ?? 1) < CONVERT)) await api.before?.()
 
   const day = new Date().toLocaleDateString('de-DE')
   // Abschnittsgruppen werden Abschnitte, die Abschnitte enthalten; früher übernommene "Gruppe / Abschnitt" rücken so ein
@@ -184,15 +288,22 @@ export async function syncNotebook(nb, all, api) {
     else if (node.title !== g.name || node.parent_id !== parent) await api.update(node.id, { title: g.name, parent_id: parent })
     holder.set(g.id, node.id)
   }
+  // Seiten in Paketen holen und gleich übernehmen, damit der Fortschritt stimmt und Abbrechen greift
+  let done = 0
   for (const s of book.sections) {
     let sec = known.get(s.id)
     const home = parentOf(s.group)
-    if (!sec) sec = await api.create('section', home, s.name, { config: { onenote: { id: s.id } } })
-    else if (sec.title !== s.name || sec.parent_id !== home) await api.update(sec.id, { title: s.name, parent_id: home })
+    const conf = { onenote: { id: s.id, ...(s.locked ? { locked: true } : {}) } }
+    if (!sec) {
+      sec = await api.create('section', home, s.name, { config: conf })
+      if (s.color) await api.update(sec.id, { color: s.color })
+    }    else if (sec.title !== s.name || sec.parent_id !== home || (sec.color ?? null) !== s.color || !!link(sec).locked !== s.locked)
+      await api.update(sec.id, { title: s.name, parent_id: home, color: s.color, config: { ...sec.config, ...conf } })
     if (s.locked) {
       report.gesperrt++
       continue
     }
+    const sources = await fetchPages('pages', s.pages.filter((p) => stale.includes(p)), 10, () => {})
     const levels = [] // letzte Seite je Ebene, für Unterseiten
     for (const p of s.pages) {
       const parent = (p.level > 1 && levels[p.level - 2]) || sec.id
@@ -200,8 +311,10 @@ export async function syncNotebook(nb, all, api) {
       const source = sources.get(p.id)
       if (!node && !source) continue // gerade erst in OneNote gelöscht
       if (source) {
+        step('Seiten werden übernommen', ++done, stale.length)
         const body = await pageBody(source, api)
-        const fresh = { onenote: { id: p.id, version: p.version, hash: hash(body) } }
+        // weitere Einstellungen der Seite (z. B. Lesemodus) bleiben
+        const fresh = { ...node?.config, onenote: { id: p.id, version: p.version, hash: hash(body), conv: CONVERT } }
         if (!node) {
           node = await api.create('page', parent, p.name, { config: fresh })
           await api.update(node.id, { body, locked: 1 })
@@ -213,7 +326,7 @@ export async function syncNotebook(nb, all, api) {
         } else {
           const copy = await api.create('page', parent, `${p.name} (OneNote-Fassung vom ${day})`, { config: { onenote: { copyOf: p.id } } })
           await api.update(copy.id, { body, locked: 1 })
-          await api.update(node.id, { config: { onenote: { ...link(node), version: p.version } } })
+          await api.update(node.id, { config: { ...node.config, onenote: { ...link(node), version: p.version, conv: CONVERT } } })
           report.konflikte++
         }
       } else if (node.parent_id !== parent) {
@@ -225,7 +338,7 @@ export async function syncNotebook(nb, all, api) {
   }
   const seen = new Set(pages.map((p) => p.id))
   report.fehlt = [...known.values()].filter((n) => n.kind === 'page' && !seen.has(link(n).id) && isBelow(all, n, nb.id)).length
-  await api.update(nb.id, { config: { onenote: { ...link(nb), synced: new Date().toISOString() } } })
+  await api.update(nb.id, { config: { ...nb.config, onenote: { ...link(nb), synced: new Date().toISOString() } } })
   return report
 }
 

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import {
   AppWindow, ArrowCircleUp, ArrowsLeftRight, FileArrowDown, FileArrowUp, FolderSimplePlus, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
-  Browsers, PushPin, SidebarSimple, Sparkle, Stamp, Star, Table, Trash, Tray, Warning,
+  Browsers, LockSimple, PushPin, SidebarSimple, Sparkle, Stamp, Star, Table, Trash, Tray, Warning,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { useApp } from './ctx.js'
@@ -20,7 +20,8 @@ const NEW_LABEL = { notebook: 'Neuer Abschnitt', section: 'Neue Seite', page: 'N
 export function NodeIcon({ node, size = 16 }) {
   if (node.icon) return <span className="w-4 text-center leading-none">{node.icon}</span>
   if (node.kind === 'notebook') return <Notebook size={size} weight="duotone" color={COLORS[node.color] ?? COLORS.petrol} />
-  if (node.kind === 'section') return <FolderSimple size={size} className="text-muted" />
+  // Abschnitte aus OneNote in ihrer Reiterfarbe (OneNote-Farben sind blass, darum etwas zur Schriftfarbe gemischt)
+  if (node.kind === 'section') return node.color ? <FolderSimple size={size} weight="fill" style={{ color: `color-mix(in oklab, ${node.color} 70%, var(--text))` }} /> : <FolderSimple size={size} className="text-muted" />
   if (node.kind === 'database') return <ListChecks size={size} className="text-muted" />
   if (node.kind === 'row') return <CheckSquare size={size} className="text-muted" />
   return <FileText size={size} className="text-muted" />
@@ -328,9 +329,15 @@ function Row({ node, depth, ctx }) {
             <span className={`truncate ${node.kind === 'notebook' ? 'font-medium' : ''} ${node.title ? '' : 'text-faint'}`}>
               {node.title || 'Ohne Titel'}
             </span>
+            <OneNoteMark node={node} />
           </button>
         )}
         <span className="hidden shrink-0 items-center group-focus-within:flex group-hover:flex">
+          {node.kind === 'notebook' && node.config?.onenote?.id && (
+            <IconButton label="Mit OneNote abgleichen" onClick={() => actions.oneNoteSync(node.id)}>
+              <ArrowsClockwise size={14} />
+            </IconButton>
+          )}
           <IconButton label={NEW_LABEL[node.kind]} onClick={() => actions.add(CHILD[node.kind], node.id)}>
             <Plus size={14} />
           </IconButton>
@@ -414,6 +421,27 @@ function UserButton({ current, actions }) {
         </Menu>
       )}
     </>
+  )
+}
+
+// Stand bei OneNote: am verbundenen Notizbuch wann zuletzt abgeglichen (dreht sich während des Abgleichs),
+// an kennwortgeschützten Abschnitten ein Schloss
+const ago = (iso) => {
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60e3)
+  return min < 1 ? 'gerade eben' : min < 60 ? `vor ${min} Min.` : min < 24 * 60 ? `vor ${Math.round(min / 60)} Std.` : new Date(iso).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
+}
+function OneNoteMark({ node }) {
+  const run = useApp()?.oneNoteRun
+  const one = node.config?.onenote
+  if (!one?.id) return null
+  if (node.kind === 'section' && one.locked) return <LockSimple size={12} className="shrink-0 text-faint" aria-label="In OneNote kennwortgeschützt, nicht übernommen" />
+  if (node.kind !== 'notebook') return null
+  const busy = run?.id === node.id && !run.finished
+  const title = busy ? 'OneNote wird abgeglichen …' : one.synced ? `Mit OneNote verbunden, abgeglichen ${ago(one.synced)}` : 'Mit OneNote verbunden'
+  return (
+    <span title={title} aria-label={title} className="ml-auto shrink-0 text-faint">
+      <ArrowsClockwise size={12} className={busy ? 'animate-spin text-accent' : ''} />
+    </span>
   )
 }
 

@@ -28,7 +28,7 @@ import { desiredEvents, followUpMail, pushDue, readEvents } from './outlook.js'
 import Journal from './Journal.jsx'
 import Stats from './Stats.jsx'
 import Print, { PrintAsk } from './Print.jsx'
-import OneNoteConnect from './OneNote.jsx'
+import OneNoteConnect, { OneNoteProgress } from './OneNote.jsx'
 import { VaultPicker, VaultUnlock, setVaultPicker, vault } from './Vault.jsx'
 import { htmlToMarkdown } from './Editor.jsx'
 import { indexText } from './ocr.js'
@@ -39,7 +39,7 @@ import * as T from './tabs.js'
 import TitleBar from './TitleBar.jsx'
 import News from './News.jsx'
 import { getVersion } from '@tauri-apps/api/app'
-import { homeDir } from '@tauri-apps/api/path'
+import { appConfigDir, homeDir, join } from '@tauri-apps/api/path'
 import { peopleList, personsOf } from './people.js'
 import { getLook, loadLook, motionOn, setLook, useLook } from './theme.js'
 import { dayOf, daysBetween, describe, emptyConfig, fieldsOf, formatDate, isDone, lopConfig, nextDate, shiftDate, statusField, today, toggleDone } from './fields.js'
@@ -131,6 +131,10 @@ export default function App() {
   const [notice, setNotice] = useState('')
   const [oneNote, setOneNote] = useState(null) // offen: { busy: Fortschrittstext }
   const syncing = useRef(false)
+  const stopSync = useRef(false)
+  const oneNoteSyncRef = useRef(null)
+  // laufender OneNote-Abgleich: { id, title, text, done, total, silent, finished, error }
+  const [oneNoteRun, setOneNoteRun] = useState(null)
   const [vaultAsk, setVaultAsk] = useState(null) // Entsperren offen: { status, resolve }
   const [vaultPick, setVaultPick] = useState(null) // Auswahl offen: { resolve }
   const [vaultOpen, setVaultOpen] = useState(false)
@@ -326,6 +330,22 @@ export default function App() {
   }
 
   // force: "Jetzt sichern"; sonst nur, wenn das Intervall abgelaufen ist
+  // OneNote von selbst abgleichen: 20 s nach dem Start, dann im eingestellten Abstand (Einstellung onenote-auto in
+  // Minuten, 0 = aus). Still im Hintergrund, nacheinander für jedes verbundene Notizbuch
+  useEffect(() => {
+    if (windowPage || !nodes) return
+    let timer
+    const run = async () => {
+      const minutes = Number((await db.getSetting('onenote-auto').catch(() => null)) ?? 30)
+      if (minutes > 0) {
+        for (const nb of (await db.allNodes()).filter((n) => n.kind === 'notebook' && !n.deleted_at && oneNoteLink(n)?.id)) await oneNoteSyncRef.current?.(nb.id, { silent: true })
+      }
+      timer = setTimeout(run, (minutes > 0 ? minutes : 30) * 60e3)
+    }
+    timer = setTimeout(run, 20_000)
+    return () => clearTimeout(timer)
+  }, [nodes !== null])
+
   const doBackup = useCallback(async (force) => {
     try {
       if (force) setBackup((b) => ({ ...b, busy: true }))
@@ -1016,30 +1036,58 @@ export default function App() {
     },
     oneNoteDialog: () => setOneNote({ busy: '' }),
     async oneNoteConnect(book) {
-      setOneNote({ busy: 'Notizbuch wird angelegt …' })
       try {
         const nb = await db.create('notebook', null, book.name, { config: { onenote: { id: book.id } }, area: areaValue })
-        await actions.oneNoteSync(nb.id, (text) => setOneNote({ busy: text }))
+        await reload()
+        setOneNote(null)
         actions.openHere(nb.id)
+        actions.oneNoteSync(nb.id)
       } catch (e) {
         setError(`OneNote: ${e}`)
-      } finally {
-        setOneNote(null)
       }
     },
-    async oneNoteSync(id, progress = setNotice) {
-      if (syncing.current) return
+    // Abgleich im Hintergrund. Von Hand: Fenster unten rechts mit Fortschritt; silent (automatisch): still, nur ein
+    // Hinweis, wenn sich etwas geändert hat. Läuft schon einer, wird er nur sichtbar gemacht
+    async oneNoteSync(id, { silent = false } = {}) {
+      if (syncing.current) return !silent && setOneNoteRun((r) => r && { ...r, silent: false })
       syncing.current = true
-      progress('OneNote wird gefragt …')
+      stopSync.current = false
+      const all = await db.allNodes()
+      const nb = all.find((n) => n.id === id)
+      const show = (patch) => setOneNoteRun((r) => r && { ...r, ...patch })
+      setOneNoteRun({ id, title: nb?.title || 'Notizbuch', text: 'OneNote wird gefragt …', done: 0, total: 0, silent })
       try {
-        const all = await db.allNodes()
-        const api = { create: db.create, update: db.update, loadBody: db.loadBody, snapshot: db.snapshot, saveImage: saveImageBytes, toMarkdown: htmlToMarkdown, progress }
-        const report = await syncNotebook(all.find((n) => n.id === id), all, api)
+        const api = {
+          create: db.create,
+          update: db.update,
+          loadBody: db.loadBody,
+          snapshot: db.snapshot,
+          saveImage: saveImageBytes,
+          toMarkdown: htmlToMarkdown,
+          importFile: (source, name) => invoke('import_attachment', { source, id: crypto.randomUUID(), name }),
+          ink: (data) => invoke('onenote_ink', { data }),
+          progress: show,
+          stopped: () => stopSync.current,
+          // vor dem Umbau in Ordner oder dem Neuübernehmen aller Seiten: Kopie der Datenbank im Datenordner
+          async before() {
+            show({ text: 'Sicherung vor dem Umbau …', total: 0 })
+            try {
+              // lokal in den Datenordner: hängt nicht davon ab, ob das Sicherungsziel erreichbar ist
+              await db.vacuumInto(await join(await appConfigDir(), `nexora-sicherung-vor-onenote-umbau-${new Date().toLocaleString('sv-SE').replace(/[-: ]/g, '')}.db`))
+            } catch (e) {
+              throw new Error(`Sicherung vor dem Umbau fehlgeschlagen, nichts geändert: ${e}`)
+            }
+          },
+        }
+        const report = await syncNotebook(nb, all, api)
         await reload()
-        setNotice(describeReport(report))
+        const changed = report.neu + report.geaendert + report.konflikte
+        if (silent) (setOneNoteRun((r) => (r?.silent ? null : { ...r, finished: true, text: describeReport(report) })), changed && setNotice(describeReport(report)))
+        else show({ finished: true, text: describeReport(report) })
       } catch (e) {
         await reload()
-        setError(`OneNote-Abgleich fehlgeschlagen: ${e}`)
+        // automatisch und nicht angesehen: Fehler still (OneNote zu, kein Netz …), beim nächsten Mal wieder
+        setOneNoteRun((r) => (r?.silent ? null : { ...r, finished: true, error: `Abgleich ${stopSync.current ? 'abgebrochen' : `fehlgeschlagen: ${e.message ?? e}`}` }))
       } finally {
         syncing.current = false
       }
@@ -1111,6 +1159,7 @@ export default function App() {
     },
   }
   openHereRef.current = actions.openHere
+  oneNoteSyncRef.current = actions.oneNoteSync
 
   const toggleRow = (row) => save(row.id, { props: toggleDone(row, fieldsOf(dbOf(row))) })
 
@@ -1187,6 +1236,8 @@ export default function App() {
     renamePerson,
     removePerson,
     pinPage: windowPage ? null : actions.pinPage,
+    oneNoteRun,
+    oneNoteSync: actions.oneNoteSync,
     profile,
     saveProfile: (p) => (setProfile(p), db.setSetting('profil', JSON.stringify(p)).catch(fail)),
     isPinned: actions.isPinned,
@@ -1472,8 +1523,10 @@ export default function App() {
       {news && <News version={news} onClose={() => setNews(null)} />}
       {searching && <Search tree={areaTree} pathOf={pathOf} commands={commands} onOpen={actions.open} onClose={() => setSearching(false)} />}
 
+      {oneNoteRun && !oneNoteRun.silent && <OneNoteProgress run={oneNoteRun} onStop={() => (stopSync.current = true)} onClose={() => setOneNoteRun(null)} />}
       {notice && !error && (
-        <div role="status" className="anim-toast fixed bottom-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-line bg-raised p-3 shadow-[var(--shadow)]">
+        // über dem OneNote-Fenster, wenn es offen ist
+        <div role="status" className={`anim-toast fixed right-4 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-line bg-raised p-3 shadow-[var(--shadow)] ${oneNoteRun && !oneNoteRun.silent ? 'bottom-40' : 'bottom-4'}`}>
           <span className="flex-1">{typeof notice === 'string' ? notice : notice.text}</span>
           {notice.run && (
             <button onClick={() => (setNotice(''), notice.run())} className="shrink-0 rounded-md px-2 py-0.5 font-medium text-accent hover:bg-hover">

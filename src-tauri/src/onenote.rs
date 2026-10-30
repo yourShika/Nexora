@@ -1,7 +1,12 @@
 // OneNote-Brücke, nur lesend: festes PowerShell-Skript spricht das installierte OneNote über COM an.
 // Das Frontend wählt nur den Befehl und gibt IDs mit, eigenen Code kann es nicht ausführen.
+use base64::{engine::general_purpose::STANDARD, Engine};
+use serde::Serialize;
 use std::os::windows::process::CommandExt;
 use std::process::Command;
+use windows::Storage::Streams::{DataWriter, InMemoryRandomAccessStream};
+use windows::UI::Input::Inking::InkStrokeContainer;
+use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
 
 const SCRIPT: &str = include_str!("onenote.ps1");
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -49,6 +54,47 @@ pub async fn onenote(op: String, id: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || call(&op, &id)).await.map_err(|e| e.to_string())?
 }
 
+// Ein Freihand-Strich in DIPs (1/96 Zoll), wie Windows ihn aus dem ISF liest
+#[derive(Serialize)]
+pub struct Stroke {
+    color: String,
+    width: f32,
+    marker: bool,
+    points: Vec<[f32; 2]>,
+}
+
+// Freihand aus OneNote kommt als ISF (Ink Serialized Format); das liest Windows selbst über InkStrokeContainer
+fn ink(isf: &[u8]) -> windows::core::Result<Vec<Stroke>> {
+    let stream = InMemoryRandomAccessStream::new()?;
+    let writer = DataWriter::CreateDataWriter(&stream)?;
+    writer.WriteBytes(isf)?;
+    writer.StoreAsync()?.join()?;
+    writer.DetachStream()?;
+    let container = InkStrokeContainer::new()?;
+    container.LoadAsync(&stream.GetInputStreamAt(0)?)?.join()?;
+    let mut out = Vec::new();
+    for s in container.GetStrokes()? {
+        let a = s.DrawingAttributes()?;
+        let c = a.Color()?;
+        let points = s.GetInkPoints()?.into_iter().filter_map(|p| p.Position().ok()).map(|q| [q.X, q.Y]).collect();
+        out.push(Stroke { color: format!("#{:02x}{:02x}{:02x}", c.R, c.G, c.B), width: a.Size()?.Width, marker: a.DrawAsHighlighter()?, points });
+    }
+    Ok(out)
+}
+
+// Mehrere Freihand-Stücke (Base64) auf einmal; was Windows nicht lesen kann, kommt als null zurück
+#[tauri::command]
+pub async fn onenote_ink(data: Vec<String>) -> Result<Vec<Option<Vec<Stroke>>>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        unsafe {
+            let _ = RoInitialize(RO_INIT_MULTITHREADED);
+        }
+        data.iter().map(|b| STANDARD.decode(b.trim()).ok().and_then(|bytes| ink(&bytes).ok())).collect()
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,5 +106,36 @@ mod tests {
         assert_eq!(base64(b"Ma"), "TWE=");
         assert_eq!(base64(b"Man"), "TWFu");
         assert_eq!(base64(b"M"), "TQ==");
+    }
+
+    // Striche mit Windows bauen, als ISF speichern (wie OneNote) und wieder lesen
+    #[test]
+    fn freihand_aus_isf() {
+        use windows_collections::IIterable;
+        use windows::Foundation::Point;
+        use windows::Storage::Streams::DataReader;
+        use windows::UI::Input::Inking::InkStrokeBuilder;
+        unsafe {
+            let _ = RoInitialize(RO_INIT_MULTITHREADED);
+        }
+        let builder = InkStrokeBuilder::new().unwrap();
+        let pts: Vec<Point> = (0..20).map(|i| Point { X: 10.0 + i as f32 * 5.0, Y: 40.0 + (i as f32).sin() * 8.0 }).collect();
+        let stroke = builder.CreateStroke(&IIterable::from(pts)).unwrap();
+        let container = InkStrokeContainer::new().unwrap();
+        container.AddStroke(&stroke).unwrap();
+        let stream = InMemoryRandomAccessStream::new().unwrap();
+        container.SaveAsync(&stream.GetOutputStreamAt(0).unwrap()).unwrap().join().unwrap();
+        let size = stream.Size().unwrap() as u32;
+        let reader = DataReader::CreateDataReader(&stream.GetInputStreamAt(0).unwrap()).unwrap();
+        reader.LoadAsync(size).unwrap().join().unwrap();
+        let mut isf = vec![0u8; size as usize];
+        reader.ReadBytes(&mut isf).unwrap();
+
+        let strokes = ink(&isf).expect("ISF lesbar");
+        assert_eq!(strokes.len(), 1);
+        assert!(strokes[0].points.len() >= 10, "Punkte: {}", strokes[0].points.len());
+        let xs: Vec<f32> = strokes[0].points.iter().map(|p| p[0]).collect();
+        assert!(xs.iter().cloned().fold(f32::MIN, f32::max) - xs.iter().cloned().fold(f32::MAX, f32::min) > 80.0);
+        assert!(ink(b"kein isf").is_err());
     }
 }

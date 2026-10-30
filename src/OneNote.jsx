@@ -59,3 +59,34 @@ export default function OneNoteConnect({ connected, busy, onConnect, onClose }) 
     </div>
   )
 }
+
+// Abgleich im Hintergrund: kleines Fenster unten rechts mit Fortschritt; Nexora bleibt bedienbar
+export function OneNoteProgress({ run, onStop, onClose }) {
+  const share = run.total ? Math.min(1, run.done / run.total) : null
+  return (
+    <div role="status" aria-label="OneNote-Abgleich" className="anim-toast fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-line bg-raised p-3 shadow-[var(--shadow)]">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate font-medium">OneNote: {run.title}</span>
+        {run.finished && (
+          <button aria-label="Schließen" onClick={onClose} className="rounded p-0.5 text-muted hover:bg-hover hover:text-text">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      <p className={`mb-2 text-sm ${run.error ? 'text-danger' : 'text-muted'}`}>
+        {run.error ?? run.text}
+        {!run.finished && run.total > 0 && ` (${run.done} von ${run.total})`}
+      </p>
+      {!run.finished && (
+        <>
+          <div className="h-1.5 overflow-hidden rounded-full bg-hover" role="progressbar" aria-valuemin={0} aria-valuemax={run.total || undefined} aria-valuenow={run.total ? run.done : undefined}>
+            <div className={`h-full rounded-full bg-accent ${share === null ? 'w-1/3 animate-pulse' : 'transition-[width]'}`} style={share === null ? undefined : { width: `${Math.max(3, share * 100)}%` }} />
+          </div>
+          <div className="mt-2 flex justify-end">
+            <button onClick={onStop} className="rounded-md px-2 py-0.5 text-sm text-muted hover:bg-hover hover:text-text">Abbrechen</button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
