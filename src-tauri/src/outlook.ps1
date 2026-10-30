@@ -61,6 +61,7 @@ try {
                         busy = $a.BusyStatus
                         categories = $a.Categories
                         color = $color
+                        entry = $a.EntryID
                     })
                 }
             }
@@ -101,6 +102,17 @@ try {
             $mail.Subject = $m.subject
             $mail.Body = $m.body
             $mail.Display()
+            [Console]::Out.Write('{}')
+        }
+        'open' {
+            # Termin in Outlook zeigen; bei Serien das Vorkommen an NEXORA_FROM. Nur anzeigen, nie ändern
+            $item = $ns.GetItemFromID($env:NEXORA_ID)
+            if ($item.IsRecurring) {
+                try { $item = $item.GetRecurrencePattern().GetOccurrence([datetime]::Parse($env:NEXORA_FROM, $culture)) } catch { }
+            }
+            $insp = $item.GetInspector
+            $insp.Display()
+            $insp.Activate()
             [Console]::Out.Write('{}')
         }
         'drop' {

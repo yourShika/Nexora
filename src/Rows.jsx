@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import { ArrowBendUpRight, CalendarBlank, EnvelopeSimple, Lightning, Tray } from '@phosphor-icons/react'
-import { BUSY, eventDays, eventLook, eventTime } from './outlook.js'
+import { useCallback, useId, useRef, useState } from 'react'
+import { ArrowBendUpRight, CalendarBlank, EnvelopeSimple, Lightning, Question, Tray } from '@phosphor-icons/react'
+import { BUSY, eventDays, eventLook, eventTime, openEvent } from './outlook.js'
 import Menu, { MenuItem } from './Menu.jsx'
 import { Chip, DateText, FieldValue } from './Props.jsx'
 import { LOP_FIELDS, dayOf, fieldsOf, formatNr, isDone, isLate, isToday, option, statusField, today } from './fields.js'
-import { parseQuick } from './quick.js'
+import { parseQuick, quickName, tokenAt } from './quick.js'
+import { useApp } from './ctx.js'
 
 // Eine Zeile mit Erledigt-Haken; für Liste, Eingang und Heute
 // Fortschritt der Checkliste im Text eines Punkts: Balken und "3/5"
@@ -51,24 +52,114 @@ export function RowItem({ row, db, onOpen, onToggle, showDb, actions, drag, mark
   )
 }
 
-// Eingabezeile mit Kurzsyntax; zeigt vorab, was erkannt wurde
+// Bausteine der Kurzsyntax: immer unter dem Feld, ausführlich hinter „?“
+const HINTS = [['#Tag', 'Tag, z. B. #netzwerk'], ['@Person', 'Zuständig, mehrere möglich'], ['!hoch', '!hoch, !mittel, !niedrig'], ['morgen · fr · 15.11.', 'Fällig'], ['14:00', 'Uhrzeit'], ['*wöchentlich', 'Wiederholung']]
+const HELP = [
+  ['#netzwerk', 'Tag; mit Leerzeichen in Anführungszeichen: #"Listen & Struktur"'],
+  ['@kim', 'zuständig; mehrere: @kim @sam; mit Leerzeichen: @"Kim B."'],
+  ['!hoch  !mittel  !niedrig', 'Priorität (auch !h, !m, !n oder !1, !2, !3)'],
+  ['heute  morgen  übermorgen', 'fällig an diesem Tag'],
+  ['mo di mi do fr sa · montag …', 'fällig am nächsten solchen Wochentag (heute zählt)'],
+  ['15.11.  15.11.27  +7', 'Datum (ohne Jahr: das nächste), +7 = in 7 Tagen'],
+  ['nächste woche', 'fällig am nächsten Montag'],
+  ['14:00  14uhr  „14 Uhr“', 'Uhrzeit; ohne Datum heute (oder morgen, wenn vorbei)'],
+  ['*täglich *wöchentlich *14tägig *monatlich *quartal *jährlich', 'Wiederholung: beim Erledigen kommt der nächste Termin'],
+]
+
+// Eingabezeile mit Kurzsyntax: zeigt vorab, was erkannt wurde, die Bausteine immer, und schlägt nach # und @
+// vorhandene Tags und Personen vor (Pfeile wählen, Enter oder Tab übernimmt)
 export function QuickAdd({ onAdd, placeholder = 'Neuer Punkt: Text #tag @person !hoch fr' }) {
+  const app = useApp()
   const [text, setText] = useState('')
+  const [caret, setCaret] = useState(0)
+  const [active, setActive] = useState(0)
+  const [help, setHelp] = useState(null)
+  const closeHelp = useCallback(() => setHelp(null), [])
+  const input = useRef(null)
+  const id = useId()
   const parsed = parseQuick(text)
+  const token = tokenAt(text, caret)
+  const pool = token ? (token.sign === '#' ? app?.tagNames ?? [] : (app?.people ?? []).map((p) => p.name)) : []
+  const q = token?.query.toLowerCase() ?? ''
+  const hits = token ? pool.filter((n) => n.toLowerCase().includes(q) && n.toLowerCase() !== q).sort((a, b) => b.toLowerCase().startsWith(q) - a.toLowerCase().startsWith(q)).slice(0, 8) : []
+  const take = (name) => {
+    const insert = `${quickName(token.sign, name)} `
+    const next = text.slice(0, token.start) + insert + text.slice(caret).replace(/^\S*\s?/, '')
+    setText(next)
+    const at = token.start + insert.length
+    setCaret(at)
+    setActive(0)
+    requestAnimationFrame(() => input.current?.setSelectionRange(at, at))
+  }
+  const track = (e) => setCaret(e.target.selectionStart ?? e.target.value.length)
   return (
-    <div className="mb-3">
+    <div className="relative mb-3">
       <input
+        ref={input}
         value={text}
         placeholder={placeholder}
         aria-label="Neuer Punkt"
-        onChange={(e) => setText(e.target.value)}
+        role="combobox"
+        aria-expanded={hits.length > 0}
+        aria-controls={id}
+        aria-activedescendant={hits.length ? `${id}-${Math.min(active, hits.length - 1)}` : undefined}
+        onChange={(e) => (setText(e.target.value), track(e), setActive(0))}
+        onSelect={track}
         onKeyDown={(e) => {
+          if (hits.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault()
+            return setActive((a) => (a + (e.key === 'ArrowDown' ? 1 : hits.length - 1)) % hits.length)
+          }
+          if (hits.length && (e.key === 'Enter' || e.key === 'Tab')) return e.preventDefault(), take(hits[Math.min(active, hits.length - 1)])
           if (e.key === 'Enter' && parsed.title) onAdd(parsed.title, parsed.props), setText('')
           if (e.key === 'Escape') setText('')
         }}
         className="w-full rounded-md border border-line bg-raised px-3 py-2 outline-none placeholder:text-faint focus:border-accent"
       />
+      {hits.length > 0 && (
+        <ul id={id} role="listbox" aria-label={token.sign === '#' ? 'Tags' : 'Personen'} onMouseDown={(e) => e.preventDefault()} className="anim-pop absolute left-0 top-11 z-30 w-64 rounded-lg border border-line bg-raised p-1 text-sm shadow-[var(--shadow)]">
+          {hits.map((n, i) => (
+            <li key={n} id={`${id}-${i}`} role="option" aria-selected={i === active} onMouseEnter={() => setActive(i)} onClick={() => take(n)} className={`cursor-default truncate rounded-md px-2 py-1.5 ${i === active ? 'bg-hover' : ''}`}>
+              {token.sign}{n}
+            </li>
+          ))}
+        </ul>
+      )}
       {text && <ParsedPreview props={parsed.props} />}
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 px-1 text-xs text-faint">
+        {HINTS.map(([chip, title]) => (
+          <span key={chip} title={title} className="rounded border border-line px-1.5 py-px font-mono">{chip}</span>
+        ))}
+        <button
+          aria-label="Hilfe zur Kurzsyntax"
+          title="Hilfe zur Kurzsyntax"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect()
+            setHelp({ x: r.left, y: r.bottom + 4 })
+          }}
+          className="grid size-5 place-items-center rounded-full text-muted hover:bg-hover hover:text-text"
+        >
+          <Question size={14} />
+        </button>
+      </div>
+      {help && (
+        <Menu x={help.x} y={help.y} onClose={closeHelp} role="dialog" label="Kurzsyntax">
+          <div className="max-w-md p-2 text-sm">
+            <p className="mb-2 text-muted">Alles im Feld „Neuer Punkt“ mit Leerzeichen dazuschreiben; der Rest wird der Titel. Enter speichert.</p>
+            <table className="w-full border-collapse">
+              <tbody>
+                {HELP.map(([code, what]) => (
+                  <tr key={code} className="border-t border-line align-top">
+                    <td className="whitespace-nowrap py-1.5 pr-3 font-mono text-xs text-text">{code}</td>
+                    <td className="py-1.5 text-muted">{what}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-2 font-mono text-xs text-muted">Beispiel: Switch tauschen #netzwerk @kim !hoch fr 14:00</p>
+          </div>
+        </Menu>
+      )}
     </div>
   )
 }
@@ -86,7 +177,7 @@ export function ParsedPreview({ props }) {
           {props.tags?.map((t) => <Chip key={t}>#{t}</Chip>)}
         </>
       ) : (
-        <span>Enter speichert. Erkannt werden #tag, @person, !hoch/!mittel/!niedrig und Termine wie heute, morgen, fr, 3.11. oder +7</span>
+        <span>Enter speichert.</span>
       )}
     </div>
   )
@@ -132,6 +223,7 @@ export function Inbox({ rows, databases, onOpen, onToggle, onAdd, onAssign, hotk
 }
 
 export function Today({ rows, dbOf, events = [], onOpen, onToggle, onFollowUp }) {
+  const app = useApp()
   const t = today()
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString()
   const open = rows.filter((r) => !isDone(r, fieldsOf(dbOf(r))))
@@ -153,7 +245,12 @@ export function Today({ rows, dbOf, events = [], onOpen, onToggle, onFollowUp })
           </h2>
           <ul className="divide-y divide-line border-y border-line">
             {meetings.map((e) => (
-              <li key={e.id} className="flex items-center gap-3 py-2">
+              <li key={e.id}>
+                <button
+                  onClick={() => openEvent(e).catch((err) => app?.notice(`Outlook: ${err.message ?? err}`))}
+                  title="In Outlook öffnen"
+                  className="flex w-full items-center gap-3 rounded-md py-2 text-left hover:bg-hover"
+                >
                 <span aria-hidden className="h-5 w-[3px] shrink-0 rounded-full" style={{ background: eventLook(e).stripe }} />
                 <CalendarBlank size={16} className="shrink-0 text-faint" />
                 <span className="w-24 shrink-0 text-sm tabular-nums text-muted">{eventTime(e)}</span>
@@ -161,6 +258,7 @@ export function Today({ rows, dbOf, events = [], onOpen, onToggle, onFollowUp })
                 {e.location && <span className="truncate text-sm text-faint">{e.location}</span>}
                 {e.busy !== 2 && BUSY[e.busy] && <span className="shrink-0 text-xs text-faint">{BUSY[e.busy]}</span>}
                 {e.categories && <span className="shrink-0 truncate text-xs text-faint">{e.categories}</span>}
+                </button>
               </li>
             ))}
           </ul>

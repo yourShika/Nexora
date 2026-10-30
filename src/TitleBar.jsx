@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import logo from '../src-tauri/icons/icon.svg'
+import AppIcon from './AppIcon.jsx'
 
 // Eigene Titelleiste statt der von Windows. Leere Fläche zieht das Fenster, Doppelklick maximiert
 // (data-tauri-drag-region wirkt nur auf das Element selbst, nicht auf Kinder).
@@ -21,7 +21,7 @@ export default function TitleBar({ children }) {
 
   return (
     <header data-tauri-drag-region className="titlebar flex h-10 shrink-0 select-none items-stretch bg-side">
-      <img src={logo} alt="" className="pointer-events-none mx-3 h-4 w-4 self-center" />
+      <AppIcon size={16} className="pointer-events-none mx-3 self-center" />
       {children}
       <div data-tauri-drag-region className="min-w-10 flex-1" />
       <WinButton label="Minimieren" glyph={''} onClick={() => win.minimize()} />

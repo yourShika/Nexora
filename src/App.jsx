@@ -37,6 +37,7 @@ import { findUpdate, installUpdate } from './updates.js'
 import Tabs, { VIEWS } from './Tabs.jsx'
 import * as T from './tabs.js'
 import TitleBar from './TitleBar.jsx'
+import { useWindowIcon } from './AppIcon.jsx'
 import News from './News.jsx'
 import { getVersion } from '@tauri-apps/api/app'
 import { appConfigDir, homeDir, join } from '@tauri-apps/api/path'
@@ -92,6 +93,7 @@ function buildTree(nodes) {
 
 export default function App() {
   const [nodes, setNodes] = useState(null)
+  useWindowIcon(!windowPage)
   // Reiter wie im Browser (tabs.js); die offene Seite ist die des aktiven Reiters
   const [tabState, setTabState] = useState({ tabs: [], active: null })
   const tabsRef = useRef(tabState)
@@ -1236,6 +1238,8 @@ export default function App() {
     renamePerson,
     removePerson,
     pinPage: windowPage ? null : actions.pinPage,
+    // Vorschläge nach # in „Neuer Punkt“: Tags aller Listen und schon benutzte
+    tagNames: [...new Set([...databases.flatMap((d) => (fieldsOf(d).find((f) => f.id === 'tags')?.options ?? []).map((o) => o.name)), ...allRows.flatMap((r) => r.props?.tags ?? [])])].sort((a, b) => a.localeCompare(b, 'de')),
     oneNoteRun,
     oneNoteSync: actions.oneNoteSync,
     profile,

@@ -2,6 +2,17 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.32.0',
+    date: '2026-10-30',
+    title: 'Kleinigkeiten',
+    items: [
+      '**Neues Icon**: das N-Monogramm. Es nimmt die Farben deines **Farbschemas** an (Titelleiste, Seitenleiste, Taskleiste, Tray) und hat für kleine Größen eine kräftigere Fassung.',
+      '**Outlook-Termine anklicken** (Kalender und Heute) öffnet den Termin in Outlook, bei Serien das richtige Vorkommen. LOP-Punkte öffnen sich wie gewohnt in Nexora.',
+      'Unter **„Neuer Punkt“** steht jetzt immer, wie die Kurzsyntax geht; **„?“** zeigt alle Möglichkeiten mit Beispielen.',
+      'Nach **#** und **@** schlägt Nexora vorhandene **Tags und Personen** vor (Pfeile wählen, Enter oder Tab übernimmt). Namen mit Leerzeichen gehen in Anführungszeichen: @"Kim B.".',
+    ],
+  },
+  {
     version: '0.31.0',
     date: '2026-10-30',
     title: 'OneNote',

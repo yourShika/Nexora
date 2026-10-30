@@ -68,6 +68,15 @@ pub async fn outlook_draft(subject: String, body: String) -> Result<String, Stri
     blocking(move || call("draft", &[], Some(job))).await
 }
 
+// Termin in Outlook öffnen (EntryID aus "events"; bei Serien das Vorkommen zum Beginn)
+#[tauri::command]
+pub async fn outlook_open(entry: String, start: String) -> Result<String, String> {
+    if entry.is_empty() || !entry.chars().all(|c| c.is_ascii_hexdigit()) || !valid_date(&start) {
+        return Err("Ungültige Anfrage an Outlook".into());
+    }
+    blocking(move || call("open", &[("NEXORA_ID", &entry), ("NEXORA_FROM", &start)], None)).await
+}
+
 // Nur der Testkalender lässt sich ganz löschen (landet in "Gelöschte Elemente")
 #[tauri::command]
 pub async fn outlook_drop_test() -> Result<String, String> {

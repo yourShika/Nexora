@@ -40,12 +40,26 @@ export function parseDate(word, now = new Date()) {
 const HOUR = '([01]?\\d|2[0-3])'
 const pad = (h) => h.padStart(2, '0')
 
+// Wort an der Schreibmarke, wenn es mit # oder @ beginnt (für Vorschläge): { start, sign, query }, sonst null
+export function tokenAt(text, caret) {
+  const start = text.slice(0, caret).search(/\S*$/)
+  const word = text.slice(start, caret)
+  if (!/^[#@]/.test(word) || /^[#@]".*"$/.test(word)) return null
+  return { start, sign: word[0], query: word.slice(1).replace(/^"/, '') }
+}
+
+// Name für die Kurzsyntax: einfache Namen so, sonst in Anführungszeichen
+export const quickName = (sign, name) => (/^[\p{L}\p{N}._-]+$/u.test(name) ? `${sign}${name}` : `${sign}"${name}"`)
+
 export function parseQuick(text, now = new Date()) {
   const props = {}
   const tags = []
+  const persons = []
   const words = []
   let time = null
-  const tokens = text.trim().split(/\s+/).filter(Boolean)
+  // Namen mit Leer- oder Sonderzeichen in Anführungszeichen: @"Kim B." oder #"Listen & Struktur"
+  const rest = text.replace(/([#@])"([^"]+)"/g, (_, sign, name) => ((sign === '#' ? tags : persons).push(name.trim()), ' '))
+  const tokens = rest.trim().split(/\s+/).filter(Boolean)
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i]
     // Uhrzeit: 14:30, 9:00, 14uhr, "14 Uhr"
@@ -54,7 +68,7 @@ export function parseQuick(text, now = new Date()) {
     if (m) { time = `${pad(m[1])}:${m[2] ?? '00'}`; continue }
     if (/^#[\p{L}\p{N}_-]+$/u.test(t)) { tags.push(t.slice(1)); continue }
     // mehrere @Namen = mehrere Zuständige
-    if (/^@[\p{L}\p{N}._-]+$/u.test(t)) { props.person = props.person ? [].concat(props.person, t.slice(1)) : t.slice(1); continue }
+    if (/^@[\p{L}\p{N}._-]+$/u.test(t)) { persons.push(t.slice(1)); continue }
     if (/^!/.test(t) && PRIO[t.slice(1).toLowerCase()]) { props.prio = PRIO[t.slice(1).toLowerCase()]; continue }
     if (t.startsWith('*') && REPEAT[t.slice(1).toLowerCase()]) { props.repeat = REPEAT[t.slice(1).toLowerCase()]; continue }
     if (/^nächste$/i.test(t) && /^woche$/i.test(tokens[i + 1] ?? '')) {
@@ -67,6 +81,7 @@ export function parseQuick(text, now = new Date()) {
     words.push(t)
   }
   if (tags.length) props.tags = [...new Set(tags)]
+  if (persons.length) props.person = persons.length === 1 ? persons[0] : persons
   // Nur Uhrzeit: heute, falls noch nicht vorbei, sonst morgen
   if (time) props.due = `${props.due ?? (`${iso(now)}T${time}` > stamp(now) ? iso(now) : iso(addDays(now, 1)))}T${time}`
   return { title: words.join(' '), props }

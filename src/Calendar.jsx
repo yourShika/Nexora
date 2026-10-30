@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { CaretLeft, CaretRight, Plus } from '@phosphor-icons/react'
 import { CHIP_COLORS, LOP_FIELDS, addDays, dayOf, fieldsOf, isDone, iso, option, timeOf, today } from './fields.js'
 import { parseQuick } from './quick.js'
-import { BUSY, eventDays, eventLook, eventTime } from './outlook.js'
+import { BUSY, eventDays, eventLook, eventTime, openEvent } from './outlook.js'
+import { useApp } from './ctx.js'
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
@@ -12,6 +13,7 @@ export default function CalendarView({ rows, dbOf, events = [], field = 'due', o
   const [adding, setAdding] = useState(null)
   const [open, setOpen] = useState(null)
   const [over, setOver] = useState(null)
+  const app = useApp()
   const t = today()
 
   const days = useMemo(() => {
@@ -97,15 +99,17 @@ export default function CalendarView({ rows, dbOf, events = [], field = 'due', o
                 {(expanded ? meetings : meetings.slice(0, 3)).map((e) => {
                   const look = eventLook(e)
                   return (
-                    <li
-                      key={e.id}
-                      title={`${eventTime(e)} ${e.subject}${e.location ? ` (${e.location})` : ''} · ${look.label} · Outlook`}
-                      style={{ background: look.tint ?? undefined }}
-                      className={`relative truncate rounded bg-hover py-0.5 pl-2.5 pr-1.5 text-xs ${look.tint ? 'text-text' : 'text-muted'} ${e.busy === 0 ? 'opacity-75' : ''}`}
-                    >
-                      <span aria-hidden className="absolute inset-y-0.5 left-0.5 w-[3px] rounded-full" style={{ background: look.stripe }} />
-                      {!e.allDay && <span className="mr-1 opacity-70">{e.start.slice(11, 16)}</span>}
-                      {e.subject}
+                    <li key={e.id}>
+                      <button
+                        onClick={() => openEvent(e).catch((err) => app?.notice(`Outlook: ${err.message ?? err}`))}
+                        title={`${eventTime(e)} ${e.subject}${e.location ? ` (${e.location})` : ''} · ${look.label} · in Outlook öffnen`}
+                        style={{ background: look.tint ?? undefined }}
+                        className={`relative block w-full truncate rounded bg-hover py-0.5 pl-2.5 pr-1.5 text-left text-xs hover:brightness-95 ${look.tint ? 'text-text' : 'text-muted'} ${e.busy === 0 ? 'opacity-75' : ''}`}
+                      >
+                        <span aria-hidden className="absolute inset-y-0.5 left-0.5 w-[3px] rounded-full" style={{ background: look.stripe }} />
+                        {!e.allDay && <span className="mr-1 opacity-70">{e.start.slice(11, 16)}</span>}
+                        {e.subject}
+                      </button>
                     </li>
                   )
                 })}

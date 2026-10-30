@@ -7,7 +7,7 @@ import Menu, { MenuItem } from './Menu.jsx'
 import { useApp } from './ctx.js'
 import { DEFAULT_LOOK, setLook, useLook } from './theme.js'
 import { initials } from './people.js'
-import logo from '../src-tauri/icons/icon.svg'
+import AppIcon from './AppIcon.jsx'
 
 export const COLORS = {
   petrol: '#1b8a94', blau: '#3a6fc4', gruen: '#3f8f4f', gelb: '#c49a1d',
@@ -73,7 +73,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
         className="absolute right-0 top-0 z-20 h-full w-1.5 cursor-col-resize hover:bg-accent/30"
       />
       <div className="flex h-12 items-center gap-2 px-4">
-        <img src={logo} alt="" className="size-5" />
+        <AppIcon size={20} />
         <span className="font-semibold tracking-tight">Nexora</span>
         <span className="flex-1" />
         <IconButton label="Einstellungen" onClick={() => actions.open('settings')}>

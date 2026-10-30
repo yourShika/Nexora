@@ -149,6 +149,7 @@ pub fn run() {
             outlook::outlook_events,
             outlook::outlook_push,
             outlook::outlook_draft,
+            outlook::outlook_open,
             outlook::outlook_drop_test,
             team::team_login,
             clip::clipboard_read,
@@ -198,7 +199,7 @@ pub fn run() {
             let clip = MenuItem::with_id(app, "clip", "Zwischenablage in den Eingang", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &quick, &clip, &quit])?;
-            TrayIconBuilder::new()
+            TrayIconBuilder::with_id("main") // das Frontend tauscht das Icon nach dem Farbschema
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("Nexora")
                 .menu(&menu)

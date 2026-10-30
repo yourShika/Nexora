@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseQuick } from './quick.js'
+import { parseQuick, quickName, tokenAt } from './quick.js'
 
 // Dienstag, 27.10.2026
 const now = new Date(2026, 9, 27, 9, 30)
@@ -59,4 +59,18 @@ test('Checklisten-Vorlage: Tage relativ zum Stichtag', () => {
 
 test('Priorität kurz, mehrere Tags ohne Doppel', () => {
   assert.deepEqual(q('Backup #srv #srv #nas !1'), { title: 'Backup', props: { prio: 'hoch', tags: ['srv', 'nas'] } })
+})
+
+test('Namen in Anführungszeichen, Wort an der Schreibmarke', () => {
+  const p = parseQuick('Angebot prüfen @"Kim B." @sam #"Listen & Struktur" #neu')
+  assert.equal(p.title, 'Angebot prüfen')
+  assert.deepEqual(p.props.person, ['Kim B.', 'sam'])
+  assert.deepEqual(p.props.tags, ['Listen & Struktur', 'neu'])
+  assert.equal(parseQuick('x @kim').props.person, 'kim') // eine Person bleibt ein Name
+  assert.deepEqual(tokenAt('Server #net', 11), { start: 7, sign: '#', query: 'net' })
+  assert.deepEqual(tokenAt('Server @"Kim', 12), { start: 7, sign: '@', query: 'Kim' })
+  assert.equal(tokenAt('Server neu', 10), null)
+  assert.equal(tokenAt('a @"Kim B."', 11), null) // fertig geschrieben
+  assert.equal(quickName('@', 'kim'), '@kim')
+  assert.equal(quickName('@', 'Kim B.'), '@"Kim B."')
 })

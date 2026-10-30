@@ -92,6 +92,9 @@ export function eventLook(e) {
   return { stripe, tint: tint && `color-mix(in oklab, ${tint} 35%, var(--raised))`, label: [BUSY[e.busy], e.categories].filter(Boolean).join(' · ') }
 }
 
+// Termin in Outlook öffnen (Kalender, Heute); ältere gelesene Termine ohne entry gehen nicht
+export const openEvent = (e) => (e.entry ? invoke('outlook_open', { entry: e.entry, start: e.start }) : Promise.reject(new Error('Termin neu lesen (Outlook abgleichen)')))
+
 export const eventTime = (e) => (e.allDay ? 'ganztägig' : `${e.start.slice(11, 16)}–${e.end.slice(11, 16)}`)
 
 // Nachhaken zu einem wartenden Punkt: Betreff und Text; den Empfänger trägt man in Outlook ein
