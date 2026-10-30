@@ -2,6 +2,18 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.33.0',
+    date: '2026-10-30',
+    title: 'Felder & Import',
+    items: [
+      '**Spalten verschieben**: In der Tabellenansicht einer Liste den Spaltenkopf an eine andere Stelle ziehen. Die Reihenfolge gilt für die ganze Liste; Nummer und Titel bleiben vorne.',
+      '**Aus Obsidian importieren**: Notizbücher → Importieren → „Obsidian-Vault (Ordner)“. Ordner werden Abschnitte, Eigenschaften stehen oben auf der Seite, Links, Bilder und Anhänge kommen mit.',
+      '**Aus Notion importieren**: in Notion als „Markdown & CSV“ exportieren, dann Importieren → „Notion-Export (Zip)“. Unterseiten bleiben Unterseiten, Datenbanken werden **Listen** mit Status, Priorität, Zuständig, Tags und Datum.',
+      '**Für Obsidian oder Notion exportieren**: Rechtsklick auf Notizbuch, Abschnitt, Seite oder Liste. Obsidian bekommt Wikilinks und Eigenschaften, Notion ein Zip mit einer CSV je Liste.',
+      'Der **Markdown-Export** schreibt Daten jetzt fest (2026-10-30 statt „Heute“) und die Nummer mit Kürzel.',
+    ],
+  },
+  {
     version: '0.32.0',
     date: '2026-10-30',
     title: 'Kleinigkeiten',

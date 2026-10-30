@@ -1,5 +1,6 @@
 // Import von Textdateien und Markdown-Export: reine Logik, ohne Tauri (testbar)
-import { describe as show } from './fields.js'
+import { describe as show, formatNr, option } from './fields.js'
+import { personsOf } from './people.js'
 
 // UTF-8, sonst Windows-1252 (alte Notepad-Dateien); BOM entfernen
 export function decodeText(bytes) {
@@ -37,14 +38,47 @@ export function relPath(fromFile, to) {
   return [...a.slice(i).map(() => '..'), ...b.slice(i)].join('/')
 }
 
-const link = (text, target) => `[${text.replace(/[[\]]/g, '')}](<${target}>)`
+// CSV wie Notion sie liest: Felder mit Komma, Anführungszeichen oder Umbruch in "…"
+export const toCsv = (rows) => rows.map((r) => r.map((v) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)).join(',')).join('\n') + '\n'
+
+// Feldwert als schlichter Text (Datum als JJJJ-MM-TT, Nummer mit Kürzel); leer bleibt leer
+function plain(f, n, db) {
+  const v = f.type === 'nr' ? n.props?.nr : n.props?.[f.id]
+  if (v == null || v === '' || (Array.isArray(v) && !v.length)) return ''
+  if (f.type === 'nr') return formatNr(db, v)
+  if (f.type === 'date') return v.replace('T', ' ')
+  if (f.type === 'person') return personsOf(v).join(', ')
+  return show(f, v)
+}
+
+// Obsidian-Eigenschaften (YAML): Listen als Liste, Datum und Häkchen ohne Anführungszeichen, sonst als JSON-String (gültiges YAML)
+function yaml(f, n, db) {
+  const text = plain(f, n, db)
+  if (!text) return []
+  const k = /^[\p{L}\p{N}][\p{L}\p{N} ._-]*$/u.test(f.name) ? f.name : JSON.stringify(f.name)
+  const v = n.props?.[f.id]
+  if (f.type === 'multi' || f.type === 'person') return [`${k}:`, ...(f.type === 'multi' ? v.map((x) => option(f, x).name) : personsOf(v)).map((x) => `  - ${JSON.stringify(x)}`)]
+  if (f.type === 'date') return [`${k}: ${v}`]
+  if (f.type === 'checkbox') return [`${k}: ${!!v}`]
+  return [`${k}: ${JSON.stringify(text)}`]
+}
 
 /*
  * Baut den Export für die Knoten `rootIds`.
  * src: { get(id), children(id) (Baum ohne Punkte), rows(id) (Punkte einer Liste), body(id) }
+ * style: 'markdown' (normale Links), 'obsidian' (Wikilinks, Felder als YAML-Kopf, ohne Titelzeile),
+ * 'notion' (wie Notions eigener Export: Listen als CSV, Felder als "Name: Wert" unter dem Titel)
  * Ergebnis: files [{ path, content }], copies [{ from, to }] (Bilder/Anhänge aus dem Datenordner)
  */
-export function buildExport(rootIds, src) {
+export function buildExport(rootIds, src, style = 'markdown') {
+  // Verweis von der Datei `from` auf `to` (beide ab Export-Wurzel); in Tabellen muss "|" bei Obsidian maskiert sein
+  const link = (text, to, from, table) => {
+    const t = text.replace(/[[\]]/g, '')
+    if (style === 'obsidian') return `[[${to.replace(/\.md$/, '')}${table ? '\\|' : '|'}${t.replace(/\|/g, '')}]]`
+    const rel = relPath(from, to)
+    if (style === 'notion') return `[${t}](${rel.split('/').map((p) => encodeURIComponent(p).replace(/[()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)).join('/')})`
+    return `[${t}](<${rel}>)`
+  }
   const paths = new Map() // id -> Pfad der .md-Datei
   const plan = [] // [id, Pfad]
 
@@ -66,8 +100,9 @@ export function buildExport(rootIds, src) {
         place(src.children(id).map((n) => n.id), base)
         continue
       }
-      paths.set(id, `${base}.md`)
-      plan.push([id, `${base}.md`])
+      const file = `${base}.${style === 'notion' && node.kind === 'database' ? 'csv' : 'md'}`
+      paths.set(id, file)
+      plan.push([id, file])
       const kids = [...src.children(id), ...(node.kind === 'database' ? src.rows(id) : [])]
       if (kids.length) place(kids.map((n) => n.id), base)
     }
@@ -80,34 +115,38 @@ export function buildExport(rootIds, src) {
     const node = src.get(id)
     const rewrite = (md) =>
       md
-        .replace(/\[\[lop:([0-9a-f-]{36})(?:\|alle)?\]\]/g, (_, ref) => (paths.has(ref) ? `Liste: ${link(src.get(ref).title || 'Ohne Titel', relPath(path, paths.get(ref)))}` : 'Liste (nicht exportiert)'))
-        .replace(/\[\[([^\]|\n]*)\|([0-9a-f-]{36})\]\]/g, (_, title, ref) => (paths.has(ref) ? link(src.get(ref).title || title, relPath(path, paths.get(ref))) : title))
+        .replace(/\[\[lop:([0-9a-f-]{36})(?:\|alle)?\]\]/g, (_, ref) => (paths.has(ref) ? `Liste: ${link(src.get(ref).title || 'Ohne Titel', paths.get(ref), path)}` : 'Liste (nicht exportiert)'))
+        .replace(/\[\[([^\]|\n]*)\|([0-9a-f-]{36})\]\]/g, (_, title, ref) => (paths.has(ref) ? link(src.get(ref).title || title, paths.get(ref), path) : title))
         .replace(/\[\[datei:([0-9a-f-]{36})\/([^\]|\n]+)\|\d+(?:\|vorschau)?\]\]/g, (_, uuid, name) => {
           const to = `anhaenge/${uuid}/${name}`
           copies.set(to, to)
-          return `Anhang: ${link(name, relPath(path, to))}`
+          return `Anhang: ${link(name, to, path)}`
         })
         .replace(/!\[([^\]]*)\]\((bilder\/[\w-]+\.\w+)\)/g, (_, alt, img) => {
           copies.set(img, img)
-          return `![${alt}](${relPath(path, img)})`
+          return `![${style === 'notion' ? alt.replace(/\|\d+$/, '') : alt}](${relPath(path, img)})`
         })
 
-    const head = [`# ${node.icon ? `${node.icon} ` : ''}${node.title || 'Ohne Titel'}`, '']
+    const head = style === 'obsidian' ? [] : [`# ${node.icon ? `${node.icon} ` : ''}${node.title || 'Ohne Titel'}`, '']
     if (node.kind === 'database') {
       const fields = node.config?.fields ?? []
       const rows = src.rows(id)
       const cols = ['Titel', ...fields.map((f) => f.name)]
+      if (style === 'notion') return { path, content: toCsv([cols, ...rows.map((r) => [r.title || 'Ohne Titel', ...fields.map((f) => plain(f, r, node))])]) }
       const cell = (s) => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ')
       const table = [
         `| ${cols.map(cell).join(' | ')} |`,
         `| ${cols.map(() => '---').join(' | ')} |`,
-        ...rows.map((r) => `| ${[link(r.title || 'Ohne Titel', relPath(path, paths.get(r.id))), ...fields.map((f) => cell(f.type === 'nr' ? r.props?.nr ?? '' : show(f, r.props?.[f.id])))].join(' | ')} |`),
+        ...rows.map((r) => `| ${[link(r.title || 'Ohne Titel', paths.get(r.id), path, true), ...fields.map((f) => cell(plain(f, r, node) || '–'))].join(' | ')} |`),
       ]
       return { path, content: [...head, ...(rows.length ? table : ['(keine Punkte)']), ''].join('\n') }
     }
     if (node.kind === 'row') {
-      const fields = src.get(node.parent_id)?.config?.fields ?? []
-      const props = fields.map((f) => `- **${f.name}:** ${f.type === 'nr' ? node.props?.nr ?? '–' : show(f, node.props?.[f.id])}`)
+      const db = src.get(node.parent_id)
+      const fields = db?.config?.fields ?? []
+      if (style === 'obsidian') return { path, content: ['---', ...fields.flatMap((f) => yaml(f, node, db)), '---', '', rewrite(src.body(id))].join('\n') }
+      if (style === 'notion') return { path, content: [...head, ...fields.map((f) => [f.name, plain(f, node, db)]).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`), '', rewrite(src.body(id))].join('\n') }
+      const props = fields.map((f) => `- **${f.name}:** ${plain(f, node, db) || '–'}`)
       return { path, content: [...head, ...props, '', rewrite(src.body(id))].join('\n') }
     }
     return { path, content: [...head, rewrite(src.body(id))].join('\n') }

@@ -29,6 +29,7 @@ export function NodeIcon({ node, size = 16 }) {
 
 export default function Sidebar({ tree, area, favorites, counts, current, expanded, renaming, actions, warning, onSearch, updates, vaultOpen, onLockVault }) {
   const [menu, setMenu] = useState(null)
+  const [importMenu, setImportMenu] = useState(null)
   const templates = useApp()?.templates ?? []
 
   const openMenu = (e, node) => {
@@ -150,7 +151,15 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
         <Heading
           action={
             <span className="flex gap-0.5">
-              <IconButton label="Nexora-Datei importieren" onClick={actions.importNexora}><FileArrowDown size={14} /></IconButton>
+              <IconButton
+                label="Importieren (Nexora, Obsidian, Notion)"
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect()
+                  setImportMenu({ x: r.left, y: r.bottom + 4 })
+                }}
+              >
+                <FileArrowDown size={14} />
+              </IconButton>
               <IconButton label="OneNote-Notizbuch verbinden" onClick={actions.oneNoteDialog}><PlugsConnected size={14} /></IconButton>
               <IconButton label="Neues Notizbuch" onClick={() => actions.add('notebook', null)}><Plus size={14} /></IconButton>
             </span>
@@ -221,6 +230,8 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
           )}
           {m.kind === 'notebook' && <MenuItem icon={FileArrowUp} onClick={run(() => actions.exportNexora(m.id))}>Als Nexora-Datei speichern …</MenuItem>}
           <MenuItem icon={Export} onClick={run(() => actions.exportTree([m.id]))}>Als Markdown exportieren …</MenuItem>
+          <MenuItem icon={Export} onClick={run(() => actions.exportTree([m.id], false, 'obsidian'))}>Für Obsidian exportieren …</MenuItem>
+          <MenuItem icon={Export} onClick={run(() => actions.exportTree([m.id], false, 'notion'))}>Für Notion exportieren (Zip) …</MenuItem>
           <MenuItem icon={PencilSimple} onClick={run(() => actions.startRename(m.id))}>Umbenennen</MenuItem>
           <MenuItem icon={Star} onClick={run(() => actions.save(m.id, { favorite: m.favorite ? 0 : 1 }))}>
             {m.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
@@ -251,6 +262,13 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
           )}
           <div className="my-1 border-t border-line" />
           <MenuItem icon={Trash} danger onClick={run(() => actions.remove(m.id))}>In den Papierkorb</MenuItem>
+        </Menu>
+      )}
+      {importMenu && (
+        <Menu x={importMenu.x} y={importMenu.y} onClose={() => setImportMenu(null)}>
+          <MenuItem icon={FileArrowDown} onClick={() => (setImportMenu(null), actions.importNexora())}>Nexora-Datei …</MenuItem>
+          <MenuItem icon={FolderSimple} onClick={() => (setImportMenu(null), actions.importForeign('obsidian'))}>Obsidian-Vault (Ordner) …</MenuItem>
+          <MenuItem icon={DownloadSimple} onClick={() => (setImportMenu(null), actions.importForeign('notion'))}>Notion-Export (Zip, Markdown &amp; CSV) …</MenuItem>
         </Menu>
       )}
     </aside>

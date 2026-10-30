@@ -51,8 +51,8 @@ test('Export: Baum, Links, Bilder, Anhänge, Listen', () => {
   assert.match(ex, new RegExp(`Anhang: \\[Plan\\.pdf\\]\\(<\\.\\./\\.\\./anhaenge/${id(8)}/Plan\\.pdf>\\)`))
   assert.match(ex, /Liste: \[LOP\]\(<LOP\.md>\)/)
   assert.match(byPath['IT/Server/DC.md'], /^# 🖥️ DC/)
-  assert.match(byPath['IT/Server/LOP.md'], /\| \[Zertifikat\]\(<LOP\/Zertifikat\.md>\) \| 1 \| Wartet \|/)
-  assert.match(byPath['IT/Server/LOP/Zertifikat.md'], /- \*\*Status:\*\* Wartet/)
+  assert.match(byPath['IT/Server/LOP.md'], /\| \[Zertifikat\]\(<LOP\/Zertifikat\.md>\) \| LOP-001 \| Wartet \| – \| 2026-11-03 \|/)
+  assert.match(byPath['IT/Server/LOP/Zertifikat.md'], /- \*\*Status:\*\* Wartet\n- \*\*Priorität:\*\* –\n- \*\*Fällig:\*\* 2026-11-03/)
   assert.deepEqual(copies.map((c) => c.from).sort(), [`anhaenge/${id(8)}/Plan.pdf`, 'bilder/abc.png'])
 })
 

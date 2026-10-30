@@ -165,6 +165,7 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
               onSorts={setSorts}
               widths={config.widths ?? {}}
               onWidths={(widths) => setConfig({ widths })}
+              onFields={(next) => setConfig({ fields: next })}
               onOpen={onOpen}
               onRow={onRow}
               addOption={addOption}
@@ -233,13 +234,23 @@ function SortMenu({ x, y, fields, sorts, onSorts, onClose }) {
   )
 }
 
-function TableView({ db, rows, fields, sorts, onSorts, widths, onWidths, onOpen, onRow, addOption }) {
+function TableView({ db, rows, fields, sorts, onSorts, widths, onWidths, onFields, onOpen, onRow, addOption }) {
   const cols = [...fields.filter((f) => f.type === 'nr'), TITLE, ...fields.filter((f) => f.type !== 'nr')]
   // Klick auf den Kopf: nur nach dieser Spalte, auf, ab, aus; mehrere Ebenen über "Sortieren"
   const clickSort = (id) =>
     onSorts(sorts[0]?.field !== id ? [{ field: id, dir: 'asc' }] : sorts[0].dir === 'asc' ? [{ field: id, dir: 'desc' }] : [])
   const drag = useRowDrag(rows, onRow, !sorts.length)
   const [live, setLive] = useState(null) // Breiten während des Ziehens
+  // Spalten umordnen: Kopf ziehen; Nummer und Titel bleiben vorne. Die Reihenfolge gilt für die ganze Liste
+  const [colDrag, setColDrag] = useState(null)
+  const [colOver, setColOver] = useState(null) // { id, side }
+  const movable = (c) => c.type !== 'nr' && c.id !== 'title'
+  const sideOf = (e) => (e.clientX - e.currentTarget.getBoundingClientRect().left < e.currentTarget.offsetWidth / 2 ? 'before' : 'after')
+  function moveField(id, target, side) {
+    const rest = fields.filter((x) => x.id !== id)
+    rest.splice(rest.findIndex((x) => x.id === target) + (side === 'after' ? 1 : 0), 0, fields.find((x) => x.id === id))
+    onFields(rest)
+  }
   const width = (c) => (live ?? widths)[c.id] ?? COL_WIDTH[c.type] ?? 128
   const total = 24 + cols.reduce((s, c) => s + width(c), 0)
 
@@ -276,7 +287,31 @@ function TableView({ db, rows, fields, sorts, onSorts, widths, onWidths, onOpen,
           <tr className="border-b border-line text-left text-xs text-muted">
             <th aria-label="Reihenfolge" />
             {cols.map((c) => { const level = sorts.findIndex((s) => s.field === c.id); return (
-              <th key={c.id} className="relative whitespace-nowrap px-1.5 py-1.5 font-medium">
+              <th
+                key={c.id}
+                draggable={movable(c)}
+                onDragStart={(e) => {
+                  if (e.target.closest('[role=separator]')) return e.preventDefault() // Breite ziehen, nicht die Spalte
+                  setColDrag(c.id)
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData('application/x-nexora-feld', c.id)
+                }}
+                onDragEnd={() => (setColDrag(null), setColOver(null))}
+                onDragOver={(e) => {
+                  if (!colDrag || colDrag === c.id || !movable(c)) return
+                  e.preventDefault()
+                  const side = sideOf(e)
+                  if (colOver?.id !== c.id || colOver.side !== side) setColOver({ id: c.id, side })
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  if (colDrag && colDrag !== c.id && movable(c)) moveField(colDrag, c.id, sideOf(e))
+                  setColDrag(null)
+                  setColOver(null)
+                }}
+                title={movable(c) ? 'Ziehen verschiebt die Spalte' : undefined}
+                className={`relative whitespace-nowrap px-1.5 py-1.5 font-medium ${movable(c) ? 'cursor-grab' : ''} ${colDrag === c.id ? 'opacity-50' : ''} ${colOver?.id === c.id ? (colOver.side === 'before' ? 'shadow-[inset_2px_0_0_var(--accent)]' : 'shadow-[inset_-2px_0_0_var(--accent)]') : ''}`}
+              >
                 <button onClick={() => clickSort(c.id)} className="flex max-w-full items-center gap-1 overflow-hidden hover:text-text">
                   <span className="truncate">{c.name}</span>
                   {level >= 0 && (sorts[level].dir === 'asc' ? <SortAscending size={13} /> : <SortDescending size={13} />)}

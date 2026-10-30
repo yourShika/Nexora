@@ -97,8 +97,8 @@ pub fn reveal_attachment(app: AppHandle, rel: String) -> Result<(), String> {
 pub fn read_text_file(path: String) -> Result<Response, String> {
     let p = Path::new(&path);
     let ext = p.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
-    if !["txt", "md", "markdown", "log"].contains(&ext.as_str()) {
-        return Err("Nur .txt, .md oder .log".into());
+    if !["txt", "md", "markdown", "log", "csv"].contains(&ext.as_str()) {
+        return Err("Nur .txt, .md, .csv oder .log".into());
     }
     if fs::metadata(p).map_err(|e| e.to_string())?.len() > MAX_TEXT {
         return Err("Datei ist größer als 20 MB".into());
@@ -147,6 +147,31 @@ pub fn export_files(app: AppHandle, target: String, files: Vec<ExportFile>, copi
         // fehlende Dateien (z. B. gelöscht) überspringen statt den ganzen Export abzubrechen
         let _ = fs::copy(&from, &to);
     }
+    Ok(files.len())
+}
+
+// Export als Zip (für Notion): dieselben Dateien und Kopien wie export_files, in eine Datei
+#[tauri::command]
+pub fn export_zip(app: AppHandle, target: String, files: Vec<ExportFile>, copies: Vec<ExportCopy>) -> Result<usize, String> {
+    use std::io::Write;
+    let data = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let mut zip = zip::ZipWriter::new(fs::File::create(&target).map_err(|e| e.to_string())?);
+    let opts = zip::write::SimpleFileOptions::default();
+    let name = |p: &PathBuf| p.to_string_lossy().replace('\\', "/");
+    for f in &files {
+        zip.start_file(name(&safe_rel(&f.path)?), opts).map_err(|e| e.to_string())?;
+        zip.write_all(f.content.as_bytes()).map_err(|e| e.to_string())?;
+    }
+    for c in &copies {
+        if !(c.from.starts_with("bilder/") || c.from.starts_with("anhaenge/")) {
+            return Err(format!("Nicht erlaubte Quelle: {}", c.from));
+        }
+        // fehlende Dateien überspringen wie beim Ordner-Export
+        let Ok(bytes) = fs::read(data.join(safe_rel(&c.from)?)) else { continue };
+        zip.start_file(name(&safe_rel(&c.to)?), opts).map_err(|e| e.to_string())?;
+        zip.write_all(&bytes).map_err(|e| e.to_string())?;
+    }
+    zip.finish().map_err(|e| e.to_string())?;
     Ok(files.len())
 }
 

@@ -9,6 +9,7 @@ mod clip;
 mod doctext;
 mod files;
 mod ocr;
+mod interop;
 mod onenote;
 mod outlook;
 mod package;
@@ -146,6 +147,10 @@ pub fn run() {
             preview::attachment_preview,
             onenote::onenote,
             onenote::onenote_ink,
+            interop::list_folder,
+            interop::unzip_import,
+            interop::drop_import,
+            attach::export_zip,
             outlook::outlook_events,
             outlook::outlook_push,
             outlook::outlook_draft,

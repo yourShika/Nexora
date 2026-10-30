@@ -22,7 +22,7 @@ import { maskSecrets, secretSpans } from './secrets.js'
 import SecretDialog from './SecretDialog.jsx'
 import { isPermissionGranted, sendNotification } from '@tauri-apps/plugin-notification'
 import { checkReminders } from './notify.js'
-import { bmpToPng, initImages, saveImageBytes } from './images.js'
+import { bmpToPng, importImage, initImages, saveImageBytes } from './images.js'
 import { describeReport, hash, link as oneNoteLink, syncNotebook } from './onenote.js'
 import { desiredEvents, followUpMail, pushDue, readEvents } from './outlook.js'
 import Journal from './Journal.jsx'
@@ -49,6 +49,7 @@ import { CalendarBlank } from '@phosphor-icons/react'
 import { parseQuick } from './quick.js'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { buildExport, decodeText, importedPage, packNotebook, safeName, unpackNotebook } from './io.js'
+import { IMAGE, planImport } from './interop.js'
 import { setLinkData } from './Links.jsx'
 import { AppContext } from './ctx.js'
 
@@ -895,10 +896,14 @@ export default function App() {
     }
   }
 
-  // Markdown-Export: Baum ab `ids` (oder alles) in einen gewählten Ordner, mit Bildern und Anhängen
-  async function exportTree(ids, all) {
+  // Markdown-Export: Baum ab `ids` (oder alles) in einen gewählten Ordner, mit Bildern und Anhängen.
+  // style 'obsidian' schreibt Wikilinks und YAML-Kopf, 'notion' ein Zip mit CSV je Liste (Notion: Importieren → Text & Markdown)
+  async function exportTree(ids, all, style = 'markdown') {
     try {
-      const target = await openDialog({ directory: true, title: 'Ordner für den Export wählen' })
+      const target =
+        style === 'notion'
+          ? await saveDialog({ title: 'Für Notion exportieren', defaultPath: `${safeName(tree.alive.get(ids[0])?.title)}.zip`, filters: [{ name: 'Zip', extensions: ['zip'] }] })
+          : await openDialog({ directory: true, title: style === 'obsidian' ? 'Ordner für Obsidian wählen (z. B. im Vault)' : 'Ordner für den Export wählen' })
       if (!target) return
       const bodies = new Map()
       const walk = async (id) => {
@@ -907,12 +912,12 @@ export default function App() {
         for (const k of [...tree.children(id), ...tree.rows(id)]) await walk(k.id)
       }
       for (const id of ids) await walk(id)
-      const out = buildExport(ids, { get: (x) => tree.alive.get(x), children: tree.children, rows: tree.rows, body: (x) => bodies.get(x) ?? '' })
+      const out = buildExport(ids, { get: (x) => tree.alive.get(x), children: tree.children, rows: tree.rows, body: (x) => bodies.get(x) ?? '' }, style)
       // "Alles" landet in einem eigenen Unterordner mit Datum
       const prefix = all ? `Nexora-Export ${today()}/` : ''
       const files = out.files.map((f) => ({ ...f, path: prefix + f.path }))
       const copies = out.copies.map((c) => ({ ...c, to: prefix + c.to }))
-      const n = await invoke('export_files', { target, files, copies })
+      const n = await invoke(style === 'notion' ? 'export_zip' : 'export_files', { target, files, copies })
       setNotice(`${n} Seiten exportiert nach ${target}${all ? `\\${prefix.slice(0, -1)}` : ''}`)
     } catch (e) {
       fail(e)
@@ -947,21 +952,72 @@ export default function App() {
       const source = await openDialog({ title: 'Nexora-Datei importieren', filters: [{ name: 'Nexora-Notizbuch', extensions: ['nexora'] }] })
       if (!source) return
       const { nodes: list, activity } = unpackNotebook(JSON.parse(await invoke('import_nexora', { source })), () => crypto.randomUUID())
-      const [book] = list
-      // Gleichnamiges Notizbuch bleibt unberührt, die Kopie bekommt einen Zusatz; sie landet im aktiven Bereich
-      const taken = new Set([...tree.alive.values()].filter((n) => n.kind === 'notebook').map((n) => n.title))
-      const base = book.title
-      for (let i = 1; taken.has(book.title); i++) book.title = `${base} (Import${i > 1 ? ` ${i}` : ''})`
-      book.area = areaValue
-      book.sort = (tree.roots.at(-1)?.sort ?? 0) + 1000
-      for (const n of list) await db.insertNode(n)
-      for (const a of activity) await db.insertActivity(a)
-      db.nodesChanged()
-      setNodes(await db.allNodes())
-      actions.openHere(book.id)
+      const book = await addNotebook(list, activity)
       setNotice(`„${book.title}“ importiert: ${list.length} Einträge.`)
     } catch (e) {
       setError(`Import: ${e.message ?? e}`)
+    }
+  }
+
+  // Importiertes Notizbuch (Eltern vor Kindern) eintragen und öffnen
+  async function addNotebook(list, activity = []) {
+    const [book] = list
+    // Gleichnamiges Notizbuch bleibt unberührt, die Kopie bekommt einen Zusatz; sie landet im aktiven Bereich
+    const taken = new Set([...tree.alive.values()].filter((n) => n.kind === 'notebook').map((n) => n.title))
+    const base = book.title
+    for (let i = 1; taken.has(book.title); i++) book.title = `${base} (Import${i > 1 ? ` ${i}` : ''})`
+    book.area = areaValue
+    book.sort = (tree.roots.at(-1)?.sort ?? 0) + 1000
+    for (const n of list) await db.insertNode(n)
+    for (const a of activity) await db.insertActivity(a)
+    db.nodesChanged()
+    setNodes(await db.allNodes())
+    actions.openHere(book.id)
+    return book
+  }
+
+  // Obsidian-Vault (Ordner) oder Notion-Export (Zip „Markdown & CSV“) als neues Notizbuch
+  async function importForeign(style) {
+    let temp = null
+    try {
+      const notion = style === 'notion'
+      const picked = notion
+        ? await openDialog({ title: 'Notion-Export wählen (Format „Markdown & CSV“)', filters: [{ name: 'Notion-Export', extensions: ['zip'] }] })
+        : await openDialog({ directory: true, title: 'Obsidian-Vault (Ordner) wählen' })
+      if (!picked) return
+      setNotice('Import läuft …')
+      const root = notion ? (temp = await invoke('unzip_import', { path: picked })) : picked
+      const path = (rel) => `${root}\\${rel.replaceAll('/', '\\')}`
+      const files = await invoke('list_folder', { root })
+      const texts = new Map()
+      for (const f of files) if ((notion ? /\.(md|csv)$/i : /\.md$/i).test(f.rel)) texts.set(f.rel, decodeText(new Uint8Array(await invoke('read_text_file', { path: path(f.rel) }))))
+      const input = { files, texts, title: picked.split(/[\\/]/).pop().replace(/\.zip$/i, '') }
+      // Erst planen, um die verlinkten Bilder und Dateien zu kennen; die kommen in den Datenordner, dann wird endgültig geplant
+      const assets = new Map()
+      let failed = 0
+      for (const rel of planImport(style, { ...input, makeId: () => crypto.randomUUID() }).used) {
+        try {
+          if (IMAGE.test(rel)) assets.set(rel, { src: await importImage(path(rel)) })
+          else {
+            const [file, size] = await invoke('import_attachment', { source: path(rel), id: crypto.randomUUID(), name: null })
+            assets.set(rel, { file, size })
+          }
+        } catch {
+          failed++
+        }
+      }
+      const { nodes: list } = planImport(style, { ...input, assets, makeId: () => crypto.randomUUID() })
+      if (list.length < 2) return setError(notion ? 'Keine Seiten gefunden. Beim Export in Notion das Format „Markdown & CSV“ wählen.' : 'Keine Markdown-Dateien in diesem Ordner.')
+      const book = await addNotebook(list)
+      const count = (k, one, many) => {
+        const n = list.filter((x) => x.kind === k).length
+        return `${n} ${n === 1 ? one : many}`
+      }
+      setNotice(`„${book.title}“ importiert: ${count('page', 'Seite', 'Seiten')}, ${count('database', 'Liste', 'Listen')} mit ${count('row', 'Punkt', 'Punkten')}, ${assets.size} ${assets.size === 1 ? 'Bild oder Datei' : 'Bilder und Dateien'}${failed ? `; ${failed} nicht übernommen` : ''}.`)
+    } catch (e) {
+      setError(`Import: ${e.message ?? e}`)
+    } finally {
+      if (temp) invoke('drop_import', { dir: temp }).catch(() => {})
     }
   }
 
@@ -1003,6 +1059,7 @@ export default function App() {
     exportTree,
     exportNexora,
     importNexora,
+    importForeign,
     canMove: (id, targetId, zone) => !!placement(id, targetId, zone),
     move(id, targetId, zone) {
       const to = placement(id, targetId, zone)
@@ -1267,6 +1324,8 @@ export default function App() {
     { label: 'Fokus-Modus (Strg+Umschalt+F)', run: () => setFocusMode((f) => !f) },
     { label: 'Neues Notizbuch', run: () => actions.add('notebook', null) },
     { label: 'Nexora-Datei importieren …', run: () => actions.importNexora() },
+    { label: 'Obsidian-Vault importieren …', run: () => actions.importForeign('obsidian') },
+    { label: 'Notion-Export importieren (Zip) …', run: () => actions.importForeign('notion') },
     { label: 'Einstellungen', run: () => actions.open('settings') },
     { label: 'Papierkorb', run: () => actions.open('trash') },
     { label: 'Darstellung: Hell', run: () => setLook({ mode: 'light' }) },
