@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import {
   AppWindow, ArrowCircleUp, ArrowsLeftRight, FileArrowDown, FileArrowUp, FolderSimplePlus, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
-  Browsers, Compass, LockSimple, PushPin, SidebarSimple, Sparkle, Stamp, Star, Table, Timer, Trash, Tray, Warning, Wrench,
+  Browsers, Compass, LockSimple, Microphone, PushPin, SidebarSimple, Sparkle, Stamp, Star, Table, Timer, Trash, Tray, Warning, Wrench,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { NODE_DRAG } from './tabs.js'
@@ -115,11 +115,12 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
             { id: 'stats', label: 'Statistik', icon: ChartBar },
             { id: 'snippets', label: 'Snippets', icon: Code },
             { id: 'jobs', label: 'Aufgaben', icon: Timer },
+            { id: 'meeting', label: 'Besprechung', icon: Microphone, run: actions.meeting },
           ].map((v) => (
             <li key={v.id}>
               <button
-                onClick={() => actions.open(v.id)}
-                onAuxClick={(e) => e.button === 1 && actions.openTab(v.id)}
+                onClick={() => (v.run ? v.run() : actions.open(v.id))}
+                onAuxClick={(e) => e.button === 1 && !v.run && actions.openTab(v.id)}
                 className={`flex h-[var(--row)] w-full items-center gap-2 rounded-md px-2 text-left ${current === v.id ? 'bg-accent-soft' : 'hover:bg-hover'}`}
               >
                 <v.icon size={16} className="text-accent" />

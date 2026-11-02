@@ -17,6 +17,8 @@ import { Inbox, Today } from './Rows.jsx'
 import Snippets from './Snippets.jsx'
 import Settings from './Settings.jsx'
 import Search from './Search.jsx'
+import { MeetingDialog, MeetingDone, SpeechBar } from './Speech.jsx'
+import { slashApp } from './SlashMenu.jsx'
 import { HOTKEYS, bindHotkeys, hotkeyLabel } from './hotkey.js'
 import { maskSecrets, secretSpans } from './secrets.js'
 import SecretDialog from './SecretDialog.jsx'
@@ -198,6 +200,7 @@ export default function App() {
   const hotkeyRun = useRef(null)
   const [secretAsk, setSecretAsk] = useState(null) // Passwort-Warnung bei "Zwischenablage in den Eingang"
   const [searching, setSearching] = useState(false)
+  const [meeting, setMeeting] = useState(false)
   const [backup, setBackup] = useState({ busy: false, error: '', dest: '' })
   const [update, setUpdate] = useState({ found: null, busy: false, error: '' })
   const live = useRef(null)
@@ -1221,6 +1224,7 @@ export default function App() {
       if ((kind === 'page' || kind === 'row') && (windowMode === 'always' || (windowMode === 'ctrl' && modifier.current))) return actions.openWindow(id)
       actions.openHere(id)
     },
+    meeting: () => setMeeting(true),
     openWindow(id, at) {
       setWindows((s) => new Set([...s, id]))
       openPageWindow(id, at ?? {}).catch((e) => {
@@ -1444,6 +1448,16 @@ export default function App() {
     // Bereich der Seite, die hier bearbeitet wird; ein Seitenfenster kann in einem anderen liegen als das Hauptfenster
     textArea: windowPage ? tree.areaOf(windowPage) : area,
     openAiSettings: () => (setSettingsTab('ki'), actions.open('settings')),
+    openSpeechSettings: () => (setSettingsTab('sprache'), actions.open('settings')),
+    areaOf: tree.areaOf,
+    // Seite für eine Mitschrift: gleich mit Inhalt anlegen und öffnen
+    createPage: async (parentId, title, body) => {
+      const node = await db.create('page', parentId, title, { area: parentId ? null : areaValue })
+      await db.update(node.id, { body })
+      setNodes((ns) => [...ns, node])
+      actions.open(node.id)
+      return node.id
+    },
     databases,
     open: actions.open,
     // Mittelklick auf einen Eintrag; ein Seitenfenster hat keine Reiter, dort geht es ins Hauptfenster
@@ -1472,7 +1486,9 @@ export default function App() {
     exportAll: () => exportTree(tree.roots.map((n) => n.id), true),
     templates: [...tree.alive.values()].filter((n) => n.template),
   }
+  slashApp.current = app
   const commands = [
+    { label: 'Besprechung mitschreiben', run: () => setMeeting(true) },
     { label: 'Heute', run: () => actions.open('today') },
     { label: 'Eingang', run: () => actions.open('inbox') },
     { label: 'Kalender', run: () => actions.open('calendar') },
@@ -1776,6 +1792,9 @@ export default function App() {
         />
       )}
       {searching && <Search tree={areaTree} pathOf={pathOf} commands={commands} onOpen={actions.open} onClose={() => setSearching(false)} />}
+      <SpeechBar />
+      <MeetingDone app={app} />
+      {meeting && <MeetingDialog app={app} onClose={() => setMeeting(false)} />}
 
       {oneNoteRun && !oneNoteRun.silent && <OneNoteProgress run={oneNoteRun} onStop={() => (stopSync.current = true)} onClose={() => setOneNoteRun(null)} />}
       {notice && !error && (

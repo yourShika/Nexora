@@ -6,6 +6,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 mod admin;
 mod ai;
 mod attach;
+mod capture;
 mod clip;
 mod doctext;
 mod files;
@@ -19,6 +20,7 @@ mod preview;
 mod vault;
 mod run;
 mod shortcuts;
+mod speech;
 mod spell;
 mod team;
 
@@ -173,6 +175,16 @@ pub fn run() {
             ai::ai_models,
             ai::ai_complete,
             mcp_command,
+            speech::speech_models,
+            speech::speech_download,
+            speech::speech_download_cancel,
+            speech::speech_import_model,
+            speech::speech_delete_model,
+            speech::speech_start,
+            speech::speech_stop,
+            speech::speech_file,
+            speech::speech_cleanup,
+            capture::speech_devices,
             attach::export_zip,
             outlook::outlook_events,
             outlook::outlook_push,
@@ -209,6 +221,7 @@ pub fn run() {
         .manage(vault::Vault::default())
         .manage(team::Team::default())
         .manage(clip::Picker::default())
+        .manage(speech::Speech::default())
         .setup(|app| {
             if !std::env::args().any(|a| a == "--hidden") {
                 show(app.handle());
@@ -262,6 +275,11 @@ pub fn run() {
                     return;
                 }
                 api.prevent_close();
+                // Eine Aufnahme läuft nie unsichtbar im Tray weiter
+                if window.label() == "main" && window.state::<speech::Speech>().active() {
+                    let _ = window.emit("speech-keep-open", ());
+                    return;
+                }
                 let _ = window.hide();
             }
         })

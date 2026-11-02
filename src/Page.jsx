@@ -14,6 +14,7 @@ import { IconButton } from './Sidebar.jsx'
 import { PropsPanel } from './Props.jsx'
 import Select from './Select.jsx'
 import { DateField } from './DatePicker.jsx'
+import { LiveTranscript, useLivePage } from './Speech.jsx'
 
 export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove, fields, db: parentDb, onAddOption, flushRef, onWindow, windowed, onFollowUp, onPrint }) {
   const [body, setBody] = useState(null)
@@ -66,6 +67,15 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
       flush()
     }
   }, [node.id, flush])
+
+  // Besprechung: Während der Aufnahme läuft die Mitschrift statt des Editors mit; danach den fertigen Text laden
+  const livePage = useLivePage(node.id)
+  const liveVersion = useRef(livePage.version)
+  useEffect(() => {
+    if (livePage.version === liveVersion.current) return
+    liveVersion.current = livePage.version
+    db.loadBody(node.id).then((b) => (setBody(b), setLatest(b), setReload((k) => k + 1))).catch(() => {})
+  }, [livePage.version, node.id])
 
   const onReady = useCallback((e) => (editor.current = e), [])
   // Seitenfenster speichert vor dem Schließen
@@ -227,6 +237,8 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
             </p>
             <Editor key={`fluss${reload}`} markdown={toFlow(latest ?? body)} editable={false} />
           </>
+        ) : livePage.live ? (
+          <LiveTranscript lines={livePage.lines} loading={livePage.loading} />
         ) : free ? (
           <FreeCanvas key={reload} body={body} editable={!node.locked} onChange={(md) => (setLatest(md), queue({ body: md }))} />
         ) : (

@@ -4,8 +4,9 @@ import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
 import { open } from '@tauri-apps/plugin-dialog'
-import { ArrowCircleUp, ArrowsClockwise, Bell, ClockCounterClockwise, Database, EnvelopeSimple, FolderOpen, GearSix, Key, Keyboard, MagnifyingGlass, Monitor, Moon, Palette, SlidersHorizontal, Sparkle, Sun, TerminalWindow, TextAa, Users, UsersThree, X } from '@phosphor-icons/react'
+import { ArrowCircleUp, ArrowsClockwise, Bell, ClockCounterClockwise, Database, EnvelopeSimple, FolderOpen, GearSix, Key, Keyboard, MagnifyingGlass, Microphone, Monitor, Moon, Palette, SlidersHorizontal, Sparkle, Sun, TerminalWindow, TextAa, Users, UsersThree, X } from '@phosphor-icons/react'
 import AiSettings from './AiSettings.jsx'
+import { SpeechSettings } from './Speech.jsx'
 import { addOwnWord, loadWriting, onWritingChange, removeNever, removeOwnWord, setWriting, writingState } from './writing.js'
 import { BACKUP_DEFAULTS, loadBackupSettings } from './backup.js'
 import { deleteImages, unusedImages } from './images.js'
@@ -422,6 +423,7 @@ const CATEGORIES = [
   { id: 'aussehen', label: 'Aussehen', icon: Palette, keys: 'farbe farbschema schema theme hell dunkel modus darstellung verlauf gradient akzent discord schrift schriftart schriftgröße größe zoom bewegung animation übergang dichte zeilenabstand kompakt breite seitenbreite ecken rund eckig seitenleiste' },
   { id: 'schreiben', label: 'Schreiben', icon: TextAa, keys: 'autokorrektur rechtschreibung wörterbuch tippfehler autofüllen vervollständigen vorschlag großschreibung typografie anführungszeichen sprache deutsch englisch' },
   { id: 'ki', label: 'KI', icon: Sparkle, keys: 'ki künstliche intelligenz anbieter amber openai azure claude mistral ollama lm studio api schlüssel modell mcp korrigieren übersetzen zusammenfassen' },
+  { id: 'sprache', label: 'Sprache', icon: Microphone, keys: 'sprache diktat mikrofon besprechung mitschrift whisper spracherkennung aufnahme audio modell transkription' },
   { id: 'tasten', label: 'Tastenkürzel', icon: Keyboard, keys: 'hotkey kürzel tastatur schnellerfassung zwischenablage snippet picker' },
   { id: 'erinnerungen', label: 'Erinnerungen', icon: Bell, keys: 'meldung sammelmeldung benachrichtigung fällig uhrzeit morgen' },
   { id: 'onenote', label: 'OneNote', icon: ArrowsClockwise, keys: 'abgleich automatisch notizbuch sync onenote' },
@@ -599,6 +601,7 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
     aussehen: <AppearanceSection />,
     schreiben: <WritingSection />,
     ki: <AiSettings />,
+    sprache: <SpeechSettings />,
     tasten: (
       <section className="mb-10">
         <h2 className="mb-1 font-semibold">Tastenkürzel</h2>

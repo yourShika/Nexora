@@ -2,6 +2,18 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.41.0',
+    date: '2026-11-02',
+    title: 'Sprache und Besprechungen',
+    items: [
+      '**Diktat:** /Diktat in einer Seite tippen, dann sprechen, der Text erscheint an der Schreibmarke.',
+      '**Besprechung mitschreiben:** „Besprechung“ in der Seitenleiste. Nexora hört Mikrofon und PC-Ton mit und schreibt live in eine neue Seite, etwa alle 10 Sekunden, getrennt nach „Ich“ und „Andere“. Nexora tritt keinem Gespräch bei, einzelne Personen unterscheidet es nicht. Auch vorhandene **Audiodateien** lassen sich einlesen.',
+      '**Nur auf diesem PC:** Die Erkennung läuft lokal mit Whisper, das Audio verlässt den PC nicht. Das Sprachmodell lädst du einmal unter Einstellungen → Sprache.',
+      '**Danach auf Klick:** Zusammenfassung oben in die Seite und vorgeschlagene Aufgaben in eine Liste, über deinen KI-Anbieter. Dabei geht die Mitschrift nach Rückfrage an den Anbieter. Die Aufnahme kann als Anhang an der Seite bleiben.',
+      '**Nie heimlich:** Vor jeder Besprechung bestätigst du, dass alle Beteiligten einverstanden sind (§ 201 StGB). Solange aufgenommen wird, zeigt Nexora eine rote Anzeige, und das Fenster lässt sich nicht in den Tray schließen.',
+    ],
+  },
+  {
     version: '0.40.0',
     date: '2026-11-02',
     title: 'KI in Nexora und MCP',

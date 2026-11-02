@@ -16,6 +16,7 @@
     "core:window:allow-set-icon",
     "core:tray:allow-get-by-id",
     "core:tray:allow-set-icon",
+    "core:tray:allow-set-tooltip",
     "core:window:allow-close",
     "core:window:allow-destroy",
     "core:window:allow-set-title",

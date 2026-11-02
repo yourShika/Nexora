@@ -40,11 +40,15 @@ fn http() -> Result<reqwest::Client, String> {
 }
 
 pub(crate) fn http_with(timeout: Duration) -> Result<reqwest::Client, String> {
+    http_builder().timeout(timeout).build().map_err(|e| e.to_string())
+}
+
+pub(crate) fn http_builder() -> reqwest::ClientBuilder {
     // reqwest prüft Zertifikate über den Windows-Speicher (auch interne CAs); Krypto wie beim Updater
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
-    reqwest::Client::builder().timeout(timeout).build().map_err(|e| e.to_string())
+    reqwest::Client::builder()
 }
 
 // Nur https, außer für Tests auf diesem PC

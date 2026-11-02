@@ -5,8 +5,9 @@ import Suggestion from '@tiptap/suggestion'
 import { pickAttachments } from './Attachment.jsx'
 import { pickVault } from './Vault.jsx'
 import { pickEmoji } from './EmojiPicker.jsx'
+import { dictate } from './Speech.jsx'
 import {
-  ChartBar, CheckSquare, Smiley, Code, FlowArrow, Key, Scribble, LinkSimple, ListBullets, ListChecks, ListNumbers, Minus, Paperclip, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
+  ChartBar, CheckSquare, Smiley, Code, FlowArrow, Key, Scribble, LinkSimple, ListBullets, ListChecks, ListNumbers, Microphone, Minus, Paperclip, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
 } from '@phosphor-icons/react'
 
 // `keys`: weitere Suchwörter, damit auch "todo", "h1" oder "pre" trifft
@@ -30,7 +31,11 @@ const ITEMS = [
   { title: 'Tresor-Eintrag', keys: 'vault passwort kennwort bitwarden zugang', icon: Key, run: (c, editor) => (pickVault(editor), c) },
   { title: 'LOP-Liste einbetten', keys: 'lop liste datenbank punkte', icon: ListChecks, run: (c) => c.insertContent({ type: 'lopEmbed', attrs: { id: null } }) },
   { title: 'Datei anhängen', keys: 'anhang datei pdf upload', icon: Paperclip, run: (c, editor) => (attach(editor), c) },
+  { title: 'Diktat', keys: 'sprache sprechen mikrofon spracherkennung', icon: Microphone, run: (c, editor) => (setTimeout(() => dictate(editor, slashApp.current)), c) },
 ]
+
+// Fürs Diktat: Hinweise und Einstellungen aus der App, das Menü selbst läuft außerhalb von React
+export const slashApp = { current: null }
 
 // Emoji-Auswahl an der Schreibmarke, das gewählte kommt an dieselbe Stelle
 // (Stelle erst danach lesen: das /-Menü löscht "/emoji" erst nach diesem Aufruf)
