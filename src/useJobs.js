@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification'
 import * as db from './db.js'
 import { readEvents } from './outlook.js'
 import { compareEvents, describeChanges, dueJobs, overviewMarkdown, snapshot } from './jobs.js'
+import { message } from './notify.js'
 
 const MAX_RUNS = 100
 const stateKey = (id) => `aufgabe-stand:${id}`
-
-async function notify(title, body) {
-  if ((await isPermissionGranted()) || (await requestPermission()) === 'granted') sendNotification({ title, body })
-}
 
 // Eine Aufgabe ausführen; Rückgabe für den Verlauf, ein Fehler landet dort als fehlgeschlagener Lauf
 async function execute(job, api, setOptions) {
@@ -86,8 +82,8 @@ export function useJobs(active, api) {
       setRunning(null)
       if (manual) return
       // melden nur bei Unterschieden und beim ersten Fehlschlag in Folge, sonst meldet jeder Lauf dasselbe
-      if (!result.ok && job.lastOk !== false) notify(`Aufgabe fehlgeschlagen: ${job.name}`, result.text).catch(() => {})
-      if (result.changed) notify(`${job.name}: ${result.text}`, result.lines.slice(0, 3).join('\n')).catch(() => {})
+      if (!result.ok && job.lastOk !== false) message(`Aufgabe fehlgeschlagen: ${job.name}`, result.text).catch(() => {})
+      if (result.changed) message(`${job.name}: ${result.text}`, result.lines.slice(0, 3).join('\n')).catch(() => {})
     },
     [patch],
   )

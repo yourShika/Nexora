@@ -47,7 +47,7 @@ Eine LOP-Liste hält offene Punkte mit Status, Priorität, Fälligkeit und Zust�
 Zertifikat erneuern #server @Kim !hoch fr 14:00 *monatlich
 \`\`\`
 
-Oben wechselst du zwischen Tabelle, Liste, Kanban, Kalender und Zeitleiste. Spalten verschiebst du in der Tabelle am Kopf.
+Oben wechselst du zwischen Tabelle, Liste, Kanban, Kalender und Zeitleiste. Spalten verschiebst du in der Tabelle am Kopf. Unter **Regeln** stellst du ein, was von selbst passieren soll, zum Beispiel das Datum eintragen, wenn ein Punkt erledigt ist.
 
 ## Heute, Eingang, Kalender
 

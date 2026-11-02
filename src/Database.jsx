@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowSquareOut, ArrowsDownUp, CalendarBlank, ChartBarHorizontal, DotsSixVertical, Kanban, ListBullets, Plus, SlidersHorizontal, SortAscending, SortDescending, Table, X } from '@phosphor-icons/react'
+import { ArrowSquareOut, ArrowsDownUp, CalendarBlank, ChartBarHorizontal, DotsSixVertical, Kanban, ListBullets, MagicWand, Plus, SlidersHorizontal, SortAscending, SortDescending, Table, X } from '@phosphor-icons/react'
 import { Chip, FieldEditor, FieldValue } from './Props.jsx'
 import { Progress, QuickAdd, RowItem } from './Rows.jsx'
 import { ConfirmButton } from './Overview.jsx'
+import RulesPanel from './Rules.jsx'
 import { Cover, IconRow } from './PageHead.jsx'
 import CalendarView from './Calendar.jsx'
 import TimelineView from './Timeline.jsx'
@@ -76,7 +77,7 @@ const SORTED = ['table', 'list', 'kanban'] // Kalender und Zeitleiste ordnen nac
 export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig, onTitle, onSave }) {
   const config = db.config
   const fields = config.fields
-  const [panel, setPanel] = useState(false)
+  const [panel, setPanel] = useState(null) // 'felder' | 'regeln'
   const [sortMenu, setSortMenu] = useState(null)
   const closeSort = useCallback(() => setSortMenu(null), [])
   const [title, setTitle] = useState(db.title)
@@ -149,7 +150,10 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
               </button>
             )}
             {sortMenu && <SortMenu x={sortMenu.x} y={sortMenu.y} fields={fields} sorts={sorts} onSorts={setSorts} onClose={closeSort} />}
-            <button onClick={() => setPanel(!panel)} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 ${panel ? 'bg-accent-soft' : 'text-muted hover:bg-hover hover:text-text'}`}>
+            <button onClick={() => setPanel(panel === 'regeln' ? null : 'regeln')} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 ${panel === 'regeln' || config.rules?.some((r) => r.enabled) ? 'bg-accent-soft text-text' : 'text-muted hover:bg-hover hover:text-text'}`}>
+              <MagicWand size={16} /> Regeln{config.rules?.length ? ` (${config.rules.length})` : ''}
+            </button>
+            <button onClick={() => setPanel(panel === 'felder' ? null : 'felder')} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 ${panel === 'felder' ? 'bg-accent-soft' : 'text-muted hover:bg-hover hover:text-text'}`}>
               <SlidersHorizontal size={16} /> Felder
             </button>
           </div>
@@ -197,7 +201,8 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
           {!rows.length && <p className="mt-2 text-muted">Noch keine Punkte. Tippe oben einen ein und drücke Enter.</p>}
         </div>
       </div>
-      {panel && <FieldsPanel config={config} onConfig={onConfig} onClose={() => setPanel(false)} />}
+      {panel === 'felder' && <FieldsPanel config={config} onConfig={onConfig} onClose={() => setPanel(null)} />}
+      {panel === 'regeln' && <RulesPanel db={db} config={config} onConfig={onConfig} onClose={() => setPanel(null)} />}
     </div>
   )
 }

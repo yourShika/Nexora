@@ -5,6 +5,11 @@ import { digestMessage, plan, timedMessage } from './reminders.js'
 
 let busy = false
 
+// Windows-Meldung; ohne Erlaubnis still
+export async function message(title, body) {
+  if ((await isPermissionGranted()) || (await requestPermission()) === 'granted') sendNotification({ title, body })
+}
+
 // Läuft alle 30 s im Hauptfenster (auch versteckt im Tray) und schickt fällige Windows-Meldungen
 export async function checkReminders(rows, dbOf, now = new Date()) {
   if (busy) return

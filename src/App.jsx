@@ -21,7 +21,7 @@ import { HOTKEYS, bindHotkeys, hotkeyLabel } from './hotkey.js'
 import { maskSecrets, secretSpans } from './secrets.js'
 import SecretDialog from './SecretDialog.jsx'
 import { isPermissionGranted, sendNotification } from '@tauri-apps/plugin-notification'
-import { checkReminders } from './notify.js'
+import { checkReminders, message } from './notify.js'
 import { bmpToPng, importImage, initImages, saveImageBytes } from './images.js'
 import { describeReport, hash, link as oneNoteLink, syncNotebook } from './onenote.js'
 import { desiredEvents, followUpMail, pushDue, readEvents } from './outlook.js'
@@ -42,6 +42,7 @@ import News from './News.jsx'
 import Setup, { Tour } from './Setup.jsx'
 import Jobs from './Jobs.jsx'
 import { useJobs } from './useJobs.js'
+import { applyCreated, applyRules, dueChanges, pruneSeen, ruleTitle } from './rules.js'
 import { EXAMPLE_ROWS, HELP_PAGE, HELP_TITLE, SEED_BOOK, SEED_SECTION, WELCOME, tourStations } from './setup.js'
 import { getVersion } from '@tauri-apps/api/app'
 import { appConfigDir, homeDir, join } from '@tauri-apps/api/path'
@@ -200,6 +201,7 @@ export default function App() {
   const [backup, setBackup] = useState({ busy: false, error: '', dest: '' })
   const [update, setUpdate] = useState({ found: null, busy: false, error: '' })
   const live = useRef(null)
+  const dueRules = useRef(null)
   // Seiten, die gerade in eigenen Fenstern offen sind (nur im Hauptfenster gepflegt)
   const [windows, setWindows] = useState(() => new Set())
   const [windowMode, setWindowMode] = useState('ctrl')
@@ -220,6 +222,13 @@ export default function App() {
   }, [])
 
   // Hauptfenster: Seitenfenster melden sich beim Schließen ab und schicken Links hierher
+  // Name unten links: gespeichert, sonst der Windows-Anmeldename; auch in Seitenfenstern, Regeln brauchen „ich“
+  useEffect(() => {
+    Promise.all([db.getSetting('profil').catch(() => null), homeDir().catch(() => '')]).then(([saved, home]) =>
+      setProfile(saved ? JSON.parse(saved) : { name: home.split(/[\\/]/).filter(Boolean).at(-1) ?? '', color: 'petrol' }),
+    )
+  }, [])
+
   useEffect(() => {
     if (windowPage) return
     db.getSetting('window-mode').then((m) => m && setWindowMode(m)).catch(() => {})
@@ -237,10 +246,6 @@ export default function App() {
       if (after || (seen && seen !== v)) setNews(v)
       if (seen !== v) db.setSetting('neuigkeiten-gesehen', v).catch(() => {})
     }).catch(() => {})
-    // Name unten links: gespeichert, sonst der Windows-Anmeldename
-    Promise.all([db.getSetting('profil').catch(() => null), homeDir().catch(() => '')]).then(([saved, home]) =>
-      setProfile(saved ? JSON.parse(saved) : { name: home.split(/[\\/]/).filter(Boolean).at(-1) ?? '', color: 'petrol' }),
-    )
     const offs = [
       listen('window-closed', (e) => setWindows((s) => new Set([...s].filter((id) => id !== e.payload)))),
       listen('open-page', (e) => {
@@ -441,6 +446,7 @@ export default function App() {
     const run = () => {
       if (live.current) checkReminders(live.current.rows, live.current.dbOf).catch(() => {})
       doBackup(false)
+      dueRules.current?.().catch(() => {})
     }
     run()
     const timer = setInterval(run, 30_000)
@@ -663,6 +669,15 @@ export default function App() {
   // replay: Rückgängig/Wiederholen; dann kein neuer Schritt und keine Folgen (nächster Termin, Tagebuch)
   function save(id, fields, { replay = false } = {}) {
     const node = tree.alive.get(id) ?? nodes.find((n) => n.id === id) // auch Gelöschte (Wiederherstellen)
+    // vor dem Merken für Strg+Z: Änderung und Regeln sind ein Schritt, der Verlauf zeigt beides
+    if (node?.kind === 'row' && fields.props && !replay) {
+      const list = dbOf(node)
+      if (list?.config?.rules?.length) {
+        const { props, fired } = applyRules(list.config.rules, fieldsOf(list), node.props ?? {}, fields.props, ruleContext())
+        announce(node, list, fired)
+        if (fired.length) fields = { ...fields, props }
+      }
+    }
     if (node) logNode(node, fields)
     if (node && !replay) remember(node, fields)
     if (node?.kind === 'row' && fields.props) {
@@ -675,6 +690,44 @@ export default function App() {
     }
     patch(id, { ...fields, updated_at: new Date().toISOString() })
     db.update(id, fields).catch(fail)
+  }
+
+  const ruleContext = () => ({ now: new Date(), me: profile.name })
+  // Im Verlauf des Punkts steht, welche Regel gegriffen hat; Meldungen gehen an Windows
+  function announce(row, list, fired) {
+    const fs = fieldsOf(list)
+    for (const { rule, messages, reverted } of fired) {
+      db.addActivity(row.id, 'change', `Regel${reverted ? ' zurückgenommen' : ''}: ${ruleTitle(rule, fs)}`).catch(() => {})
+      for (const text of messages) message(rule.name?.trim() || list.title || 'Nexora', [text, row.title || 'Ohne Titel'].filter(Boolean).join('\n')).catch(() => {})
+    }
+  }
+  // Neue Punkte einer Liste: Regeln „Neuer Punkt“; Anlegen, Zuteilen und Übernehmen aus einer Checkliste laufen hier durch
+  const createdProps = (list, props) => (list.config?.rules?.length ? applyCreated(list.config.rules, fieldsOf(list), props, ruleContext()) : { props, fired: [] })
+
+  // Termine: je Regel, Punkt und Datum einmal. Läuft im Hintergrund und zählt darum nicht als Schritt für Strg+Z
+  dueRules.current = async () => {
+    const lists = [...tree.alive.values()].filter((n) => n.kind === 'database' && n.config?.rules?.some((r) => r.enabled && r.when.type === 'due'))
+    if (!lists.length) return
+    const seen = new Set(JSON.parse((await db.getSetting('regeln-gelaufen')) || '[]'))
+    let ran = false
+    for (const list of lists) {
+      const fs = fieldsOf(list)
+      const texts = new Map() // Regel → Titel der Punkte, damit viele Punkte nicht viele Meldungen ergeben
+      for (const hit of dueChanges(list.config.rules, fs, tree.rows(list.id), seen, ruleContext())) {
+        if (JSON.stringify(hit.props) !== JSON.stringify(hit.row.props ?? {})) save(hit.row.id, { props: hit.props }, { replay: true })
+        for (const { rule, messages } of hit.fired) {
+          db.addActivity(hit.row.id, 'change', `Regel: ${ruleTitle(rule, fs)}`).catch(() => {})
+          if (messages.length) texts.set(rule, { text: messages.find(Boolean) ?? '', rows: [...(texts.get(rule)?.rows ?? []), hit.row.title || 'Ohne Titel'] })
+        }
+        hit.keys.forEach((k) => seen.add(k))
+        ran = true
+      }
+      for (const [rule, { text, rows }] of texts) {
+        const shown = rows.slice(0, 3).join(', ') + (rows.length > 3 ? ` und ${rows.length - 3} weitere` : '')
+        message(rule.name?.trim() || list.title || 'Nexora', [text, shown].filter(Boolean).join('\n')).catch(() => {})
+      }
+    }
+    if (ran) await db.setSetting('regeln-gelaufen', JSON.stringify(pruneSeen([...seen], new Date())))
   }
 
   // Wiederkehrender Punkt wird erledigt: nächsten Termin als neuen Punkt anlegen.
@@ -793,9 +846,10 @@ export default function App() {
   async function addRow(parentId, title, props = {}, open = false) {
     try {
       const list = parentId ? tree.alive.get(parentId) : null
-      const full = list ? numbered(list, props) : { status: 'offen', ...props }
-      const node = await db.create('row', parentId, title, { props: full, area: parentId ? null : areaValue })
+      const rules = list ? createdProps(list, numbered(list, props)) : { props: { status: 'offen', ...props }, fired: [] }
+      const node = await db.create('row', parentId, title, { props: rules.props, area: parentId ? null : areaValue })
       setNodes((ns) => [...ns, node])
+      if (list) announce(node, list, rules.fired)
       rememberNew(node)
       db.journal('angelegt', node.id, title).catch(() => {})
       if (open) actions.open(node.id), setFresh(node.id)
@@ -885,7 +939,10 @@ export default function App() {
     const created = []
     for (const [i, { title, props }] of parsed.entries()) {
       const full = { ...(sf ? { [sf.id]: sf.options[0]?.id } : {}), ...props, ...(numbering ? { nr: config.nextNr + i } : {}) }
-      created.push(await db.create('row', listId, title || items[i], { props: full }))
+      const rules = createdProps(list, full)
+      const row = await db.create('row', listId, title || items[i], { props: rules.props })
+      announce(row, list, rules.fired)
+      created.push(row)
     }
     if (numbering) config = { ...config, nextNr: config.nextNr + parsed.length }
     save(listId, { config })
@@ -1312,8 +1369,10 @@ export default function App() {
   const toggleRow = (row) => save(row.id, { props: toggleDone(row, fieldsOf(dbOf(row))) })
 
   function assign(row, list) {
-    save(row.id, { parent_id: list.id, props: numbered(list, row.props ?? {}) })
+    const rules = createdProps(list, numbered(list, row.props ?? {}))
+    save(row.id, { parent_id: list.id, props: rules.props })
     db.addActivity(row.id, 'change', `Zugeteilt: ${list.title || 'Ohne Titel'}`).catch(() => {})
+    announce(row, list, rules.fired)
   }
 
   if (nodes === null) {

@@ -2,6 +2,18 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.38.0',
+    date: '2026-11-02',
+    title: 'Regeln für Listen',
+    items: [
+      'Neu in jeder Liste: **Regeln** neben „Felder“. Du stellst selbst zusammen, was von selbst passieren soll, zum Beispiel: Wenn der Status „Erledigt“ wird, trage das Datum ein.',
+      '**Wenn:** ein Feld bekommt einen bestimmten Wert, wird gefüllt oder geleert, ein neuer Punkt entsteht, oder ein Termin ist erreicht oder überschritten.',
+      '**Dann:** Felder setzen oder leeren, Tags setzen oder entfernen, eine Windows-Meldung zeigen, auch mehreres zugleich. Je Regel wählbar: vorhandene Werte überschreiben, und wieder wegnehmen, wenn die Bedingung nicht mehr gilt.',
+      '**Vorlagen** für den Start, und Regeln lassen sich von einer anderen Liste übernehmen. Neue Listen starten ohne Regeln.',
+      '**Strg+Z** nimmt deine Änderung mitsamt der Regel zurück, im Verlauf des Punkts steht, welche Regel was getan hat.',
+    ],
+  },
+  {
     version: '0.37.0',
     date: '2026-11-02',
     title: 'Pfad klickbar',
