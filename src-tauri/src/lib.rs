@@ -4,12 +4,14 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod admin;
+mod ai;
 mod attach;
 mod clip;
 mod doctext;
 mod files;
 mod ocr;
 mod interop;
+mod mcp;
 mod onenote;
 mod outlook;
 mod package;
@@ -46,8 +48,19 @@ fn toggle(app: &AppHandle) {
     }
 }
 
+// Pfad zum Eintragen in KI-Programme, die Nexora als MCP-Server starten
+#[tauri::command]
+fn mcp_command() -> Result<String, String> {
+    std::env::current_exe().map(|p| p.display().to_string()).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    // Von einem KI-Programm gestartet: nur der MCP-Server, kein Fenster und keine Sperre gegen einen zweiten Start
+    if std::env::args().any(|a| a == "--mcp") {
+        return mcp::serve(&context.config().identifier);
+    }
     let migrations = vec![
         Migration {
             version: 1,
@@ -155,6 +168,11 @@ pub fn run() {
             shortcuts::tint_shortcuts,
             spell::spell_check,
             spell::spell_suggest,
+            ai::ai_key_set,
+            ai::ai_key_has,
+            ai::ai_models,
+            ai::ai_complete,
+            mcp_command,
             attach::export_zip,
             outlook::outlook_events,
             outlook::outlook_push,
@@ -247,7 +265,7 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("Nexora konnte nicht starten")
         // Beim Beenden auch die bw-Sitzung sperren
         .run(|app, event| {

@@ -2,6 +2,17 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.40.0',
+    date: '2026-11-02',
+    title: 'KI in Nexora und MCP',
+    items: [
+      '**KI für markierten Text:** Text in einer Seite markieren, dann auf „KI“ neben der Markierung oder **Strg+J**: Korrigieren, Verbessern, Kürzen, Zusammenfassen, Auf Englisch, Auf Deutsch oder eine eigene Anweisung, die du auch speichern kannst.',
+      '**Du behältst die Kontrolle:** Das Ergebnis erscheint zuerst als Vorschau zum Übernehmen, Darunter-Einfügen oder Verwerfen, Strg+Z geht auch. Es geht nur der markierte Text raus und nur, wenn du einen Befehl auslöst. Was nach Passwort aussieht, fängt Nexora vorher ab.',
+      '**Anbieter frei wählbar** unter Einstellungen → KI: amberAI, OpenAI, Azure OpenAI, Claude, Mistral, Ollama, LM Studio oder eine eigene Adresse. Der API-Schlüssel liegt verschlüsselt nur für deinen Windows-Benutzer, nicht in der Datenbank und nicht in Sicherungen.',
+      '**KI-Programme auf Nexora zugreifen lassen (MCP):** Programme auf diesem PC, die MCP-Server lokal starten können (z. B. Claude Desktop), können deine Notizen und Listen nutzen. Von Haus aus aus; du wählst unter Einstellungen → KI, was sie dürfen: Lesen, Neu anlegen, Bearbeiten, Bereich Privat.',
+    ],
+  },
+  {
     version: '0.39.0',
     date: '2026-11-02',
     title: 'Autokorrektur und Autofüllen',

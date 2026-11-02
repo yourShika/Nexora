@@ -1,6 +1,6 @@
 [package]
 name = "nexora"
-version = "0.39.0"
+version = "0.40.0"
 description = "Notizen, LOP und Runbooks in einer schlanken Desktop-App"
 edition = "2021"
 
@@ -38,6 +38,9 @@ getrandom = "0.3"
 url = "2"
 # Rechtschreibung mit Hunspell-Wörterbüchern, ohne C-Bibliothek
 spellbook = "0.4"
+# MCP-Server (--mcp) liest die Datenbank ohne Tauri; dieselbe SQLite wie sqlx im SQL-Plugin
+rusqlite = "0.32"
+regex = "1"
 
 [profile.release]
 codegen-units = 1

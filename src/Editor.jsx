@@ -33,6 +33,7 @@ import { imageText } from './ocr.js'
 import { maskSecrets, secretSpans } from './secrets.js'
 import { adminLinks } from './adminlinks.js'
 import { addOwnWord, AutoText, learnArea, misspelledAt, suggestionsFor } from './writing.js'
+import AiMenu from './AiMenu.jsx'
 import SecretDialog from './SecretDialog.jsx'
 import ImageEditor from './ImageEditor.jsx'
 
@@ -324,6 +325,7 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
         {editable && <BlockHandle editor={editor} wrapper={wrapper} />}
         <EditorContent editor={editor} />
       </div>
+      {editable && editor && <AiMenu editor={editor} onSettings={app?.openAiSettings} />}
       {editImage && (
         <ImageEditor
           file={editImage}

@@ -1,0 +1,4 @@
+[env]
+# Laufen der Freihand- und ein PDF-Test gleichzeitig, bleibt der Testprozess beim Beenden im Intel-Grafiktreiber
+# hängen (Windows.Data.Pdf räumt dort auf) und belegt einen Kern, bis man ihn abschießt. Die Tests selbst sind grün.
+RUST_TEST_THREADS = "1"

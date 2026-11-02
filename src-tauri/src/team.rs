@@ -36,11 +36,15 @@ struct Saved {
 pub struct Team(Arc<Mutex<Option<(String, Instant)>>>);
 
 fn http() -> Result<reqwest::Client, String> {
+    http_with(Duration::from_secs(20))
+}
+
+pub(crate) fn http_with(timeout: Duration) -> Result<reqwest::Client, String> {
     // reqwest prüft Zertifikate über den Windows-Speicher (auch interne CAs); Krypto wie beim Updater
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
-    reqwest::Client::builder().timeout(Duration::from_secs(20)).build().map_err(|e| e.to_string())
+    reqwest::Client::builder().timeout(timeout).build().map_err(|e| e.to_string())
 }
 
 // Nur https, außer für Tests auf diesem PC
@@ -63,7 +67,7 @@ fn challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
 
-mod dpapi {
+pub(crate) mod dpapi {
     use windows::Win32::Foundation::{LocalFree, HLOCAL};
     use windows::Win32::Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB};
 

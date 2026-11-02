@@ -1443,6 +1443,7 @@ export default function App() {
     alive: tree.alive,
     // Bereich der Seite, die hier bearbeitet wird; ein Seitenfenster kann in einem anderen liegen als das Hauptfenster
     textArea: windowPage ? tree.areaOf(windowPage) : area,
+    openAiSettings: () => (setSettingsTab('ki'), actions.open('settings')),
     databases,
     open: actions.open,
     // Mittelklick auf einen Eintrag; ein Seitenfenster hat keine Reiter, dort geht es ins Hauptfenster
