@@ -33,6 +33,21 @@ export function openTab(s, view, { pinned = false, atEnd = false } = {}) {
   return fix({ tabs, active: t.key })
 }
 
+// Datentyp beim Ziehen aus dem Baum auf die Reiterleiste
+export const NODE_DRAG = 'application/x-nexora-node'
+
+// Aus dem Baum auf die Reiterleiste gezogen: neuer Reiter an dieser Stelle (ohne Ziel ganz hinten).
+// Ist die Seite schon offen, nur dorthin wechseln, wie überall sonst auch
+export function dropIn(s, view, target, side) {
+  const there = s.tabs.find((t) => t.view === view)
+  if (there) return { ...s, active: there.key }
+  const t = tab(view)
+  const tabs = [...s.tabs]
+  const i = tabs.findIndex((x) => x.key === target)
+  tabs.splice(i < 0 ? tabs.length : i + (side === 'after' ? 1 : 0), 0, t)
+  return fix({ tabs, active: t.key })
+}
+
 // im aktiven Reiter zeigen; ein angepinnter bleibt bei seiner Seite, dann gibt es einen neuen Reiter
 export function navigate(s, view) {
   const a = activeTab(s)

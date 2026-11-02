@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TrayIcon } from '@tauri-apps/api/tray'
-import { iconColors, iconSvg } from './appicon.js'
+import { iconColors, iconSvg, icoFile } from './appicon.js'
 import { useLook } from './theme.js'
 
 const url = (look, small) => `data:image/svg+xml;base64,${btoa(iconSvg(iconColors(look), small))}`
@@ -23,7 +24,15 @@ async function png(look, size, small = size <= 32) {
   return new Uint8Array(await blob.arrayBuffer())
 }
 
-// Fenster (Taskleiste, Alt+Tab) und im Hauptfenster auch der Tray folgen dem Farbschema
+// Die Taskleiste zeigt bei einem installierten Nexora das Icon der Startmenü-Verknüpfung, nicht das des Fensters.
+// Darum bekommen die eigenen Verknüpfungen eine Icon-Datei im Schema; im Standard-Petrol bleiben sie, wie sie sind
+async function tintShortcuts(look) {
+  const plain = (look.theme ?? 'petrol') === 'petrol' && !look.accent
+  const ico = plain ? null : icoFile(await Promise.all([16, 24, 32, 48, 64, 256].map(async (size) => ({ size, bytes: await png(look, size) }))))
+  await invoke('tint_shortcuts', { ico: ico && Array.from(ico) })
+}
+
+// Fenster und im Hauptfenster auch Tray und Verknüpfungen folgen dem Farbschema
 export function useWindowIcon(main) {
   const look = useLook()
   const key = JSON.stringify([look.theme, look.accent, look.gradient])
@@ -36,8 +45,11 @@ export function useWindowIcon(main) {
       await getCurrentWindow().setIcon(big)
       if (main) await (await TrayIcon.getById('main'))?.setIcon(await png(look, 32))
     })().catch(() => {})
+    // Verknüpfungen erst, wenn die Wahl steht (Farbwähler ändert laufend); auch beim Start, ein Update setzt sie zurück
+    const later = main && setTimeout(() => tintShortcuts(look).catch(() => {}), 1500)
     return () => {
       alive = false
+      clearTimeout(later)
     }
   }, [key])
 }

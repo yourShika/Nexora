@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { NODE_DRAG } from './tabs.js'
 import { AppWindow, BookOpenText, CalendarBlank, ChartBar, Code, GearSix, Lightning, Plus, PushPin, PushPinSlash, Timer, Trash, Tray, X } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { NodeIcon } from './Sidebar.jsx'
@@ -18,9 +19,17 @@ function TabIcon({ tab, size = 14 }) {
 // Reiter in der Titelleiste wie im Browser (Logik in tabs.js). Angepinnte schmal mit Symbol und ohne X.
 // Ziehen ordnet um; aus dem Fenster gezogen und losgelassen öffnet die Seite in einem eigenen Fenster.
 // Mittelklick schließt, Rechtsklick zeigt das Menü
-export default function Tabs({ tabs, active, onSelect, onClose, onPin, onMove, onCloseOthers, onCloseRight, onNew, onWindow }) {
+export default function Tabs({ tabs, active, onSelect, onClose, onPin, onMove, onCloseOthers, onCloseRight, onNew, onWindow, onDropNode }) {
   const [drag, setDrag] = useState(null)
-  const [over, setOver] = useState(null) // { key, side: 'before' | 'after' }
+  const [over, setOver] = useState(null) // { key, side: 'before' | 'after' }; key 'ende': hinter dem letzten Reiter
+  // Zieht jemand etwas aus dem Baum? (Die Daten selbst gibt es erst beim Ablegen)
+  const fromTree = (e) => e.dataTransfer.types.includes(NODE_DRAG)
+  // Abgebrochen (Esc, außerhalb losgelassen): Markierung weg
+  useEffect(() => {
+    const clear = () => setOver(null)
+    addEventListener('dragend', clear)
+    return () => removeEventListener('dragend', clear)
+  }, [])
   const [menu, setMenu] = useState(null) // { tab, x, y }
   const closeMenu = useCallback(() => setMenu(null), [])
   const outside = useRef(false)
@@ -50,7 +59,25 @@ export default function Tabs({ tabs, active, onSelect, onClose, onPin, onMove, o
   }
 
   return (
-    <nav aria-label="Reiter" data-tour="reiter" data-tauri-drag-region className="flex min-w-0 items-stretch gap-0.5 pt-1.5">
+    <nav
+      aria-label="Reiter"
+      data-tour="reiter"
+      data-tauri-drag-region
+      onDragOver={(e) => {
+        if (!fromTree(e)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        if (over?.key !== 'ende') setOver({ key: 'ende' })
+      }}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget) && setOver(null)}
+      onDrop={(e) => {
+        if (!fromTree(e)) return
+        e.preventDefault()
+        onDropNode(e.dataTransfer.getData(NODE_DRAG))
+        setOver(null)
+      }}
+      className="flex min-w-0 flex-auto items-stretch gap-0.5 pt-1.5"
+    >
       {tabs.map((t) => {
         const on = t.key === active
         const mark = over?.key !== t.key ? '' : over.side === 'before' ? 'shadow-[inset_2px_0_0_var(--accent)]' : 'shadow-[inset_-2px_0_0_var(--accent)]'
@@ -61,14 +88,19 @@ export default function Tabs({ tabs, active, onSelect, onClose, onPin, onMove, o
             onDragStart={(e) => start(e, t)}
             onDragEnd={(e) => end(e, t)}
             onDragOver={(e) => {
-              if (!drag || drag === t.key) return
+              const tree = fromTree(e)
+              if (!tree && (!drag || drag === t.key)) return
               e.preventDefault()
+              e.stopPropagation()
+              if (tree) e.dataTransfer.dropEffect = 'move'
               const side = sideOf(e)
               if (over?.key !== t.key || over.side !== side) setOver({ key: t.key, side })
             }}
             onDrop={(e) => {
               e.preventDefault()
-              if (drag && drag !== t.key) onMove(drag, t.key, sideOf(e))
+              e.stopPropagation()
+              if (fromTree(e)) onDropNode(e.dataTransfer.getData(NODE_DRAG), t.key, sideOf(e))
+              else if (drag && drag !== t.key) onMove(drag, t.key, sideOf(e))
               setDrag(null)
               setOver(null)
             }}
@@ -98,7 +130,7 @@ export default function Tabs({ tabs, active, onSelect, onClose, onPin, onMove, o
           </div>
         )
       })}
-      <button aria-label="Neuer Reiter (Strg+T)" title="Neuer Reiter (Strg+T)" onClick={onNew} className="mb-0.5 ml-0.5 grid size-7 shrink-0 place-items-center self-end rounded-md text-muted hover:bg-hover hover:text-text">
+      <button aria-label="Neuer Reiter (Strg+T)" title="Neuer Reiter (Strg+T)" onClick={onNew} className={`mb-0.5 ml-0.5 grid size-7 shrink-0 place-items-center self-end rounded-md text-muted ${over?.key === 'ende' ? 'shadow-[inset_2px_0_0_var(--accent)]' : ''} hover:bg-hover hover:text-text`}>
         <Plus size={14} />
       </button>
       {menu && (

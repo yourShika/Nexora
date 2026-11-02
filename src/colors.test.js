@@ -53,3 +53,23 @@ test('Farbwähler: Hex und HSV hin und zurück', () => {
   assert.deepEqual(hexToHsv('#f00'), { h: 0, s: 1, v: 1 })
   assert.equal(hexToHsv('rot'), null)
 })
+
+// Durchscheinende Flächen zeichnet Chromium ohne ClearType, und Menüs ließen den Text dahinter durchscheinen
+test('Mit Verlauf: Inhaltsfläche und Menüs deckend', () => {
+  for (const look of [{ theme: 'lavendel' }, { theme: 'custom', gradient: { colors: ['#ff0000', '#0000ff'], angle: 90 } }]) {
+    for (const dark of [false, true]) {
+      const p = palette(look, dark)
+      assert.match(p.raised, /^#[0-9a-f]{6}$/, 'Menüs und Dialoge deckend')
+      assert.equal(p.main.length, p.gradient.length)
+      for (const [i, stop] of p.main.entries()) {
+        assert.match(stop, /^#[0-9a-f]{6}$/, 'Inhaltsfläche deckend')
+        assert.equal(stop, over(p.bg, p.gradient[i]), 'sieht aus wie die Fläche über dem Verlauf')
+        assert.ok(contrast(p.text, stop) >= 7)
+      }
+    }
+  }
+  assert.equal(palette({ theme: 'petrol' }, false).main, null)
+  const css = lookCss({ theme: 'lavendel' })
+  assert.match(css, /--main-bg: linear-gradient\(135deg, #/)
+  assert.match(lookCss({ theme: 'wald' }), /--main-bg: none/)
+})

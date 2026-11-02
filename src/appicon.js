@@ -27,5 +27,27 @@ export function iconColors(look = {}) {
   return { from: oklch(0.62, c, h), to: oklch(0.42, c, h), tint: oklch(0.9, c * 0.4, h) }
 }
 
+// ICO-Datei aus PNG-Bildern [{ size, bytes }]; 256 Pixel steht im Kopf als 0
+export function icoFile(entries) {
+  const head = 6 + 16 * entries.length
+  const out = new Uint8Array(head + entries.reduce((n, e) => n + e.bytes.length, 0))
+  const view = new DataView(out.buffer)
+  view.setUint16(2, 1, true)
+  view.setUint16(4, entries.length, true)
+  let at = head
+  entries.forEach((e, i) => {
+    const p = 6 + 16 * i
+    view.setUint8(p, e.size % 256)
+    view.setUint8(p + 1, e.size % 256)
+    view.setUint16(p + 4, 1, true)
+    view.setUint16(p + 6, 32, true)
+    view.setUint32(p + 8, e.bytes.length, true)
+    view.setUint32(p + 12, at, true)
+    out.set(e.bytes, at)
+    at += e.bytes.length
+  })
+  return out
+}
+
 // feste Farben für die Icon-Dateien des Installers (Petrol)
 export const PETROL = { from: '#1e96a1', to: '#0a5a62', tint: '#bfe3e6' }

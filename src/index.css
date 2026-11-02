@@ -111,11 +111,13 @@ body {
 @keyframes nx-zoom { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
 .anim-pop { animation: nx-pop 0.16s var(--ease-out) both; transform-origin: top left; }
 /* Seitenwechsel (App.jsx setCurrent): nur der Inhalt blendet, Titel- und Seitenleiste wechseln ohne Bewegung */
-.page-main { view-transition-name: seite; }
+/* --main-bg: Verlauf deckend eingerechnet (colors.js), fixed passt ihn an den Verlauf der Seitenleiste an */
+.page-main { view-transition-name: seite; background-image: var(--main-bg, none); background-attachment: fixed; }
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
 ::view-transition-group(seite) { animation-duration: 0s; }
-::view-transition-old(seite) { animation: nx-fade 0.12s ease-in reverse both; }
-::view-transition-new(seite) { animation: nx-rise 0.22s var(--ease-out) 0.04s both; }
+/* Die alte Seite bleibt deckend stehen, die neue blendet darüber: Beide halb durchsichtig ließen kurz den Hintergrund durch */
+::view-transition-old(seite) { animation: none; mix-blend-mode: normal; }
+::view-transition-new(seite) { animation: nx-rise 0.22s var(--ease-out) 0.04s both; mix-blend-mode: normal; }
 .anim-row { animation: nx-rise 0.2s var(--ease-out) both; }
 .anim-tree { animation: nx-drop 0.18s var(--ease-out) both; }
 .anim-panel { animation: nx-slide 0.24s var(--ease-out) both; }

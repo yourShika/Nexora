@@ -2,6 +2,16 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.36.0',
+    date: '2026-11-02',
+    title: 'Verlauf, Reiter, Icon',
+    items: [
+      '**Schemata mit Verlauf** sehen sauberer aus: Der Text ist wieder scharf statt grau und pixelig, Menüs und Dialoge lassen nichts mehr durchscheinen, und beim Seitenwechsel blitzt der Verlauf nicht mehr kurz auf.',
+      '**Seite auf die Reiterleiste ziehen**: aus der Seitenleiste auf einen Reiter oder die freie Fläche daneben, und sie öffnet sich dort als neuer Reiter. Ist sie schon offen, wechselt Nexora zu ihrem Reiter.',
+      '**Das Icon in der Taskleiste folgt jetzt dem Farbschema.** Windows nimmt es von der Verknüpfung, deshalb stellt Nexora seine eigenen Verknüpfungen (Startmenü, Desktop, angeheftet) auf eine Icon-Datei im Schema um. Im Standard-Petrol bleiben sie unverändert.',
+    ],
+  },
+  {
     version: '0.35.0',
     date: '2026-10-30',
     title: 'Aufgaben',

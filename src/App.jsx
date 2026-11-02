@@ -1333,6 +1333,12 @@ export default function App() {
     closeOthers: (key) => changeTabs((s) => T.closeOthers(s, key)),
     closeRight: (key) => changeTabs((s) => T.closeRight(s, key)),
     add: () => changeTabs((s) => T.openTab(s, 'today', { atEnd: true })),
+    // aus dem Baum auf die Reiterleiste gezogen
+    dropNode(id, target, side) {
+      if (!tree.alive.has(id)) return
+      changeTabs((s) => T.dropIn(s, id, target, side))
+      db.touch(id).catch(() => {})
+    },
     // herausgezogen: die Seite wandert in ein eigenes Fenster
     window(key, at) {
       const t = tabState.tabs.find((x) => x.key === key)
@@ -1610,6 +1616,7 @@ export default function App() {
               onCloseRight={tabActions.closeRight}
               onNew={tabActions.add}
               onWindow={tabActions.window}
+              onDropNode={tabActions.dropNode}
             />
           )
         )}

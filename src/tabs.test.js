@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { activeTab, close, closeOthers, closeRight, cycle, move, navigate, openTab, pin, restore, serialize, show } from './tabs.js'
+import { activeTab, close, closeOthers, closeRight, cycle, dropIn, move, navigate, openTab, pin, restore, serialize, show } from './tabs.js'
 
 const views = (s) => s.tabs.map((t) => (t.pinned ? `*${t.view}` : t.view)).join(' ')
 const on = (s) => activeTab(s).view
@@ -55,4 +55,22 @@ test('Reiter wie im Browser', () => {
   assert.equal(on(cycle(s, 1)), 'e')
   assert.equal(on(cycle(cycle(s, 1), 1)), 'a')
   assert.equal(on(cycle(s, -1)), 'g')
+})
+
+test('Aus dem Baum auf die Reiterleiste ziehen', () => {
+  const s = restore({ tabs: [{ view: 'p', pinned: true }, { view: 'a' }, { view: 'b' }], active: 1 }, 'a')
+  const key = (v) => s.tabs.find((t) => t.view === v).key
+  // an die Stelle, auf die gezogen wurde, und aktiv
+  const before = dropIn(s, 'n', key('b'), 'before')
+  assert.equal(views(before), '*p a n b')
+  assert.equal(on(before), 'n')
+  assert.equal(views(dropIn(s, 'n', key('a'), 'after')), '*p a n b')
+  // ohne Ziel ganz hinten
+  assert.equal(views(dropIn(s, 'n')), '*p a b n')
+  // vor einen angepinnten gezogen: bleibt hinter den angepinnten
+  assert.equal(views(dropIn(s, 'n', key('p'), 'before')), '*p n a b')
+  // schon offen: kein zweiter Reiter, nur dorthin wechseln
+  const open = dropIn(s, 'b', key('a'), 'before')
+  assert.equal(views(open), '*p a b')
+  assert.equal(on(open), 'b')
 })

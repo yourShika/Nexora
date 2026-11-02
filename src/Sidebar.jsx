@@ -4,6 +4,7 @@ import {
   Browsers, Compass, LockSimple, PushPin, SidebarSimple, Sparkle, Stamp, Star, Table, Timer, Trash, Tray, Warning, Wrench,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
+import { NODE_DRAG } from './tabs.js'
 import { useApp } from './ctx.js'
 import { DEFAULT_LOOK, setLook, useLook } from './theme.js'
 import { initials } from './people.js'
@@ -299,6 +300,7 @@ function Row({ node, depth, ctx }) {
           drag.current = node.id
           e.dataTransfer.effectAllowed = 'move'
           e.dataTransfer.setData('text/plain', node.title)
+          e.dataTransfer.setData(NODE_DRAG, node.id)
         }}
         onDragEnd={() => ((drag.current = null), setOver(null))}
         onDragOver={(e) => {

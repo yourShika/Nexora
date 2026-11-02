@@ -85,10 +85,13 @@ export function palette(look, dark) {
   const g = (L, k, alpha = 1) => oklch(L, t * k, n, glass(alpha))
   const { accent, soft } = accentOf(custom ? { a: stops[1]?.[2] ?? n, c: 0.13 } : base, look.accent, dark)
   const colors = dark
-    ? { bg: g(0.19, 2, 0.78), side: g(0.21, 2.5, 0.66), raised: g(0.235, 2.5, 0.96), line: g(0.3, 3), hover: g(0.27, 3, 0.85), text: g(0.94, 1), muted: g(0.76, 2), faint: g(0.67, 2) }
-    : { bg: g(0.985, 1, 0.8), side: g(0.962, 2, 0.66), raised: g(1, 0, 0.94), line: g(0.905, 2), hover: g(0.935, 2.5, 0.85), text: g(0.2, 2), muted: g(0.45, 3), faint: g(0.53, 3) }
+    ? { bg: g(0.19, 2, 0.78), side: g(0.21, 2.5, 0.66), raised: g(0.235, 2.5), line: g(0.3, 3), hover: g(0.27, 3, 0.85), text: g(0.94, 1), muted: g(0.76, 2), faint: g(0.67, 2) }
+    : { bg: g(0.985, 1, 0.8), side: g(0.962, 2, 0.66), raised: g(1, 0), line: g(0.905, 2), hover: g(0.935, 2.5, 0.85), text: g(0.2, 2), muted: g(0.45, 3), faint: g(0.53, 3) }
   const gradient = stops?.map(([L, C, H]) => (dark ? oklch(clamp(L ?? 0.3, 0.24, 0.34), Math.min(C, 0.09), H) : oklch(clamp(L ?? 0.86, 0.82, 0.9), Math.min(C, 0.1), H)))
-  return { ...colors, accent, soft, gradient: gradient ?? null }
+  // Inhaltsfläche: dieselbe Mischung wie --bg über dem Verlauf, aber deckend. Auf durchscheinendem Grund zeichnet
+  // Chromium Text ohne ClearType (grau und pixelig), und beim Seitenwechsel schiene der kräftige Verlauf durch
+  const main = gradient?.map((stop) => over(colors.bg, stop)) ?? null
+  return { ...colors, accent, soft, gradient: gradient ?? null, main }
 }
 
 // Was vom Standard (Petrol, ohne eigene Farben) abweicht, als CSS; beim Drucken (data-print) gilt immer der Standard
@@ -102,7 +105,8 @@ export function lookCss(look) {
     ]
     const angle = look.theme === 'custom' ? look.gradient?.angle ?? 135 : 135
     const bg = p.gradient ? `linear-gradient(${angle}deg, ${p.gradient.join(', ')})` : p.bg
-    return `:root:not([data-print])[data-theme="${dark ? 'dark' : 'light'}"] { ${vars.map(([k, v]) => `${k}: ${v};`).join(' ')} --app-bg: ${bg}; }`
+    const main = p.main ? `linear-gradient(${angle}deg, ${p.main.join(', ')})` : 'none'
+    return `:root:not([data-print])[data-theme="${dark ? 'dark' : 'light'}"] { ${vars.map(([k, v]) => `${k}: ${v};`).join(' ')} --app-bg: ${bg}; --main-bg: ${main}; }`
   }
   return `${block(false)}\n${block(true)}`
 }

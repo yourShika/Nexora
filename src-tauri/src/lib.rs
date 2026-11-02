@@ -16,6 +16,7 @@ mod package;
 mod preview;
 mod vault;
 mod run;
+mod shortcuts;
 mod team;
 
 fn show(app: &AppHandle) {
@@ -150,6 +151,7 @@ pub fn run() {
             interop::list_folder,
             interop::unzip_import,
             interop::drop_import,
+            shortcuts::tint_shortcuts,
             attach::export_zip,
             outlook::outlook_events,
             outlook::outlook_push,
