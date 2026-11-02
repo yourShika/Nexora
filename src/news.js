@@ -2,6 +2,18 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.39.0',
+    date: '2026-11-02',
+    title: 'Autokorrektur und Autofüllen',
+    items: [
+      '**Rechtschreibung in Seiten:** Unbekannte Wörter bekommen eine rote Linie, Deutsch und Englisch gelten zugleich. Rechtsklick zeigt Vorschläge und nimmt Wörter ins eigene Wörterbuch auf.',
+      '**Autokorrektur:** Beim Leerzeichen oder Enter verbessert Nexora eindeutige Tippfehler (nciht → nicht), schreibt den Satzanfang groß und berichtigt ZWei GRoßbuchstaben. Die Rücktaste direkt danach nimmt es zurück, das Wort bleibt dann künftig, wie du es geschrieben hast.',
+      '**Typografie:** "Text" wird zu „Text“, ... zu …, -> zu →, und -- mit Leerzeichen rundherum zu –.',
+      '**Autofüllen:** Beim Tippen erscheint ein grauer Vorschlag, Tab übernimmt ihn, Esc blendet ihn aus, auch für Wörter, die du oft zusammen schreibst („Mit freundl“ → „Mit freundlichen Grüßen“). Gelernt wird nur aus deinen eigenen Seiten, je Bereich getrennt, und es bleibt auf diesem PC.',
+      'Code, Links, Pfade und Wörter mit Ziffern bleiben immer unberührt. Alles ist einzeln abschaltbar unter **Einstellungen → Schreiben**. Titel und Listenfelder bleiben, wie sie sind.',
+    ],
+  },
+  {
     version: '0.38.0',
     date: '2026-11-02',
     title: 'Regeln für Listen',

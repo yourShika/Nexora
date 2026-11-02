@@ -1441,6 +1441,8 @@ export default function App() {
   setLinkData({ get: (id) => byId.get(id), list: () => [...tree.alive.values()] })
   const app = {
     alive: tree.alive,
+    // Bereich der Seite, die hier bearbeitet wird; ein Seitenfenster kann in einem anderen liegen als das Hauptfenster
+    textArea: windowPage ? tree.areaOf(windowPage) : area,
     databases,
     open: actions.open,
     // Mittelklick auf einen Eintrag; ein Seitenfenster hat keine Reiter, dort geht es ins Hauptfenster

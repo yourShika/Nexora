@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLineDown, Copy, PencilSimple } from '@phosphor-icons/react'
+import { ArrowLineDown, BookOpenText, Copy, PencilSimple } from '@phosphor-icons/react'
 import { EditorContent, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
 import { Extension, generateJSON, resolveExtensions } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
@@ -32,6 +32,7 @@ import { useApp } from './ctx.js'
 import { imageText } from './ocr.js'
 import { maskSecrets, secretSpans } from './secrets.js'
 import { adminLinks } from './adminlinks.js'
+import { addOwnWord, AutoText, learnArea, misspelledAt, suggestionsFor } from './writing.js'
 import SecretDialog from './SecretDialog.jsx'
 import ImageEditor from './ImageEditor.jsx'
 
@@ -156,6 +157,7 @@ const extensions = [
   LopEmbed,
   VaultRef,
   AdminLinks,
+  AutoText,
   Markdown,
   SlashCommand,
 ]
@@ -174,6 +176,7 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
   const [error, setError] = useState('')
   const [zoom, setZoom] = useState(null)
   const [menu, setMenu] = useState(null)
+  const [spell, setSpell] = useState(null) // Rechtsklick auf ein rot markiertes Wort
   const [editImage, setEditImage] = useState(null) // Bild im Bild-Editor ("bilder/…")
   // Passwort-Warnung: das abgefangene Einfügen wartet hier auf die Entscheidung
   const [secret, setSecret] = useState(null)
@@ -186,6 +189,7 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
     contentType: 'markdown',
     onUpdate: ({ editor }) => change.current?.(editor.getMarkdown()), // ohne onChange: nur lesen (Lesemodus)
     editorProps: {
+      attributes: { spellcheck: 'false' }, // die Prüfung kommt aus writing.js, nicht vom WebView
       handlePaste: (view, event) => {
         if (insertFiles(view, pastedFiles(event.clipboardData), null, setError)) return true
         if (bypass.current) return false
@@ -211,6 +215,12 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
     if (editor) onReady?.(editor)
   }, [editor, onReady])
 
+  // Autofüllen lernt aus dem Bereich, in dem diese Seite liegt
+  const area = editable ? app?.textArea : null
+  useEffect(() => {
+    if (area) learnArea(area)
+  }, [area])
+
   // Gesperrte Seite: lesen und Codeblöcke ausführen, aber nicht bearbeiten
   useEffect(() => {
     if (editor && editor.isEditable !== editable) editor.setEditable(editable)
@@ -226,9 +236,26 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
   // Rechtsklick auf ein Bild: erkannten Text kopieren oder als Absätze darunter einfügen
   function imageMenu(e) {
     const file = e.target.tagName === 'IMG' && relativeSrc(e.target.getAttribute('src'))
-    if (!file?.startsWith?.('bilder/')) return
+    if (!file?.startsWith?.('bilder/')) return spellMenu(e)
     e.preventDefault()
     setMenu({ x: e.clientX, y: e.clientY, file })
+  }
+  // Rechtsklick auf ein rot markiertes Wort: Vorschläge und „Ins Wörterbuch“
+  function spellMenu(e) {
+    if (!editor || !editable || !e.target.closest?.('.spell-error')) return
+    const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })
+    const hit = at && misspelledAt(editor.view, at.pos)
+    if (!hit) return
+    e.preventDefault()
+    setSpell({ ...hit, x: e.clientX, y: e.clientY, options: null })
+    suggestionsFor(hit.word).then((options) => setSpell((s) => (s && s.from === hit.from ? { ...s, options } : s)))
+  }
+  function replaceWord(text) {
+    const { from, to, word } = spell
+    setSpell(null)
+    const { view } = editor
+    if (view.state.doc.textBetween(from, to) === word) view.dispatch(view.state.tr.insertText(text, from, to))
+    view.focus()
   }
   async function withText(file, use) {
     setMenu(null)
@@ -276,6 +303,15 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
           {editable && <MenuItem icon={PencilSimple} onClick={() => (setMenu(null), setEditImage(menu.file))}>Bild bearbeiten …</MenuItem>}
           <MenuItem icon={Copy} onClick={() => copyText(menu.file)}>Text aus dem Bild kopieren</MenuItem>
           {editable && <MenuItem icon={ArrowLineDown} onClick={() => insertText(menu.file)}>Text unter dem Bild einfügen</MenuItem>}
+        </Menu>
+      )}
+      {spell && (
+        <Menu x={spell.x} y={spell.y} onClose={() => setSpell(null)} label={`Rechtschreibung: ${spell.word}`}>
+          {spell.options === null && <p className="px-2 py-1.5 text-muted">Suche Vorschläge …</p>}
+          {spell.options?.length === 0 && <p className="px-2 py-1.5 text-muted">Keine Vorschläge</p>}
+          {spell.options?.map((s) => <MenuItem key={s} onClick={() => replaceWord(s)}>{s}</MenuItem>)}
+          <div className="my-1 border-t border-line" />
+          <MenuItem icon={BookOpenText} onClick={() => (addOwnWord(spell.word).catch((e) => setError(String(e))), setSpell(null), editor.view.focus())}>Ins Wörterbuch aufnehmen</MenuItem>
         </Menu>
       )}
       {error && (

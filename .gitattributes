@@ -1,0 +1,2 @@
+# Wörterbücher unverändert lassen, auch bei core.autocrlf
+src-tauri/dict/* -text

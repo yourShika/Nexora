@@ -8,6 +8,8 @@ test('Admin-Links im Text', () => {
   assert.deepEqual(targets('Ablage auf \\\\fs01\\daten$\\IT\\Lizenzen, dort nachsehen.'), ['\\\\fs01\\daten$\\IT\\Lizenzen'])
   assert.deepEqual(targets('Logs unter C:\\ProgramData\\Agent\\logs.'), ['C:\\ProgramData\\Agent\\logs'])
   assert.deepEqual(targets('Installiert in "C:\\Program Files\\Tool X" laut Doku'), ['C:\\Program Files\\Tool X'])
+  assert.deepEqual(targets('Installiert in „C:\\Program Files\\Tool X“ laut Doku'), ['C:\\Program Files\\Tool X'])
+  assert.deepEqual(targets('Pfad „C:\\Temp“ und \\\\fs01\\daten“ da'), ['C:\\Temp', '\\\\fs01\\daten'])
   assert.deepEqual(targets('Server: rdp://srv-app01:3390 oder ssh://admin@10.0.3.1:2222.'), ['rdp://srv-app01:3390', 'ssh://admin@10.0.3.1:2222'])
   assert.deepEqual(targets('Webseite https://example.com und Text a\\b'), [])
   const [link] = adminLinks('x \\\\srv\\f y')

@@ -4,7 +4,8 @@ import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
 import { open } from '@tauri-apps/plugin-dialog'
-import { ArrowCircleUp, ArrowsClockwise, Bell, ClockCounterClockwise, Database, EnvelopeSimple, FolderOpen, GearSix, Key, Keyboard, MagnifyingGlass, Monitor, Moon, Palette, SlidersHorizontal, Sun, TerminalWindow, Users, UsersThree } from '@phosphor-icons/react'
+import { ArrowCircleUp, ArrowsClockwise, Bell, ClockCounterClockwise, Database, EnvelopeSimple, FolderOpen, GearSix, Key, Keyboard, MagnifyingGlass, Monitor, Moon, Palette, SlidersHorizontal, Sun, TerminalWindow, TextAa, Users, UsersThree, X } from '@phosphor-icons/react'
+import { addOwnWord, loadWriting, onWritingChange, removeNever, removeOwnWord, setWriting, writingState } from './writing.js'
 import { BACKUP_DEFAULTS, loadBackupSettings } from './backup.js'
 import { deleteImages, unusedImages } from './images.js'
 import { shells } from './runner.js'
@@ -418,6 +419,7 @@ export function HotkeyRow({ item, accel, busy, onChange }) {
 const CATEGORIES = [
   { id: 'allgemein', label: 'Allgemein', icon: SlidersHorizontal, keys: 'profil name benutzer farbe fenster autostart windows start tray eigenes fenster' },
   { id: 'aussehen', label: 'Aussehen', icon: Palette, keys: 'farbe farbschema schema theme hell dunkel modus darstellung verlauf gradient akzent discord schrift schriftart schriftgröße größe zoom bewegung animation übergang dichte zeilenabstand kompakt breite seitenbreite ecken rund eckig seitenleiste' },
+  { id: 'schreiben', label: 'Schreiben', icon: TextAa, keys: 'autokorrektur rechtschreibung wörterbuch tippfehler autofüllen vervollständigen vorschlag großschreibung typografie anführungszeichen sprache deutsch englisch' },
   { id: 'tasten', label: 'Tastenkürzel', icon: Keyboard, keys: 'hotkey kürzel tastatur schnellerfassung zwischenablage snippet picker' },
   { id: 'erinnerungen', label: 'Erinnerungen', icon: Bell, keys: 'meldung sammelmeldung benachrichtigung fällig uhrzeit morgen' },
   { id: 'onenote', label: 'OneNote', icon: ArrowsClockwise, keys: 'abgleich automatisch notizbuch sync onenote' },
@@ -467,6 +469,88 @@ export function AutostartToggle() {
   )
 }
 
+const WRITING_OPTIONS = [
+  ['mark', 'Fehler rot markieren', 'Rechtsklick zeigt Vorschläge und nimmt Wörter ins Wörterbuch auf.'],
+  ['fix', 'Eindeutige Tippfehler verbessern', 'Beim Leerzeichen oder Enter, nur wenn genau ein naheliegendes Wort passt (nciht → nicht). Großgeschriebenes kann ein Name sein: dort nur Buchstabendreher und doppelte Buchstaben.'],
+  ['caps', 'Großschreibung', 'Satzanfang groß, ZWei GRoßbuchstaben am Wortanfang berichtigen. Unbekannte Wörter wie ipconfig bleiben, in Tabellen gibt es keinen Satzanfang.'],
+  ['typo', 'Typografie', '"Text" wird zu „Text“, ... zu …, -> zu → und -- mit Leerzeichen rundherum zu –.'],
+  ['words', 'Wörter vervollständigen', 'Grauer Vorschlag ab drei Buchstaben, Tab übernimmt, Esc blendet aus.'],
+  ['phrases', 'Wortfolgen vervollständigen', 'Dasselbe für mehrere Wörter, die du oft zusammen schreibst.'],
+]
+
+function WordList({ title, hint, words, onRemove, children }) {
+  return (
+    <div className="mb-5">
+      <h3 className="mb-1 font-medium">{title}</h3>
+      <p className="mb-2 text-sm text-muted">{hint}</p>
+      {children}
+      {words.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5">
+          {words.map((w) => (
+            <li key={w} className="flex items-center gap-1 rounded-md border border-line bg-raised py-0.5 pl-2 pr-1 text-sm">
+              {w}
+              <button onClick={() => onRemove(w)} aria-label={`${w} entfernen`} className="rounded p-0.5 text-faint hover:text-danger"><X size={12} /></button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// Schreibhilfen im Editor (writing.js); gelten in Seiten, nicht in Titeln und Listenfeldern
+function WritingSection() {
+  const [, redraw] = useState(0)
+  const [word, setWord] = useState('')
+  const [message, setMessage] = useState('')
+  useEffect(() => {
+    const off = onWritingChange(() => redraw((n) => n + 1))
+    loadWriting().catch(() => {})
+    return off
+  }, [])
+  const { opts, own, never, failed } = writingState()
+  const guard = (p) => p.catch((e) => setMessage(`Nicht gespeichert: ${e}`))
+  function add(e) {
+    e.preventDefault()
+    if (!word.trim()) return
+    guard(addOwnWord(word.trim()))
+    setWord('')
+  }
+  return (
+    <section className="mb-10">
+      <h2 className="mb-1 font-semibold">Schreiben</h2>
+      <p className="mb-3 text-muted">
+        Hilft beim Schreiben in Seiten, Deutsch und Englisch gelten zugleich. Code, Links, Pfade und Wörter mit Ziffern bleiben immer unberührt. Die Rücktaste direkt nach einer Korrektur nimmt sie zurück, Nexora ändert das Wort danach nicht mehr.
+      </p>
+      {failed && <p role="alert" className="mb-3 text-danger">{failed}</p>}
+      <div className="mb-6 flex flex-col gap-3">
+        {WRITING_OPTIONS.map(([id, label, hint]) => (
+          <label key={id} className="flex items-start gap-3">
+            <input type="checkbox" checked={opts[id]} onChange={(e) => guard(setWriting({ [id]: e.target.checked }))} className="mt-1 size-4 shrink-0 accent-[var(--accent)]" />
+            <span>{label}<span className="block text-sm text-muted">{hint}</span></span>
+          </label>
+        ))}
+      </div>
+      <p className="mb-6 text-sm text-muted">
+        Autofüllen lernt nur aus deinen eigenen Seiten, je Bereich getrennt, und bleibt auf diesem PC. Codeblöcke und was nach Passwort aussieht werden nicht gelernt. Was drei Mal genau so in deinen Seiten steht, bekommt keine rote Linie mehr.
+      </p>
+      <WordList title="Eigenes Wörterbuch" hint="Diese Wörter gelten immer als richtig." words={[...own]} onRemove={(w) => guard(removeOwnWord(w))}>
+        <form onSubmit={add} className="mb-2 flex gap-2">
+          <input value={word} onChange={(e) => setWord(e.target.value)} placeholder="Wort hinzufügen" aria-label="Wort hinzufügen" className="w-64 rounded-md border border-line bg-raised px-2 py-1 outline-none placeholder:text-faint focus:border-accent" />
+          <button disabled={!word.trim()} className="rounded-md border border-line bg-raised px-3 py-1 hover:border-faint disabled:opacity-50">Hinzufügen</button>
+        </form>
+      </WordList>
+      {never.size > 0 && (
+        <WordList title="Nicht mehr verbessern" hint="Hier hast du eine Korrektur zurückgenommen. Diese Wörter ändert Nexora nicht mehr, rot markiert werden sie weiterhin." words={[...never]} onRemove={(w) => guard(removeNever(w))} />
+      )}
+      {message && <p role="alert" className="mb-3 text-danger">{message}</p>}
+      <p className="text-sm text-muted">
+        Wörterbücher: Deutsch aus igerman98 (GPL 2 oder 3), Englisch aus SCOWL (MIT und BSD). Sie liegen als eigene Dateien im Programmordner unter <code className="font-mono">dict</code>, dort auch die Lizenztexte.
+      </p>
+    </section>
+  )
+}
+
 export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBackupNow, updates, windowMode, onWindowMode, outlook, onOutlook, onOutlookSync, tab, onTab }) {
   const [dir, setDir] = useState('')
   const [digestTime, setDigestTime] = useState('08:00')
@@ -511,6 +595,7 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
       </>
     ),
     aussehen: <AppearanceSection />,
+    schreiben: <WritingSection />,
     tasten: (
       <section className="mb-10">
         <h2 className="mb-1 font-semibold">Tastenkürzel</h2>

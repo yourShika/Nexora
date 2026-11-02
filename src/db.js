@@ -223,6 +223,17 @@ export async function pagesWithCode() {
   return (await db()).select("SELECT id, body FROM nodes WHERE deleted_at IS NULL AND body LIKE '%```%'")
 }
 
+// Titel und Text aller lebenden Knoten eines Bereichs (Autofüllen lernt daraus); der Bereich steht am obersten Knoten
+export async function textsOfArea(area) {
+  return (await db()).select(
+    `WITH RECURSIVE t(id, title, body, area) AS (
+       SELECT id, title, body, COALESCE(NULLIF(area, ''), 'arbeit') FROM nodes WHERE parent_id IS NULL AND deleted_at IS NULL
+       UNION ALL SELECT n.id, n.title, n.body, t.area FROM nodes n JOIN t ON n.parent_id = t.id WHERE n.deleted_at IS NULL)
+     SELECT title, body FROM t WHERE area = $1`,
+    [area],
+  )
+}
+
 export async function getSetting(key) {
   const [row] = await (await db()).select('SELECT value FROM settings WHERE key = $1', [key])
   return row?.value ?? null

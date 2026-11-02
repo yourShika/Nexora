@@ -1,6 +1,7 @@
 // Admin-Links im Text: Freigaben (\\server\freigabe), lokale Pfade (C:\…), rdp:// und ssh://.
 // Pfade mit Leerzeichen erkennt Nexora, wenn sie in Anführungszeichen stehen.
-const PATTERN = /"((?:\\\\|[A-Za-z]:\\)[^"\n]+)"|(\\\\[\w.$-]+(?:\\[^\s"'<>|*?\\]+)*\\?)|(\b[A-Za-z]:\\[^\s"'<>|*?]*)|(\b(?:rdp|ssh):\/\/[\w.@:-]+)/g
+// Die Typografie macht aus "…" beim Tippen „…“, das zählt genauso.
+const PATTERN = /["„]((?:\\\\|[A-Za-z]:\\)[^"“”\n]+)["“”]|(\\\\[\w.$-]+(?:\\[^\s"'“”<>|*?\\]+)*\\?)|(\b[A-Za-z]:\\[^\s"'“”<>|*?]*)|(\b(?:rdp|ssh):\/\/[\w.@:-]+)/g
 
 // [{ from, to, target }] relativ zum Text; Satzzeichen am Ende gehören nicht dazu
 export function adminLinks(text) {
