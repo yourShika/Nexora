@@ -2,6 +2,14 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.37.0',
+    date: '2026-11-02',
+    title: 'Pfad klickbar',
+    items: [
+      'Der **Pfad oben auf einer Seite** ist jetzt klickbar: Notizbuch, Abschnitt oder Liste anklicken, und du bist wieder dort. Ein Mittelklick öffnet die Stufe in einem neuen Reiter.',
+    ],
+  },
+  {
     version: '0.36.0',
     date: '2026-11-02',
     title: 'Verlauf, Reiter, Icon',

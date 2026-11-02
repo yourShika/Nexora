@@ -104,7 +104,18 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
           {path.map((p, i) => (
             <span key={p.id} className="flex min-w-0 items-center gap-1.5">
               {i > 0 && <span className="text-faint">/</span>}
-              <span className="truncate">{p.title || 'Ohne Titel'}</span>
+              {i < path.length - 1 ? (
+                <button
+                  title={p.title || 'Ohne Titel'}
+                  onClick={() => app.open(p.id)}
+                  onAuxClick={(e) => e.button === 1 && app.openTab(p.id)}
+                  className="-mx-1 min-w-0 truncate rounded px-1 hover:bg-hover hover:text-text"
+                >
+                  {p.title || 'Ohne Titel'}
+                </button>
+              ) : (
+                <span aria-current="page" className="truncate text-text">{p.title || 'Ohne Titel'}</span>
+              )}
             </span>
           ))}
         </nav>

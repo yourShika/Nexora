@@ -1384,6 +1384,8 @@ export default function App() {
     alive: tree.alive,
     databases,
     open: actions.open,
+    // Mittelklick auf einen Eintrag; ein Seitenfenster hat keine Reiter, dort geht es ins Hauptfenster
+    openTab: windowPage ? actions.open : actions.openTab,
     notice: setNotice,
     people,
     savePeople,
