@@ -38,7 +38,10 @@ function ProviderForm({ provider, onChange, onRemove }) {
     try {
       const list = await listModels(provider)
       setModels(list)
-      setStatus({ ok: true, text: list.length ? `${list.length} Modelle gefunden, im Feld „Modell“ auswählen oder lostippen.` : 'Der Anbieter nennt keine Modelle, bitte von Hand eintragen.' })
+      // leeres oder unbekanntes Modell: das erste vorhandene eintragen, sonst scheitert jede Anfrage
+      const pick = list.length && !list.includes(provider.model.trim()) ? list[0] : null
+      if (pick) onChange({ model: pick })
+      setStatus({ ok: true, text: !list.length ? 'Der Anbieter nennt keine Modelle, bitte von Hand eintragen.' : `${list.length} Modelle gefunden${pick ? `, „${pick}“ eingetragen` : ''}. Im Feld „Modell“ kannst du ein anderes auswählen.` })
     } catch (e) {
       setStatus({ ok: false, text: String(e) })
     } finally {

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { addDays, between, taskCount, daysBetween, nextDate, sortRows, sortsOf, isoWeek, parseTime } from './fields.js'
+import { addDays, between, chipHex, taskCount, daysBetween, nextDate, sortRows, sortsOf, isoWeek, parseTime } from './fields.js'
 import { parseQuick } from './quick.js'
 
 test('nächster Termin einer Wiederholung', () => {
@@ -64,4 +64,8 @@ test('Kalenderwoche und getippte Uhrzeit', () => {
   assert.equal(isoWeek('2027-01-01'), 53) // Freitag, gehört noch zu 2026
   assert.equal(isoWeek('2024-12-30'), 1)
   assert.deepEqual(['9', '930', '0930', '14.30', '14:5', '', '25', '1260', 'ab'].map(parseTime), ['09:00', '09:30', '09:30', '14:30', null, '', null, null, null])
+})
+
+test('Optionsfarbe: fester Name, eigene Farbe oder grau', () => {
+  assert.deepEqual(['rot', '#12AbEf', '#123', 'toString', undefined, 'lila'].map(chipHex), ['#c8434b', '#12AbEf', '#7b8487', '#7b8487', '#7b8487', '#7b8487'])
 })

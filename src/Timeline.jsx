@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CHIP_COLORS, DEPS_FIELD, START_FIELD, addDays, dayOf, daysBetween, formatNr, isDone, option, statusField, timeOf, today } from './fields.js'
+import { CHIP_COLORS, DEPS_FIELD, chipHex, START_FIELD, addDays, dayOf, daysBetween, formatNr, isDone, option, statusField, timeOf, today } from './fields.js'
 
 // span: so viele Tage zeigt die Zeitleiste mindestens, damit sie die Breite füllt
 const ZOOMS = { woche: { px: 36, label: 'Tage', span: 35 }, monat: { px: 14, label: 'Wochen', span: 90 }, quartal: { px: 5, label: 'Monate', span: 270 } }
@@ -131,7 +131,7 @@ export default function TimelineView({ db, rows, fields, config, onConfig, onRow
                 {shown.map((it, i) => {
                   const o = option(sf, it.r.props?.status)
                   // grau (z. B. "Offen") wirkt als Balken matt: dann die Akzentfarbe
-                  const color = !o || o.color === 'grau' ? CHIP_COLORS.petrol : CHIP_COLORS[o.color]
+                  const color = !o || o.color === 'grau' ? CHIP_COLORS.petrol : chipHex(o.color)
                   const milestone = !startF || !it.r.props?.[startF.id]
                   const top = i * ROW + 7
                   const done = isDone(it.r, fields)

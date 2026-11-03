@@ -2,6 +2,15 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.42.0',
+    date: '2026-11-03',
+    title: 'Farbmenü und KI-Modelle',
+    items: [
+      '**Farben für Listen-Optionen:** Unter „Felder“ öffnet ein Klick auf den Farbpunkt von Status, Auswahl oder Tags ein Menü mit acht Farben und **Eigene Farbe**. Bisher wechselte die Farbe bei jedem Klick reihum.',
+      '**KI leichter einrichten:** „Modelle laden“ trägt das erste vorhandene Modell ein, wenn das Feld leer ist oder der Anbieter das Modell nicht kennt. Ein falscher Modellname wird jetzt klar gemeldet.',
+    ],
+  },
+  {
     version: '0.41.0',
     date: '2026-11-02',
     title: 'Sprache und Besprechungen',

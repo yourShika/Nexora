@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { CaretLeft, CaretRight, Plus } from '@phosphor-icons/react'
-import { CHIP_COLORS, LOP_FIELDS, addDays, dayOf, fieldsOf, isDone, iso, option, timeOf, today } from './fields.js'
+import { CHIP_COLORS, LOP_FIELDS, chipHex, addDays, dayOf, fieldsOf, isDone, iso, option, timeOf, today } from './fields.js'
 import { parseQuick } from './quick.js'
 import { BUSY, eventDays, eventLook, eventTime, openEvent } from './outlook.js'
 import { useApp } from './ctx.js'
@@ -117,7 +117,7 @@ export default function CalendarView({ rows, dbOf, events = [], field = 'due', o
                   const db = dbOf(r)
                   // nach Priorität gefärbt (Liste ohne Priorität: grau)
                   const p = option(fieldsOf(db).find((f) => f.id === 'prio'), r.props?.prio)
-                  const color = CHIP_COLORS[p?.color] ?? CHIP_COLORS.grau
+                  const color = chipHex(p?.color)
                   const done = isDone(r, fieldsOf(db))
                   return (
                     <li key={r.id}>

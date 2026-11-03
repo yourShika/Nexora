@@ -104,14 +104,15 @@ fn parse_answer(kind: &str, v: &Value) -> Result<Answer, String> {
 }
 
 fn readable_error(status: u16, body: &str) -> String {
+    let v: Value = serde_json::from_str(body).unwrap_or(Value::Null);
     let what = match status {
+        _ if v["error"]["code"] == "model_not_found" => "Dieses Modell gibt es beim Anbieter nicht, „Modelle laden“ zeigt die vorhandenen".to_string(),
         401 | 403 => "Der Anbieter lehnt den Schlüssel ab".to_string(),
         404 => "Adresse oder Modell nicht gefunden".to_string(),
         429 => "Zu viele Anfragen oder Kontingent aufgebraucht".to_string(),
         s if s >= 500 => format!("Der Anbieter hat ein Problem ({s})"),
         s => format!("Anfrage abgelehnt ({s})"),
     };
-    let v: Value = serde_json::from_str(body).unwrap_or(Value::Null);
     let detail = v["error"]["message"].as_str().or(v["error"].as_str()).or(v["message"].as_str()).unwrap_or_default();
     if detail.is_empty() {
         what
@@ -232,6 +233,7 @@ mod tests {
     fn fehler_verstaendlich() {
         assert!(readable_error(401, r#"{"error":{"message":"bad key"}}"#).starts_with("Der Anbieter lehnt den Schlüssel ab: bad key"));
         assert_eq!(readable_error(404, ""), "Adresse oder Modell nicht gefunden");
+        assert!(readable_error(404, r#"{"error":{"message":"The model `` does not exist","code":"model_not_found"}}"#).starts_with("Dieses Modell gibt es beim Anbieter nicht"));
         assert!(readable_error(429, r#"{"message":"slow"}"#).contains("slow"));
         assert!(readable_error(503, "<html>").contains("503"));
         assert_eq!(readable_error(400, r#"{"error":"nope"}"#), "Anfrage abgelehnt (400): nope");

@@ -7,7 +7,8 @@ import RulesPanel from './Rules.jsx'
 import { Cover, IconRow } from './PageHead.jsx'
 import CalendarView from './Calendar.jsx'
 import TimelineView from './Timeline.jsx'
-import { CHIP_COLORS, TYPES, between, isDone, newId, sortRows, sortsOf, statusField } from './fields.js'
+import { TYPES, between, isDone, newId, sortRows, sortsOf, statusField } from './fields.js'
+import { ChipColor } from './ColorPicker.jsx'
 import Menu, { MenuItem } from './Menu.jsx'
 import Select from './Select.jsx'
 
@@ -539,19 +540,12 @@ function FieldsPanel({ config, onConfig, onClose }) {
 }
 
 function OptionsEditor({ field, onChange }) {
-  const colors = Object.keys(CHIP_COLORS)
   const set = (id, patch) => onChange(field.options.map((o) => (o.id === id ? { ...o, ...patch } : o)))
   return (
     <ul className="mt-2 space-y-1">
       {field.options.map((o) => (
         <li key={o.id} className="flex items-center gap-2">
-          <button
-            aria-label={`Farbe von ${o.name} wechseln`}
-            title="Farbe wechseln"
-            onClick={() => set(o.id, { color: colors[(colors.indexOf(o.color) + 1) % colors.length] })}
-            style={{ background: CHIP_COLORS[o.color] ?? CHIP_COLORS.grau }}
-            className="size-3.5 shrink-0 rounded-full"
-          />
+          <ChipColor value={o.color} label={`Farbe von ${o.name}`} onChange={(color) => set(o.id, { color })} />
           <BlurInput value={o.name} label="Option" onCommit={(v) => v && set(o.id, { name: v })} />
           {field.type === 'status' && (
             <label className="flex shrink-0 items-center gap-1 text-xs text-muted" title="Zählt als erledigt">

@@ -1,9 +1,61 @@
 import { useCallback, useRef, useState } from 'react'
+import { Check } from '@phosphor-icons/react'
 import Menu from './Menu.jsx'
 import { hexToHsv, hsvToHex } from './colors.js'
-import { CHIP_COLORS } from './fields.js'
+import { CHIP_COLORS, CHIP_NAMES, chipHex } from './fields.js'
 
 const PRESETS = [...Object.values(CHIP_COLORS), '#5bc0be', '#7a5cc4', '#2f4858', '#e8a33d']
+const ROW = 'flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-hover focus:bg-hover focus:outline-none'
+
+// Farbpunkt einer Listen-Option: Menü mit den festen Farben und "Eigene Farbe". onChange bekommt den Namen oder "#rrggbb"
+export function ChipColor({ value, onChange, label }) {
+  const [at, setAt] = useState(null)
+  const [custom, setCustom] = useState(false)
+  const close = useCallback(() => setAt(null), [])
+  const own = !Object.hasOwn(CHIP_COLORS, value ?? 'grau')
+  const mark = (on) => <Check size={14} weight="bold" className={on ? 'text-accent' : 'invisible'} />
+  return (
+    <>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-label={label}
+        title="Farbe wählen"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          setCustom(false)
+          setAt({ x: r.left, y: r.bottom + 4 })
+        }}
+        style={{ background: chipHex(value) }}
+        className="size-3.5 shrink-0 rounded-full"
+      />
+      {at && (
+        // key: neu einpassen, wenn der größere Farbwähler aufgeht
+        <Menu key={custom} x={at.x} y={at.y} onClose={close} role={custom ? 'dialog' : 'menu'} label={label}>
+          {custom ? (
+            <ColorPicker value={chipHex(value)} onPick={onChange} />
+          ) : (
+            <>
+              {Object.entries(CHIP_COLORS).map(([key, hex]) => (
+                <button key={key} role="menuitemradio" aria-checked={(value ?? 'grau') === key} onClick={() => (onChange(key), close())} className={ROW}>
+                  <span aria-hidden className="size-3.5 rounded-full" style={{ background: hex }} />
+                  <span className="flex-1">{CHIP_NAMES[key]}</span>
+                  {mark((value ?? 'grau') === key)}
+                </button>
+              ))}
+              <div className="my-1 border-t border-line" />
+              <button role="menuitemradio" aria-checked={own} onClick={() => setCustom(true)} className={ROW}>
+                <span aria-hidden className="size-3.5 rounded-full" style={{ background: own ? chipHex(value) : 'conic-gradient(#e5484d, #f5c518, #30a46c, #3e8bd6, #8e4ec6, #e5484d)' }} />
+                <span className="flex-1">Eigene Farbe …</span>
+                {mark(own)}
+              </button>
+            </>
+          )}
+        </Menu>
+      )}
+    </>
+  )
+}
 
 // Farbfeld als Knopf; Klick öffnet den eigenen Farbwähler statt des Windows-Dialogs. onChange bekommt "#rrggbb"
 export function ColorInput({ value, onChange, ...aria }) {

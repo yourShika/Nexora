@@ -3,12 +3,12 @@ import { ArrowSquareOut, Check, Plus, X } from '@phosphor-icons/react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import Menu, { MenuItem } from './Menu.jsx'
 import { DatePicker, TimeInput } from './DatePicker.jsx'
-import { CHIP_COLORS, REPEATS, dayOf, formatDate, formatNr, isLate, isToday, option, timeOf } from './fields.js'
+import { CHIP_COLORS, REPEATS, chipHex, dayOf, formatDate, formatNr, isLate, isToday, option, timeOf } from './fields.js'
 import { useApp } from './ctx.js'
 import { colorOf, initials, personsOf } from './people.js'
 
 export function Chip({ color = 'grau', children }) {
-  const hex = CHIP_COLORS[color] ?? CHIP_COLORS.grau
+  const hex = chipHex(color)
   return (
     <span
       style={{ background: `color-mix(in srgb, ${hex} 17%, transparent)`, color: `color-mix(in srgb, ${hex} 78%, var(--text))` }}
