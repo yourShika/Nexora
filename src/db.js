@@ -208,6 +208,14 @@ export const renamed = (id, from, to) => {
   return addChange(id, `Umbenannt: ${t(from)} → ${t(to)}`, { key: 'Umbenannt:', join: (last) => (last.startsWith(`Umbenannt: ${t(to)} →`) ? null : last.replace(/→ „[^]*“$/, `→ ${t(to)}`)) })
 }
 
+// Kommentare je Punkt für die Listen: Anzahl und der neueste
+export async function commentSummary() {
+  const rows = await (await db()).select(
+    "SELECT a.node_id, c.n, a.text, a.created_at FROM activity a JOIN (SELECT node_id, COUNT(*) AS n, MAX(id) AS last FROM activity WHERE kind = 'comment' GROUP BY node_id) c ON a.id = c.last",
+  )
+  return new Map(rows.map((r) => [r.node_id, { count: r.n, text: r.text, at: r.created_at }]))
+}
+
 export async function addActivity(id, kind, text) {
   await (await db()).execute('INSERT INTO activity (node_id, kind, text) VALUES ($1, $2, $3)', [id, kind, text])
 }

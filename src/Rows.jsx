@@ -1,11 +1,29 @@
 import { useCallback, useId, useRef, useState } from 'react'
-import { ArrowBendUpRight, CalendarBlank, EnvelopeSimple, Lightning, Question, Tray } from '@phosphor-icons/react'
+import { ArrowBendUpRight, CalendarBlank, ChatCircle, EnvelopeSimple, Lightning, Question, Tray } from '@phosphor-icons/react'
 import { BUSY, eventDays, eventLook, eventTime, openEvent } from './outlook.js'
 import Menu, { MenuItem } from './Menu.jsx'
 import { Chip, DateText, FieldValue } from './Props.jsx'
 import { LOP_FIELDS, dayOf, fieldsOf, formatNr, isDone, isLate, isToday, option, statusField, today } from './fields.js'
 import { parseQuick, quickName, tokenAt } from './quick.js'
 import { useApp } from './ctx.js'
+
+// Kommentare am Punkt in Listen: Zähler und neuester Kommentar, je nach Einstellung "kommentare"
+export function CommentCount({ id }) {
+  const c = useApp()?.comments
+  const n = c?.look.count && c.of(id)?.count
+  if (!n) return null
+  return (
+    <span title={`${n} ${n === 1 ? 'Kommentar' : 'Kommentare'}`} className="flex shrink-0 items-center gap-0.5 text-xs tabular-nums text-muted">
+      <ChatCircle size={13} weight="bold" /> {n}
+    </span>
+  )
+}
+export function LastComment({ id, className = '' }) {
+  const c = useApp()?.comments
+  const last = c?.look.last && c.of(id)
+  if (!last) return null
+  return <span title={last.text} className={`block truncate text-xs font-normal text-muted ${className}`}>{last.text}</span>
+}
 
 // Eine Zeile mit Erledigt-Haken; für Liste, Eingang und Heute
 // Fortschritt der Checkliste im Text eines Punkts: Balken und "3/5"
@@ -38,10 +56,14 @@ export function RowItem({ row, db, onOpen, onToggle, showDb, actions, drag, mark
         className="size-4 shrink-0 cursor-pointer accent-[var(--accent)]"
       />
       {row.props?.nr && <span className="shrink-0 font-mono text-xs text-faint">{formatNr(db, row.props.nr)}</span>}
-      <button onClick={() => onOpen(row.id)} className={`min-w-0 flex-1 truncate text-left ${done ? 'text-faint line-through' : ''}`}>
-        {row.title || 'Ohne Titel'}
-      </button>
+      <span className="min-w-0 flex-1">
+        <button onClick={() => onOpen(row.id)} className={`block w-full truncate text-left ${done ? 'text-faint line-through' : ''}`}>
+          {row.title || 'Ohne Titel'}
+        </button>
+        <LastComment id={row.id} />
+      </span>
       <span className="flex shrink-0 items-center gap-1.5">
+        <CommentCount id={row.id} />
         <Progress tasks={row.tasks} />
         {showDb && <span className="text-xs text-faint">{db?.title ?? 'Eingang'}</span>}
         {shown.map((f) => <FieldValue key={f.id} field={f} value={row.props?.[f.id]} db={db} done={done} />)}
@@ -254,10 +276,11 @@ export function Today({ rows, dbOf, events = [], onOpen, onToggle, onFollowUp })
                 <span aria-hidden className="h-5 w-[3px] shrink-0 rounded-full" style={{ background: eventLook(e).stripe }} />
                 <CalendarBlank size={16} className="shrink-0 text-faint" />
                 <span className="w-24 shrink-0 text-sm tabular-nums text-muted">{eventTime(e)}</span>
-                <span className="min-w-0 flex-1 truncate">{e.subject}</span>
-                {e.location && <span className="truncate text-sm text-faint">{e.location}</span>}
+                <span className="min-w-0 flex-1 truncate" title={e.subject}>{e.subject}</span>
+                {/* Ort höchstens ein Drittel, sonst bleibt vom Titel nichts (lange Teams-Räume) */}
+                {e.location && <span className="min-w-0 max-w-[33%] truncate text-sm text-faint" title={e.location}>{e.location}</span>}
                 {e.busy !== 2 && BUSY[e.busy] && <span className="shrink-0 text-xs text-faint">{BUSY[e.busy]}</span>}
-                {e.categories && <span className="shrink-0 truncate text-xs text-faint">{e.categories}</span>}
+                {e.categories && <span className="min-w-0 max-w-[20%] truncate text-xs text-faint" title={e.categories}>{e.categories}</span>}
                 </button>
               </li>
             ))}

@@ -22,8 +22,8 @@ import { slashApp } from './SlashMenu.jsx'
 import { HOTKEYS, bindHotkeys, hotkeyLabel } from './hotkey.js'
 import { maskSecrets, secretSpans } from './secrets.js'
 import SecretDialog from './SecretDialog.jsx'
-import { isPermissionGranted, sendNotification } from '@tauri-apps/plugin-notification'
-import { checkReminders, message } from './notify.js'
+import { isPermissionGranted } from '@tauri-apps/plugin-notification'
+import { checkReminders, message, sendNotification } from './notify.js'
 import { bmpToPng, importImage, initImages, saveImageBytes } from './images.js'
 import { describeReport, hash, link as oneNoteLink, syncNotebook } from './onenote.js'
 import { desiredEvents, followUpMail, pushDue, readEvents } from './outlook.js'
@@ -50,7 +50,7 @@ import { getVersion } from '@tauri-apps/api/app'
 import { appConfigDir, homeDir, join } from '@tauri-apps/api/path'
 import { peopleList, personsOf } from './people.js'
 import { getLook, loadLook, motionOn, setLook, useLook } from './theme.js'
-import { dayOf, daysBetween, describe, emptyConfig, fieldsOf, formatDate, isDone, lopConfig, nextDate, shiftDate, statusField, today, toggleDone } from './fields.js'
+import { COMMENT_DEFAULTS, dayOf, daysBetween, describe, emptyConfig, fieldsOf, formatDate, isDone, lopConfig, nextDate, shiftDate, statusField, today, toggleDone } from './fields.js'
 import CalendarView from './Calendar.jsx'
 import { CalendarBlank } from '@phosphor-icons/react'
 import { parseQuick } from './quick.js'
@@ -491,10 +491,15 @@ export default function App() {
     return true
   }
   const fail = (e) => setError(`Speichern fehlgeschlagen: ${e}`)
-  const reload = useCallback(() => db.allNodes().then(setNodes).catch((e) => setError(`Datenbank nicht erreichbar: ${e}`)), [])
+  const [comments, setComments] = useState(() => new Map())
+  const [commentLook, setCommentLook] = useState(COMMENT_DEFAULTS)
+  const refreshComments = useCallback(() => db.commentSummary().then(setComments).catch(() => {}), [])
+  const reload = useCallback(() => (refreshComments(), db.allNodes().then(setNodes).catch((e) => setError(`Datenbank nicht erreichbar: ${e}`))), [refreshComments])
 
   useEffect(() => {
     db.getSetting('personen').then((p) => p && setPeopleSaved(JSON.parse(p))).catch(() => {})
+    db.getSetting('kommentare').then((v) => v && setCommentLook({ ...COMMENT_DEFAULTS, ...JSON.parse(v) })).catch(() => {})
+    refreshComments()
     // Seitenfenster: nur Daten laden; Aufräumen, Beispieldaten und Wiederherstellen macht das Hauptfenster
     const off = listen('nodes-changed', (e) => e.payload?.from !== label && reload())
     if (windowPage) {
@@ -541,6 +546,27 @@ export default function App() {
   useEffect(() => {
     addEventListener('focus', reload)
     return () => removeEventListener('focus', reload)
+  }, [reload])
+
+  // Änderungen über MCP (Claude u. a.) live zeigen: mcp.rs setzt bei jedem Schreiben das Signal "extern"
+  useEffect(() => {
+    let seen
+    const look = () =>
+      db
+        .getSetting('extern')
+        .then((v) => {
+          if (seen !== undefined && v && v !== seen) {
+            const s = JSON.parse(v)
+            reload()
+            dispatchEvent(new CustomEvent('nexora-extern', { detail: s.id }))
+            if (!windowPage) setNotice({ text: s.text, label: 'Öffnen', run: () => slashApp.current?.open(s.id) })
+          }
+          seen = v
+        })
+        .catch(() => {})
+    look()
+    const t = setInterval(look, 2000)
+    return () => clearInterval(t)
   }, [reload])
 
   // Fenstertitel folgt dem Seitentitel
@@ -1474,6 +1500,7 @@ export default function App() {
     oneNoteSync: actions.oneNoteSync,
     profile,
     saveProfile: (p) => (setProfile(p), db.setSetting('profil', JSON.stringify(p)).catch(fail)),
+    comments: { look: commentLook, of: (id) => comments.get(id), refresh: refreshComments, save: (look) => (setCommentLook(look), db.setSetting('kommentare', JSON.stringify(look)).catch(fail)) },
     isPinned: actions.isPinned,
     unlockVault,
     vaultCopy,

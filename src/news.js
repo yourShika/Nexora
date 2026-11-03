@@ -2,6 +2,17 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.43.0',
+    date: '2026-11-03',
+    title: 'Live-Änderungen, Kommentare und /ki',
+    items: [
+      '**Änderungen von außen live:** Ändert ein KI-Programm wie Claude über MCP eine Seite oder einen Punkt, siehst du das nach etwa 2 Sekunden, mit Hinweis und „Öffnen“. Schreibst du gerade in derselben Seite, überschreibt Nexora nichts und fragt, welche Fassung bleiben soll.',
+      '**Kommentare sichtbarer:** In Tabelle, Liste und Kanban zeigt eine Sprechblase die Anzahl, und der neueste Kommentar steht klein unter dem Titel. Auf der Seite eines Punkts stehen die Kommentare hervorgehoben über dem Verlauf. Einzeln abschaltbar unter Einstellungen → Listen.',
+      '**/ki in Seiten:** /ki zeigt die KI-Befehle für die Markierung oder den Absatz an der Schreibmarke. /ki schreiben lässt neuen Text nach deiner Anweisung schreiben, dabei geht nur die Anweisung an den Anbieter.',
+      '**Termine unter Heute:** Lange Ortsangaben wie Teams-Räume verdrängen den Titel nicht mehr. Den vollen Text zeigt der Tooltip.',
+    ],
+  },
+  {
     version: '0.42.0',
     date: '2026-11-03',
     title: 'Farbmenü und KI-Modelle',

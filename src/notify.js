@@ -1,9 +1,12 @@
-import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification'
+import { isPermissionGranted, requestPermission, sendNotification as toast } from '@tauri-apps/plugin-notification'
 import * as db from './db.js'
 import { iso } from './fields.js'
 import { digestMessage, plan, timedMessage } from './reminders.js'
 
 let busy = false
+
+// Testversion bleibt stumm: nicht installiert zeigt Windows ihre Meldungen als „Windows PowerShell“
+export const sendNotification = (m) => !import.meta.env.DEV && toast(m)
 
 // Windows-Meldung; ohne Erlaubnis still
 export async function message(title, body) {

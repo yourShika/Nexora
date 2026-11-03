@@ -7,7 +7,7 @@ import { pickVault } from './Vault.jsx'
 import { pickEmoji } from './EmojiPicker.jsx'
 import { dictate } from './Speech.jsx'
 import {
-  ChartBar, CheckSquare, Smiley, Code, FlowArrow, Key, Scribble, LinkSimple, ListBullets, ListChecks, ListNumbers, Microphone, Minus, Paperclip, Quotes, Table, TextHOne, TextHThree, TextHTwo, TextT,
+  ChartBar, CheckSquare, Smiley, Code, FlowArrow, Key, Scribble, LinkSimple, ListBullets, ListChecks, ListNumbers, Microphone, Minus, Paperclip, PencilSimple, Quotes, Sparkle, Table, TextHOne, TextHThree, TextHTwo, TextT,
 } from '@phosphor-icons/react'
 
 // `keys`: weitere Suchwörter, damit auch "todo", "h1" oder "pre" trifft
@@ -31,6 +31,9 @@ const ITEMS = [
   { title: 'Tresor-Eintrag', keys: 'vault passwort kennwort bitwarden zugang', icon: Key, run: (c, editor) => (pickVault(editor), c) },
   { title: 'LOP-Liste einbetten', keys: 'lop liste datenbank punkte', icon: ListChecks, run: (c) => c.insertContent({ type: 'lopEmbed', attrs: { id: null } }) },
   { title: 'Datei anhängen', keys: 'anhang datei pdf upload', icon: Paperclip, run: (c, editor) => (attach(editor), c) },
+  // AiMenu.jsx hört auf 'nexora-ki'; erst nach dem Löschen von "/ki", damit Schreibmarke und Absatz stimmen
+  { title: 'KI', keys: 'ai korrigieren verbessern kürzen zusammenfassen übersetzen', icon: Sparkle, run: (c, editor) => (setTimeout(() => editor.emit('nexora-ki', {})), c) },
+  { title: 'KI schreiben', keys: 'ai text schreiben entwurf formulieren', icon: PencilSimple, run: (c, editor) => (setTimeout(() => editor.emit('nexora-ki', { write: true })), c) },
   { title: 'Diktat', keys: 'sprache sprechen mikrofon spracherkennung', icon: Microphone, run: (c, editor) => (setTimeout(() => dictate(editor, slashApp.current)), c) },
 ]
 

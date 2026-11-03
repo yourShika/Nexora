@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLineDown, ArrowsClockwise, Check, GearSix, PencilSimple, ShieldWarning, Sparkle, X } from '@phosphor-icons/react'
-import { ACTIONS, cleanAnswer, hostOf, needsConsent, problemOf, SYSTEM, userMessage, withConsent } from './ai.js'
+import { ACTIONS, cleanAnswer, hostOf, needsConsent, problemOf, SYSTEM, SYSTEM_WRITE, userMessage, withConsent } from './ai.js'
 import { aiSettings, complete, currentProvider, hasKey, onAiChange, saveAi, watchAi } from './aiClient.js'
 import { maskSecrets, secretSpans } from './secrets.js'
 import Menu, { MenuItem } from './Menu.jsx'
@@ -40,9 +40,10 @@ const Modal = ({ label, onClose, wide, children }) => (
 )
 
 // Ablauf eines KI-Befehls: Anweisung (nur bei eigener), Passwort-Prüfung, Rückfrage, Anfrage, Vorschau.
-// Es geht nur der markierte Text raus; übernommen wird erst auf Klick, Strg+Z macht es rückgängig
-function AiDialog({ editor, range, action, onClose, onSettings }) {
-  const original = useRef(selectionMarkdown(editor, range))
+// Es geht nur der markierte Text raus; übernommen wird erst auf Klick, Strg+Z macht es rückgängig.
+// write (/ki schreiben): kein Text aus der Seite, nur die Anweisung geht raus, das Ergebnis kommt an die Schreibmarke
+function AiDialog({ editor, range, action, write, onClose, onSettings }) {
+  const original = useRef(write ? '' : selectionMarkdown(editor, range))
   const settings = aiSettings()
   const provider = currentProvider()
   const [stage, setStage] = useState(action ? 'start' : 'ask') // ask | secret | consent | busy | done | error | setup
@@ -60,7 +61,7 @@ function AiDialog({ editor, range, action, onClose, onSettings }) {
     const mine = ++run.current
     setStage('busy')
     try {
-      const a = await complete(provider, SYSTEM, userMessage(prompt, sendText))
+      const a = await (write ? complete(provider, SYSTEM_WRITE, prompt.trim()) : complete(provider, SYSTEM, userMessage(prompt, sendText)))
       if (mine !== run.current) return
       setResult(cleanAnswer(a.text))
       setTruncated(a.truncated)
@@ -78,7 +79,7 @@ function AiDialog({ editor, range, action, onClose, onSettings }) {
     const missing = provider ? problemOf(provider, await hasKey(provider.id).catch(() => false)) : problemOf(null, false)
     if (missing) return setProblem(missing), setStage('setup')
     setInstruction(prompt)
-    if (secretSpans(text).length) return setStage('secret')
+    if (!write && secretSpans(text).length) return setStage('secret')
     askConsent(text, prompt)
   }
 
@@ -133,7 +134,7 @@ function AiDialog({ editor, range, action, onClose, onSettings }) {
       <Modal label="Text senden?" onClose={onClose}>
         <h2 className="mb-1 flex items-center gap-2 font-semibold"><ShieldWarning size={18} className="text-accent" /> Text an {provider.name} senden?</h2>
         <p className="mb-3 text-sm text-muted">
-          Der markierte Text ({original.current.length} Zeichen) verlässt diesen PC und geht an <code className="font-mono">{hostOf(provider.base)}</code>. Was der Anbieter damit tut, regeln seine Bedingungen. Bei diesem Anbieter fragt Nexora danach nicht mehr, es geht aber weiterhin nur Markiertes raus und nur, wenn du klickst.
+          {write ? `Deine Anweisung (${instruction.trim().length} Zeichen)` : `Der Text (${original.current.length} Zeichen)`} verlässt diesen PC und geht an <code className="font-mono">{hostOf(provider.base)}</code>. Was der Anbieter damit tut, regeln seine Bedingungen. Bei diesem Anbieter fragt Nexora danach nicht mehr, es geht aber weiterhin nur dieser Text raus und nur, wenn du klickst.
         </p>
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="rounded-md px-3 py-1.5 text-muted hover:bg-hover">Abbrechen</button>
@@ -156,15 +157,15 @@ function AiDialog({ editor, range, action, onClose, onSettings }) {
   }
   if (stage === 'ask') {
     return (
-      <Modal label="Eigene Anweisung" onClose={onClose}>
-        <h2 className="mb-2 flex items-center gap-2 font-semibold"><PencilSimple size={18} className="text-accent" /> Eigene Anweisung</h2>
+      <Modal label={write ? 'Text schreiben lassen' : 'Eigene Anweisung'} onClose={onClose}>
+        <h2 className="mb-2 flex items-center gap-2 font-semibold"><PencilSimple size={18} className="text-accent" /> {write ? 'Text schreiben lassen' : 'Eigene Anweisung'}</h2>
         <textarea
           autoFocus
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && instruction.trim() && begin(instruction)}
           rows={3}
-          placeholder="Was soll mit dem markierten Text passieren? Zum Beispiel: Als höfliche Mail formulieren"
+          placeholder={write ? 'Was soll die KI schreiben? Zum Beispiel: Kurze Anleitung, wie man den Drucker neu verbindet' : 'Was soll mit dem markierten Text passieren? Zum Beispiel: Als höfliche Mail formulieren'}
           aria-label="Anweisung"
           className="mb-3 w-full resize-y rounded-md border border-line bg-raised px-3 py-2 outline-none placeholder:text-faint focus:border-accent"
         />
@@ -206,15 +207,17 @@ function AiDialog({ editor, range, action, onClose, onSettings }) {
       {truncated && <p role="alert" className="mb-2 text-sm text-danger">Die Antwort wurde abgeschnitten, weil sie zu lang war.</p>}
       {masked && <p role="alert" className="mb-2 text-sm text-danger">Maskierte Stellen (••••••) ersetzen beim Übernehmen die echten Werte. „Darunter einfügen“ lässt das Original stehen.</p>}
       <textarea value={result} onChange={(e) => setResult(e.target.value)} rows={10} aria-label="Ergebnis" className="mb-3 w-full resize-y rounded-md border border-line bg-raised px-3 py-2 outline-none focus:border-accent" />
-      <details className="mb-3 text-sm text-muted">
-        <summary className="cursor-pointer">Vorher</summary>
-        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[var(--code-bg)] px-3 py-2">{original.current}</pre>
-      </details>
+      {!write && (
+        <details className="mb-3 text-sm text-muted">
+          <summary className="cursor-pointer">Vorher</summary>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[var(--code-bg)] px-3 py-2">{original.current}</pre>
+        </details>
+      )}
       <div className="flex flex-wrap justify-end gap-2">
         <button onClick={onClose} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-muted hover:bg-hover"><X size={16} /> Verwerfen</button>
         <button onClick={() => send(text, instruction)} className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 hover:bg-hover"><ArrowsClockwise size={16} /> Nochmal</button>
-        <button onClick={() => apply(insertBelow)} disabled={!result.trim()} className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 hover:bg-hover disabled:opacity-50"><ArrowLineDown size={16} /> Darunter einfügen</button>
-        <button autoFocus={!masked} onClick={() => apply(replaceRange)} disabled={!result.trim()} className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 font-medium text-white disabled:opacity-50 dark:text-bg"><Check size={16} /> Übernehmen</button>
+        {!write && <button onClick={() => apply(insertBelow)} disabled={!result.trim()} className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 hover:bg-hover disabled:opacity-50"><ArrowLineDown size={16} /> Darunter einfügen</button>}
+        <button autoFocus={!masked} onClick={() => apply(replaceRange)} disabled={!result.trim()} className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 font-medium text-white disabled:opacity-50 dark:text-bg"><Check size={16} /> {write ? 'Einfügen' : 'Übernehmen'}</button>
       </div>
     </Modal>
   )
@@ -253,6 +256,15 @@ export default function AiMenu({ editor, onSettings }) {
       const end = view.coordsAtPos(to)
       setMenu({ x: end.left, y: end.bottom + 4, from, to })
     }
+    // /ki aus dem Slash-Menü: Befehle für Markierung oder Absatz an der Schreibmarke; leerer Absatz oder /ki schreiben: neuer Text
+    const fromSlash = ({ write } = {}) => {
+      const { from, to, empty, $from } = editor.state.selection
+      const range = empty ? { from: $from.start(), to: $from.end() } : { from, to }
+      if (write || !editor.state.doc.textBetween(range.from, range.to, ' ').trim()) return setJob({ range: { from, to: from }, action: null, write: true })
+      const end = view.coordsAtPos(range.to)
+      setMenu({ x: end.left, y: end.bottom + 4, ...range })
+    }
+    editor.on('nexora-ki', fromSlash)
     // Erst wenn die Maus los ist, sonst springt der Knopf beim Ziehen mit
     view.dom.addEventListener('mouseup', place)
     view.dom.addEventListener('keyup', place)
@@ -266,6 +278,7 @@ export default function AiMenu({ editor, onSettings }) {
       view.dom.removeEventListener('keydown', openHere)
       editor.off('blur', hide)
       editor.off('update', hide)
+      editor.off('nexora-ki', fromSlash)
       removeEventListener('scroll', hide, true)
     }
   }, [editor])
@@ -306,7 +319,7 @@ export default function AiMenu({ editor, onSettings }) {
           {onSettings && <MenuItem icon={GearSix} onClick={() => (setMenu(null), onSettings())}>KI einstellen …</MenuItem>}
         </Menu>
       )}
-      {job && <AiDialog editor={editor} range={job.range} action={job.action} onClose={closeJob} onSettings={onSettings} />}
+      {job && <AiDialog editor={editor} range={job.range} action={job.action} write={job.write} onClose={closeJob} onSettings={onSettings} />}
     </>
   )
 }

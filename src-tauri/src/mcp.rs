@@ -565,7 +565,14 @@ fn insert_node(db: &Connection, id: &str, parent: &str, kind: &str, title: &str,
 }
 
 fn note(db: &Connection, id: &str, text: &str) -> Result<(), String> {
-    db.execute("INSERT INTO activity (node_id, kind, text) VALUES (?1, 'change', ?2)", params![id, text]).map(|_| ()).map_err(|e| e.to_string())
+    db.execute("INSERT INTO activity (node_id, kind, text) VALUES (?1, 'change', ?2)", params![id, text]).map_err(|e| e.to_string())?;
+    // Signal an die laufende App: sie fragt "extern" alle 2 s ab, lädt nach und zeigt den Hinweis
+    let title: String = db.query_row("SELECT title FROM nodes WHERE id = ?1", [id], |r| r.get(0)).unwrap_or_default();
+    let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or_default();
+    let signal = json!({ "at": at.to_string(), "id": id, "text": format!("{text} · {}", if title.is_empty() { "Ohne Titel" } else { &title }) });
+    db.execute("INSERT INTO settings (key, value) VALUES ('extern', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [signal.to_string()])
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 fn create_page(db: &Connection, r: Rights, args: &Value) -> Result<Value, String> {
@@ -1022,6 +1029,8 @@ Mehr', 3);
         assert_eq!(body("p1"), "Ganz neu");
         let log: String = db.query_row("SELECT text FROM activity WHERE node_id = 'p1' ORDER BY id DESC", [], |r| r.get(0)).unwrap();
         assert_eq!(log, "Über MCP geändert: Text, Titel");
+        let signal: Value = serde_json::from_str(&db.query_row("SELECT value FROM settings WHERE key = 'extern'", [], |r| r.get::<_, String>(0)).unwrap()).unwrap();
+        assert_eq!((signal["id"].as_str(), signal["text"].as_str()), (Some("p1"), Some("Über MCP geändert: Text, Titel · Anders")));
 
         assert!(call(&mut s, "update_page", json!({ "id": "p2", "append": "x" })).0, "gesperrt");
         assert!(call(&mut s, "update_page", json!({ "id": "p3", "append": "x" })).0, "Zeichnung");

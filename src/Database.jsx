@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowSquareOut, ArrowsDownUp, CalendarBlank, ChartBarHorizontal, DotsSixVertical, Kanban, ListBullets, MagicWand, Plus, SlidersHorizontal, SortAscending, SortDescending, Table, X } from '@phosphor-icons/react'
 import { Chip, FieldEditor, FieldValue } from './Props.jsx'
-import { Progress, QuickAdd, RowItem } from './Rows.jsx'
+import { CommentCount, LastComment, Progress, QuickAdd, RowItem } from './Rows.jsx'
 import { ConfirmButton } from './Overview.jsx'
 import RulesPanel from './Rules.jsx'
 import { Cover, IconRow } from './PageHead.jsx'
@@ -374,15 +374,19 @@ function TitleCell({ row, onOpen, onTitle }) {
   useEffect(() => setText(row.title), [row.title])
   return (
     <span className="flex items-center">
-      <input
-        value={text}
-        aria-label="Titel"
-        placeholder="Ohne Titel"
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => text !== row.title && onTitle(text)}
-        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-        className="w-full min-w-0 rounded bg-transparent px-1.5 py-1 font-medium outline-none placeholder:text-faint hover:bg-hover focus:bg-raised focus:ring-1 focus:ring-accent"
-      />
+      <span className="min-w-0 flex-1">
+        <input
+          value={text}
+          aria-label="Titel"
+          placeholder="Ohne Titel"
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => text !== row.title && onTitle(text)}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          className="w-full min-w-0 rounded bg-transparent px-1.5 py-1 font-medium outline-none placeholder:text-faint hover:bg-hover focus:bg-raised focus:ring-1 focus:ring-accent"
+        />
+        <LastComment id={row.id} className="-mt-1 px-1.5 pb-1" />
+      </span>
+      <CommentCount id={row.id} />
       <Progress tasks={row.tasks} />
       <button
         aria-label="Als Seite öffnen"
@@ -453,8 +457,10 @@ function KanbanView({ db, rows, fields, onOpen, onRow }) {
               className="anim-row cursor-grab rounded-md border border-line bg-raised p-2.5 shadow-sm transition-[transform,box-shadow] duration-200 hover:-translate-y-px hover:shadow-md active:cursor-grabbing"
             >
               <p className={`mb-1.5 font-medium ${o.done ? 'text-muted line-through' : ''}`}>{r.title || 'Ohne Titel'}</p>
+              <LastComment id={r.id} className="-mt-1 mb-1.5" />
               <div className="flex flex-wrap items-center gap-1.5">
                 {r.props?.nr && <FieldValue field={{ type: 'nr' }} value={r.props.nr} db={db} />}
+                <CommentCount id={r.id} />
                 <Progress tasks={r.tasks} />
                 {cards.map((f) => <FieldValue key={f.id} field={f} value={r.props?.[f.id]} db={db} done={o.done} />)}
               </div>

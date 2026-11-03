@@ -49,11 +49,12 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
     }
   }, [node.id])
 
+  const outsideRef = useRef(false) // von außen geändert, während du schreibst: nicht automatisch drüber speichern
   const queue = useCallback((fields) => {
     Object.assign(pending.current, fields)
     setStatus('saving')
     clearTimeout(timer.current)
-    timer.current = setTimeout(flush, 400)
+    if (!outsideRef.current) timer.current = setTimeout(flush, 400)
   }, [flush])
 
   useEffect(() => {
@@ -76,6 +77,39 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
     liveVersion.current = livePage.version
     db.loadBody(node.id).then((b) => (setBody(b), setLatest(b), setReload((k) => k + 1))).catch(() => {})
   }, [livePage.version, node.id])
+
+  // Änderung über MCP an dieser Seite (Signal aus App.jsx): neu laden; schreibst du gerade darin, erst fragen
+  const [outside, setOutside] = useState(false)
+  const loadOutside = useCallback(() => {
+    clearTimeout(timer.current)
+    pending.current = {}
+    outsideRef.current = false
+    setOutside(false)
+    setStatus('saved')
+    Promise.all([db.loadBody(node.id), db.allNodes()])
+      .then(([b, all]) => {
+        const t = all.find((n) => n.id === node.id)?.title
+        if (t !== undefined) setTitle((savedTitle.current = t))
+        setBody(b)
+        setLatest(b)
+        setReload((k) => k + 1)
+      })
+      .catch(() => {})
+  }, [node.id])
+  const keepMine = () => ((outsideRef.current = false), setOutside(false), flush())
+  useEffect(() => {
+    const onExtern = (e) => {
+      if (e.detail !== node.id || outsideRef.current) return
+      if (!Object.keys(pending.current).length && !editor.current?.isFocused) return loadOutside()
+      // shortcut: was in den 2 s bis zur Abfrage schon gespeichert wurde, überschreibt die fremde Fassung; wer das braucht, vergleicht updated_at beim Speichern
+      outsideRef.current = true
+      clearTimeout(timer.current)
+      db.snapshot(node.id).catch(() => {})
+      setOutside(true)
+    }
+    addEventListener('nexora-extern', onExtern)
+    return () => removeEventListener('nexora-extern', onExtern)
+  }, [node.id, loadOutside])
 
   const onReady = useCallback((e) => (editor.current = e), [])
   // Seitenfenster speichert vor dem Schließen
@@ -189,6 +223,13 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
           </Menu>
         )}
       </header>
+      {outside && (
+        <div role="alert" className="mx-5 mb-2 flex flex-wrap items-center gap-2 rounded-md border border-line bg-accent-soft px-3 py-1.5 text-sm">
+          <span className="min-w-0 flex-1">Diese Seite wurde gerade von außen geändert, während du schreibst. Die geänderte Fassung liegt auch im Verlauf.</span>
+          <button onClick={loadOutside} className="rounded-md px-2 py-0.5 font-medium text-accent hover:bg-hover">Geänderte laden</button>
+          <button onClick={keepMine} className="rounded-md px-2 py-0.5 text-muted hover:bg-hover hover:text-text">Meine behalten</button>
+        </div>
+      )}
 
       <Cover node={node} onSave={onSave} />
       <article data-page-id={node.id} className={`${free && !reading ? '' : 'mx-auto max-w-[var(--page)]'} px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-8'}`}>
@@ -275,6 +316,7 @@ function Backlinks({ id }) {
 
 // Verlauf je Punkt: Feldänderungen (automatisch) und Kommentare
 function RowActivity({ row }) {
+  const app = useApp()
   const [items, setItems] = useState([])
   const [text, setText] = useState('')
   const [all, setAll] = useState(false)
@@ -288,9 +330,15 @@ function RowActivity({ row }) {
     await db.addActivity(row.id, 'comment', text.trim())
     setText('')
     load()
+    app.comments?.refresh()
   }
 
-  const shown = all ? items : items.slice(0, 5)
+  // Eigener Block (Einstellung "kommentare"): Kommentare hervorgehoben oben, darunter der automatische Verlauf
+  const block = app.comments?.look.block ?? true
+  const notes = block ? items.filter((a) => a.kind === 'comment') : []
+  const log = block ? items.filter((a) => a.kind !== 'comment') : items
+  const shown = all ? log : log.slice(0, 5)
+  const when = (t) => new Date(t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
   return (
     <section aria-label="Verlauf des Punkts" className="mb-8 border-b border-line pb-5">
       <input
@@ -301,6 +349,17 @@ function RowActivity({ row }) {
         aria-label="Kommentar"
         className="mb-3 w-full rounded-md border border-line bg-raised px-3 py-1.5 outline-none placeholder:text-faint focus:border-accent"
       />
+      {notes.length > 0 && (
+        <ul aria-label="Kommentare" className="mb-4 space-y-2">
+          {notes.map((a) => (
+            <li key={a.id} className="rounded-md border-l-2 border-accent bg-accent-soft px-3 py-1.5">
+              <time className="block text-xs text-faint">{when(a.created_at)}</time>
+              <p className="whitespace-pre-wrap break-words">{a.text}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      {notes.length > 0 && <h3 className="mb-1.5 text-xs font-medium text-faint">Verlauf</h3>}
       <ul className="space-y-1.5">
         {shown.map((a) => (
           <li key={a.id} className="flex gap-3 text-sm">
@@ -313,8 +372,8 @@ function RowActivity({ row }) {
           <span className="text-muted">Angelegt</span>
         </li>
       </ul>
-      {items.length > 5 && (
-        <button onClick={() => setAll(!all)} className="mt-2 text-xs text-muted hover:text-text">{all ? 'Weniger zeigen' : `Alle ${items.length} Einträge zeigen`}</button>
+      {log.length > 5 && (
+        <button onClick={() => setAll(!all)} className="mt-2 text-xs text-muted hover:text-text">{all ? 'Weniger zeigen' : `Alle ${log.length} Einträge zeigen`}</button>
       )}
     </section>
   )

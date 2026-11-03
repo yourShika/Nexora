@@ -4,7 +4,7 @@ import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
 import { open } from '@tauri-apps/plugin-dialog'
-import { ArrowCircleUp, ArrowsClockwise, Bell, ClockCounterClockwise, Database, EnvelopeSimple, FolderOpen, GearSix, Key, Keyboard, MagnifyingGlass, Microphone, Monitor, Moon, Palette, SlidersHorizontal, Sparkle, Sun, TerminalWindow, TextAa, Users, UsersThree, X } from '@phosphor-icons/react'
+import { ArrowCircleUp, ArrowsClockwise, Bell, ChatCircle, ClockCounterClockwise, Database, EnvelopeSimple, FolderOpen, GearSix, Key, Keyboard, MagnifyingGlass, Microphone, Monitor, Moon, Palette, SlidersHorizontal, Sparkle, Sun, TerminalWindow, TextAa, Users, UsersThree, X } from '@phosphor-icons/react'
 import AiSettings from './AiSettings.jsx'
 import { SpeechSettings } from './Speech.jsx'
 import { addOwnWord, loadWriting, onWritingChange, removeNever, removeOwnWord, setWriting, writingState } from './writing.js'
@@ -422,6 +422,7 @@ const CATEGORIES = [
   { id: 'allgemein', label: 'Allgemein', icon: SlidersHorizontal, keys: 'profil name benutzer farbe fenster autostart windows start tray eigenes fenster' },
   { id: 'aussehen', label: 'Aussehen', icon: Palette, keys: 'farbe farbschema schema theme hell dunkel modus darstellung verlauf gradient akzent discord schrift schriftart schriftgröße größe zoom bewegung animation übergang dichte zeilenabstand kompakt breite seitenbreite ecken rund eckig seitenleiste' },
   { id: 'schreiben', label: 'Schreiben', icon: TextAa, keys: 'autokorrektur rechtschreibung wörterbuch tippfehler autofüllen vervollständigen vorschlag großschreibung typografie anführungszeichen sprache deutsch englisch' },
+  { id: 'listen', label: 'Listen', icon: ChatCircle, keys: 'kommentare kommentar zähler sprechblase punkte anzeige verlauf' },
   { id: 'ki', label: 'KI', icon: Sparkle, keys: 'ki künstliche intelligenz anbieter amber openai azure claude mistral ollama lm studio api schlüssel modell mcp korrigieren übersetzen zusammenfassen' },
   { id: 'sprache', label: 'Sprache', icon: Microphone, keys: 'sprache diktat mikrofon besprechung mitschrift whisper spracherkennung aufnahme audio modell transkription' },
   { id: 'tasten', label: 'Tastenkürzel', icon: Keyboard, keys: 'hotkey kürzel tastatur schnellerfassung zwischenablage snippet picker' },
@@ -639,6 +640,7 @@ export default function Settings({ hotkeys, hotkeyBusy, onHotkey, backup, onBack
     outlook: <OutlookSection state={outlook} onChange={onOutlook} onSync={onOutlookSync} />,
     tresor: <VaultSection />,
     personen: <PeopleSection />,
+    listen: <CommentSection />,
     team: <TeamSection />,
     sicherung: <BackupSection status={backup} onBackupNow={onBackupNow} />,
     runbooks: <RunbookSection />,
@@ -781,6 +783,26 @@ export function ProfileSection() {
 }
 
 // Personenliste für "Zuständig" in allen LOP-Listen
+function CommentSection() {
+  const app = useApp()
+  const look = app.comments.look
+  const box = (key, label, hint) => (
+    <label className="mb-2 flex items-start gap-3">
+      <input type="checkbox" checked={look[key]} onChange={(e) => app.comments.save({ ...look, [key]: e.target.checked })} className="mt-1 size-4 accent-[var(--accent)]" />
+      <span>{label}<span className="block text-sm text-muted">{hint}</span></span>
+    </label>
+  )
+  return (
+    <section>
+      <h2 className="mb-1 font-semibold">Kommentare an Punkten</h2>
+      <p className="mb-3 text-muted">Kommentare schreibst du auf der Seite eines Punkts. So sieht man sie auch in den Listen.</p>
+      {box('count', 'Zähler in den Listen', 'Sprechblase mit Anzahl in Tabelle, Liste und Kanban')}
+      {box('last', 'Letzten Kommentar unter dem Titel', 'Der neueste Kommentar einzeilig unter dem Titel des Punkts')}
+      {box('block', 'Eigener Block auf der Punkt-Seite', 'Kommentare hervorgehoben oben, der automatische Verlauf darunter')}
+    </section>
+  )
+}
+
 function PeopleSection() {
   const app = useApp()
   const [name, setName] = useState('')

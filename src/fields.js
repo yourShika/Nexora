@@ -48,6 +48,8 @@ export const CHIP_COLORS = {
   grau: '#7b8487', blau: '#3a6fc4', petrol: '#1b8a94', gruen: '#3f8f4f',
   gelb: '#b88a12', orange: '#d06a2a', rot: '#c8434b', rosa: '#c4508f',
 }
+// Einstellung "kommentare": was Listen und Punkt-Seite von Kommentaren zeigen
+export const COMMENT_DEFAULTS = { count: true, last: true, block: true }
 export const CHIP_NAMES = { grau: 'Grau', blau: 'Blau', petrol: 'Petrol', gruen: 'Grün', gelb: 'Gelb', orange: 'Orange', rot: 'Rot', rosa: 'Rosa' }
 // Optionsfarbe ist ein Name aus CHIP_COLORS oder eine eigene Farbe "#rrggbb"
 export const chipHex = (color) => (Object.hasOwn(CHIP_COLORS, color ?? '') ? CHIP_COLORS[color] : /^#[0-9a-f]{6}$/i.test(color ?? '') ? color : CHIP_COLORS.grau)
