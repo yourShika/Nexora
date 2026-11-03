@@ -2,6 +2,14 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.44.0',
+    date: '2026-11-03',
+    title: 'Modell frei wählen',
+    items: [
+      '**Modellauswahl:** Nach „Modelle laden“ unter Einstellungen → KI wählst du das Modell aus einer Liste mit allen Modellen des Anbieters. Bisher zeigte das Feld nur das eingetragene. Mit „Eigener Name …“ tippst du einen Namen selbst ein. Die Liste bleibt gespeichert.',
+    ],
+  },
+  {
     version: '0.43.0',
     date: '2026-11-03',
     title: 'Live-Änderungen, Kommentare und /ki',

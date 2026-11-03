@@ -7,11 +7,14 @@ import Select from './Select.jsx'
 const FIELD ='w-full rounded-md border border-line bg-raised px-2 py-1 outline-none placeholder:text-faint focus:border-accent'
 
 // Eintrag eines Anbieters: Adresse, Schlüssel, Modell, Verbindung testen
+const OWN = '\u0000eigen' // Auswahl-Eintrag „Eigener Name …“, kann kein Modellname sein
 function ProviderForm({ provider, onChange, onRemove }) {
   const preset = presetOf(provider)
   const [keyInput, setKeyInput] = useState('')
   const [stored, setStored] = useState(false)
-  const [models, setModels] = useState([])
+  // geladene Modelle bleiben am Anbieter gespeichert, damit die Auswahl auch nach dem Schließen da ist
+  const [models, setModels] = useState(provider.models ?? [])
+  const [own, setOwn] = useState(false)
   const [status, setStatus] = useState(null) // { ok, text }
   const [busy, setBusy] = useState(false)
   useEffect(() => {
@@ -38,9 +41,10 @@ function ProviderForm({ provider, onChange, onRemove }) {
     try {
       const list = await listModels(provider)
       setModels(list)
+      setOwn(false)
       // leeres oder unbekanntes Modell: das erste vorhandene eintragen, sonst scheitert jede Anfrage
       const pick = list.length && !list.includes(provider.model.trim()) ? list[0] : null
-      if (pick) onChange({ model: pick })
+      onChange({ models: list, ...(pick ? { model: pick } : {}) })
       setStatus({ ok: true, text: !list.length ? 'Der Anbieter nennt keine Modelle, bitte von Hand eintragen.' : `${list.length} Modelle gefunden${pick ? `, „${pick}“ eingetragen` : ''}. Im Feld „Modell“ kannst du ein anderes auswählen.` })
     } catch (e) {
       setStatus({ ok: false, text: String(e) })
@@ -91,8 +95,16 @@ function ProviderForm({ provider, onChange, onRemove }) {
       <div>
         <span className="mb-0.5 block text-sm text-muted">Modell</span>
         <div className="flex gap-2">
-          <input list={`modelle-${provider.id}`} value={provider.model} onChange={(e) => onChange({ model: e.target.value })} placeholder={preset.modelHint} aria-label="Modell" spellCheck="false" className={`${FIELD} font-mono text-sm`} />
-          <datalist id={`modelle-${provider.id}`}>{models.map((m) => <option key={m} value={m} />)}</datalist>
+          {/* Auswahl statt datalist: die zeigt nur, was zum Feldinhalt passt, also bei eingetragenem Modell nur dieses */}
+          {models.length > 0 && !own ? (
+            <Select value={provider.model} onChange={(e) => (e.target.value === OWN ? setOwn(true) : onChange({ model: e.target.value }))} aria-label="Modell" className={`${FIELD} text-left font-mono text-sm`}>
+              {provider.model && !models.includes(provider.model) && <option value={provider.model}>{provider.model}</option>}
+              {models.map((m) => <option key={m} value={m}>{m}</option>)}
+              <option value={OWN}>Eigener Name …</option>
+            </Select>
+          ) : (
+            <input value={provider.model} onChange={(e) => onChange({ model: e.target.value })} placeholder={preset.modelHint} aria-label="Modell" spellCheck="false" autoFocus={own} className={`${FIELD} font-mono text-sm`} />
+          )}
           <button onClick={loadModels} disabled={busy || !provider.base.trim()} className="shrink-0 rounded-md border border-line px-3 py-1 hover:bg-hover disabled:opacity-50">Modelle laden</button>
         </div>
       </div>
