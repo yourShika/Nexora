@@ -2,6 +2,16 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.46.0',
+    date: '2026-11-04',
+    title: 'Obsidian-Ordner verbinden',
+    items: [
+      '**In beide Richtungen:** Ein Obsidian-Vault lässt sich als Notizbuch verbinden (Importieren → „Obsidian-Vault verbinden“). Ein vorhandenes Notizbuch schreibst du per Rechtsklick → „Mit Obsidian-Ordner verbinden …“ in einen leeren Ordner. Danach gleicht Nexora alle 5 Sekunden ab, solange es läuft.',
+      '**Was wohin kommt:** Abschnitte werden Ordner, Seiten werden .md-Dateien, Unterseiten liegen im gleichnamigen Ordner. Listen werden ein Ordner mit einer Datei je Punkt, Status, Priorität, Fällig und Tags stehen dort als Eigenschaften und sind in Obsidian änderbar.',
+      '**Nichts geht verloren:** Nexora löscht nie etwas. Fehlt eine Datei, bleibt die Seite, und liegt eine Seite im Papierkorb, bleibt die Datei. Wurde beides geändert, bleiben beide Fassungen erhalten.',
+    ],
+  },
+  {
     version: '0.45.0',
     date: '2026-11-04',
     title: 'OneNote-Seiten wie im Original',

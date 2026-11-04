@@ -57,6 +57,7 @@ import { parseQuick } from './quick.js'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { buildExport, decodeText, importedPage, packNotebook, safeName, unpackNotebook } from './io.js'
 import { IMAGE, planImport } from './interop.js'
+import { syncVault } from './obsidian.js'
 import { setLinkData } from './Links.jsx'
 import { AppContext } from './ctx.js'
 
@@ -65,6 +66,29 @@ const DEFAULT_TITLE = { notebook: 'Neues Notizbuch', section: 'Neuer Abschnitt',
 // Abschnitte dürfen in Abschnitten liegen (wie Abschnittsgruppen in OneNote)
 // Seiten und Listen dürfen auch direkt im Notizbuch liegen (ohne Abschnitt)
 const PARENTS = { notebook: [null], section: ['notebook', 'section'], page: ['notebook', 'section', 'page'], database: ['notebook', 'section', 'page'] }
+
+// Obsidian-Ordner über Tauri; touched sammelt Seiten, die der Abgleich aus Dateien geändert hat
+function vaultApi(touched) {
+  const path = (root, rel) => `${root}\\${rel.replaceAll('/', '\\')}`
+  return {
+    list: (root) => invoke('list_folder', { root }),
+    read: async (root, rel) => decodeText(new Uint8Array(await invoke('read_text_file', { path: path(root, rel) }))),
+    write: (root, rel, content) => invoke('obsidian_write', { root, rel, content }),
+    rename: (root, from, to) => invoke('obsidian_rename', { root, from, to }),
+    copyIn: (root, src, rel) => invoke('obsidian_copy', { root, src, rel }),
+    importImage: (root, rel) => importImage(path(root, rel)),
+    importFile: (root, rel) => invoke('import_attachment', { source: path(root, rel), id: crypto.randomUUID(), name: null }),
+    all: db.allNodes,
+    create: db.create,
+    update: db.update,
+    loadBody: db.loadBody,
+    changed: (id) => touched.add(id),
+    day: () => new Date().toLocaleDateString('de-DE'),
+  }
+}
+// Abgleiche nacheinander: Zeitplan und Verbinden dürfen sich nicht überholen (sonst doppelte Seiten)
+let vaultChain = Promise.resolve()
+const queueVault = (fn) => (vaultChain = vaultChain.then(fn, fn))
 
 function loadExpanded() {
   try {
@@ -566,6 +590,43 @@ export default function App() {
         .catch(() => {})
     look()
     const t = setInterval(look, 2000)
+    return () => clearInterval(t)
+  }, [reload])
+
+  // Verbundene Obsidian-Ordner alle 5 s abgleichen (nur im Hauptfenster); ein Fehler je Ordner wird einmal gemeldet
+  useEffect(() => {
+    if (windowPage) return
+    let busy = false
+    const failed = new Map()
+    const tick = async () => {
+      if (busy) return
+      busy = true
+      try {
+        const books = (await db.allNodes()).filter((n) => n.kind === 'notebook' && !n.deleted_at && n.config?.obsidian?.root)
+        for (const nb of books) {
+          const touched = new Set()
+          try {
+            const r = await queueVault(() => syncVault(nb.id, vaultApi(touched)))
+            failed.delete(nb.id)
+            if (r.konflikte) setNotice(`„${nb.title}“: ${r.konflikte} in Nexora und Obsidian geändert, die Obsidian-Fassung liegt als eigene Seite daneben.`)
+          } catch (e) {
+            const text = `Obsidian-Abgleich „${nb.title}“: ${e.message ?? e}`
+            if (failed.get(nb.id) !== text) setError(text)
+            failed.set(nb.id, text)
+          }
+          if (touched.size) {
+            reload()
+            for (const id of touched) dispatchEvent(new CustomEvent('nexora-extern', { detail: id }))
+          }
+        }
+      } catch {
+        // Datenbank gerade nicht erreichbar: nächster Lauf
+      } finally {
+        busy = false
+      }
+    }
+    const t = setInterval(tick, 5000)
+    tick()
     return () => clearInterval(t)
   }, [reload])
 
@@ -1107,6 +1168,39 @@ export default function App() {
   }
 
   // Obsidian-Vault (Ordner) oder Notion-Export (Zip „Markdown & CSV“) als neues Notizbuch
+  // Obsidian-Ordner verbinden: ohne id als neues Notizbuch aus dem Ordner, mit id ein Notizbuch in einen leeren Ordner.
+  // Danach gleicht der Zeitplan alle 5 s ab (siehe oben)
+  async function connectVault(id) {
+    try {
+      const root = await openDialog({ directory: true, title: id ? 'Leeren Ordner wählen (z. B. für einen neuen Obsidian-Vault)' : 'Obsidian-Vault (Ordner) wählen' })
+      if (!root) return
+      const all = await db.allNodes()
+      const taken = all.find((n) => !n.deleted_at && n.config?.obsidian?.root?.toLowerCase() === root.toLowerCase())
+      if (taken) return setError(`Dieser Ordner ist schon mit „${taken.title}“ verbunden.`)
+      const obsidian = { root, files: {}, assets: {} }
+      if (id) {
+        if ((await invoke('list_folder', { root })).length) return setError('Bitte einen leeren Ordner wählen: Nexora schreibt das Notizbuch hinein und überschreibt nichts.')
+        await db.update(id, { config: { ...all.find((n) => n.id === id).config, obsidian } })
+      } else id = (await db.create('notebook', null, root.split(/[\\/]/).pop() || 'Obsidian', { config: { obsidian }, area: areaValue })).id
+      setNotice('Obsidian-Ordner wird verbunden …')
+      const r = await queueVault(() => syncVault(id, vaultApi(new Set())))
+      reload()
+      actions.openHere(id)
+      setNotice(`Mit Obsidian verbunden: ${r.neu} Seiten übernommen, ${r.geschrieben} Dateien geschrieben. Ab jetzt gleicht Nexora alle 5 Sekunden ab.`)
+    } catch (e) {
+      setError(`Obsidian verbinden: ${e.message ?? e}`)
+    }
+  }
+  // Verbindung lösen: Seiten und Dateien bleiben, es wird nur nicht mehr abgeglichen
+  async function disconnectVault(id) {
+    const nb = (await db.allNodes()).find((n) => n.id === id)
+    if (!nb?.config?.obsidian) return
+    const { obsidian, ...config } = nb.config
+    await queueVault(() => db.update(id, { config }))
+    reload()
+    setNotice(`„${nb.title}“ ist nicht mehr mit ${obsidian.root} verbunden. Seiten und Dateien bleiben.`)
+  }
+
   async function importForeign(style) {
     let temp = null
     try {
@@ -1233,6 +1327,8 @@ export default function App() {
     exportNexora,
     importNexora,
     importForeign,
+    connectVault,
+    disconnectVault,
     canMove: (id, targetId, zone) => !!placement(id, targetId, zone),
     move(id, targetId, zone) {
       const to = placement(id, targetId, zone)
@@ -1531,6 +1627,7 @@ export default function App() {
     { label: 'Rundgang durch Nexora', run: () => actions.startTour() },
     { label: 'Nexora-Datei importieren …', run: () => actions.importNexora() },
     { label: 'Obsidian-Vault importieren …', run: () => actions.importForeign('obsidian') },
+    { label: 'Obsidian-Vault verbinden (laufend abgleichen) …', run: () => actions.connectVault() },
     { label: 'Notion-Export importieren (Zip) …', run: () => actions.importForeign('notion') },
     { label: 'Einstellungen', run: () => actions.open('settings') },
     { label: 'Papierkorb', run: () => actions.open('trash') },

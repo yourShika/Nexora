@@ -140,7 +140,40 @@ function cellValue(f, raw) {
 }
 
 const LINK = /(!?)\[\[([^\]\n]+?)\]\]|(!?)\[([^\]\n]*)\]\((<[^>\n]+>|(?:[^()\s]|\([^()\s]*\))+)(?:\s+"[^"\n]*")?\)/g
-const CODE = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]+`)/
+export const CODE = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]+`)/
+
+/*
+ * Wikilinks, Einbettungen und Markdown-Links einer Datei umschreiben (Code bleibt). Auch für den Obsidian-Abgleich.
+ * find(path, from, wiki) → rel der Zieldatei oder null; render(rel, label, alt, width) → Nexora-Markdown;
+ * isPage(rel) → ist eine Seite (fehlt sie, bleibt nur der Text)
+ */
+export function linkConverter({ find, render, isPage, notion = false }) {
+  return (md, from) =>
+    md
+      .split(CODE)
+      .map((part, i) => {
+        if (i % 2) return part
+        const out = part.replace(LINK, (all, wbang, wiki, mbang, label, target) => {
+          if (wiki != null) {
+            const bar = wiki.indexOf('|')
+            const [raw, alias] = bar < 0 ? [wiki, ''] : [wiki.slice(0, bar), wiki.slice(bar + 1)]
+            const [path, anchor = ''] = raw.split('#')
+            if (!path.trim()) return alias || anchor.replace(/^\^/, '')
+            const rel = find(path.trim(), from, true)
+            const width = /^(\d+)(?:x\d+)?$/.exec(alias)?.[1]
+            return rel ? render(rel, alias || path, '', width) : alias || path
+          }
+          const t = target.replace(/^<|>$/g, '')
+          if (/^[a-z][\w+.-]*:/i.test(t) || t.startsWith('#')) return all // http:, mailto:, Anker
+          const rel = find(decode(t.split('#')[0]), from, false)
+          // fehlende Seite → nur der Text; alles andere (z. B. "- [ ] (offen)") bleibt, wie es war
+          if (!rel) return mbang || !isPage(t.split('#')[0]) ? all : label
+          return render(rel, label, label.replace(/\|/g, ''))
+        })
+        return notion ? out : out.replace(/==([^=\n]+)==/g, '<span style="background-color: yellow">$1</span>')
+      })
+      .join('')
+}
 
 /*
  * Plant den Import als neues Notizbuch: Knoten für db.insertNode, Eltern vor Kindern.
@@ -285,31 +318,7 @@ export function planImport(style, { files, texts, title, makeId, assets = new Ma
     if (a.src) return `![${alt}${width ? `|${width}` : ''}](${a.src})`
     return `[[datei:${a.file}|${a.size}]]`
   }
-  const convert = (md, from) =>
-    md
-      .split(CODE)
-      .map((part, i) => {
-        if (i % 2) return part
-        const out = part.replace(LINK, (all, wbang, wiki, mbang, label, target) => {
-          if (wiki != null) {
-            const bar = wiki.indexOf('|')
-            const [raw, alias] = bar < 0 ? [wiki, ''] : [wiki.slice(0, bar), wiki.slice(bar + 1)]
-            const [path, anchor = ''] = raw.split('#')
-            if (!path.trim()) return alias || anchor.replace(/^\^/, '')
-            const rel = find(path.trim(), from, true)
-            const width = /^(\d+)(?:x\d+)?$/.exec(alias)?.[1]
-            return rel ? render(rel, alias || path, '', width) : alias || path
-          }
-          const t = target.replace(/^<|>$/g, '')
-          if (/^[a-z][\w+.-]*:/i.test(t) || t.startsWith('#')) return all // http:, mailto:, Anker
-          const rel = find(decode(t.split('#')[0]), from, false)
-          // fehlende Seite → nur der Text; alles andere (z. B. "- [ ] (offen)") bleibt, wie es war
-          if (!rel) return mbang || !isPage.test(t.split('#')[0]) ? all : label
-          return render(rel, label, label.replace(/\|/g, ''))
-        })
-        return notion ? out : out.replace(/==([^=\n]+)==/g, '<span style="background-color: yellow">$1</span>')
-      })
-      .join('')
+  const convert = linkConverter({ find, render, isPage: (rel) => isPage.test(rel), notion })
 
   // 4. Inhalte: Obsidian-Eigenschaften als Liste oben, bei Notion-Punkten die Feldzeilen weg (stehen in den Feldern)
   for (const p of pages) {

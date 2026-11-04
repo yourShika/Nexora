@@ -42,7 +42,7 @@ export function relPath(fromFile, to) {
 export const toCsv = (rows) => rows.map((r) => r.map((v) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)).join(',')).join('\n') + '\n'
 
 // Feldwert als schlichter Text (Datum als JJJJ-MM-TT, Nummer mit Kürzel); leer bleibt leer
-function plain(f, n, db) {
+export function plain(f, n, db) {
   const v = f.type === 'nr' ? n.props?.nr : n.props?.[f.id]
   if (v == null || v === '' || (Array.isArray(v) && !v.length)) return ''
   if (f.type === 'nr') return formatNr(db, v)
@@ -52,7 +52,7 @@ function plain(f, n, db) {
 }
 
 // Obsidian-Eigenschaften (YAML): Listen als Liste, Datum und Häkchen ohne Anführungszeichen, sonst als JSON-String (gültiges YAML)
-function yaml(f, n, db) {
+export function yaml(f, n, db) {
   const text = plain(f, n, db)
   if (!text) return []
   const k = /^[\p{L}\p{N}][\p{L}\p{N} ._-]*$/u.test(f.name) ? f.name : JSON.stringify(f.name)

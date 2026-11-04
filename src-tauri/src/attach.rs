@@ -119,7 +119,7 @@ pub struct ExportCopy {
 }
 
 // Nur einfache relative Pfade: kein Laufwerk, kein "..", kein Wurzelpfad
-fn safe_rel(rel: &str) -> Result<PathBuf, String> {
+pub(crate) fn safe_rel(rel: &str) -> Result<PathBuf, String> {
     let p = Path::new(rel);
     if p.components().all(|c| matches!(c, Component::Normal(_))) && !rel.is_empty() {
         Ok(p.to_path_buf())

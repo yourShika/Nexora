@@ -250,6 +250,13 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
               <MenuItem icon={LinkBreak} onClick={run(() => actions.oneNoteUnlink(m.id))}>OneNote-Verbindung lösen</MenuItem>
             </>
           )}
+          {m.kind === 'notebook' &&
+            !m.config?.onenote &&
+            (m.config?.obsidian?.root ? (
+              <MenuItem icon={LinkBreak} onClick={run(() => actions.disconnectVault(m.id))}>Obsidian-Verbindung lösen</MenuItem>
+            ) : (
+              <MenuItem icon={FolderSimple} onClick={run(() => actions.connectVault(m.id))}>Mit Obsidian-Ordner verbinden …</MenuItem>
+            ))}
           {m.kind === 'notebook' && (
             <div className="flex gap-1.5 px-2 py-2" role="group" aria-label="Farbe">
               {Object.entries(COLORS).map(([name, hex]) => (
@@ -271,6 +278,7 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
         <Menu x={importMenu.x} y={importMenu.y} onClose={() => setImportMenu(null)}>
           <MenuItem icon={FileArrowDown} onClick={() => (setImportMenu(null), actions.importNexora())}>Nexora-Datei …</MenuItem>
           <MenuItem icon={FolderSimple} onClick={() => (setImportMenu(null), actions.importForeign('obsidian'))}>Obsidian-Vault (Ordner) …</MenuItem>
+          <MenuItem icon={ArrowsClockwise} onClick={() => (setImportMenu(null), actions.connectVault())}>Obsidian-Vault verbinden (laufend abgleichen) …</MenuItem>
           <MenuItem icon={DownloadSimple} onClick={() => (setImportMenu(null), actions.importForeign('notion'))}>Notion-Export (Zip, Markdown &amp; CSV) …</MenuItem>
         </Menu>
       )}
@@ -450,7 +458,7 @@ function UserButton({ current, actions }) {
 }
 
 // Stand bei OneNote: am verbundenen Notizbuch wann zuletzt abgeglichen (dreht sich während des Abgleichs),
-// an kennwortgeschützten Abschnitten ein Schloss
+// an kennwortgeschützten Abschnitten ein Schloss; mit Obsidian verbundene Notizbücher zeigen dasselbe Zeichen
 const ago = (iso) => {
   const min = Math.round((Date.now() - Date.parse(iso)) / 60e3)
   return min < 1 ? 'gerade eben' : min < 60 ? `vor ${min} Min.` : min < 24 * 60 ? `vor ${Math.round(min / 60)} Std.` : new Date(iso).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
@@ -458,6 +466,13 @@ const ago = (iso) => {
 function OneNoteMark({ node }) {
   const run = useApp()?.oneNoteRun
   const one = node.config?.onenote
+  const vault = node.kind === 'notebook' && node.config?.obsidian?.root
+  if (vault)
+    return (
+      <span title={`Mit Obsidian-Ordner verbunden, gleicht laufend ab: ${vault}`} aria-label="Mit Obsidian-Ordner verbunden" className="ml-auto shrink-0 text-faint">
+        <ArrowsClockwise size={12} />
+      </span>
+    )
   if (!one?.id) return null
   if (node.kind === 'section' && one.locked) return <LockSimple size={12} className="shrink-0 text-faint" aria-label="In OneNote kennwortgeschützt, nicht übernommen" />
   if (node.kind !== 'notebook') return null
