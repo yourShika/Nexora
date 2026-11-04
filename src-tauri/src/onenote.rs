@@ -95,9 +95,133 @@ pub async fn onenote_ink(data: Vec<String>) -> Result<Vec<Option<Vec<Stroke>>>, 
     .map_err(|e| e.to_string())
 }
 
+// Bilder, die WebView2 nicht zeigt, als PNG: EMF (Dateiausdrucke) zeichnet GDI auf weißen Grund, `width` Pixel breit;
+// BMP, TIFF und Co. liest der Windows-Bilddecoder in voller Größe
+fn picture(bytes: &[u8], width: u32) -> windows::core::Result<Vec<u8>> {
+    use windows::Graphics::Imaging::{BitmapAlphaMode, BitmapDecoder, BitmapEncoder, BitmapPixelFormat, SoftwareBitmap};
+    use windows::Storage::Streams::DataReader;
+    let out = InMemoryRandomAccessStream::new()?;
+    let encoder = BitmapEncoder::CreateAsync(BitmapEncoder::PngEncoderId()?, &out)?.join()?;
+    if bytes.len() > 44 && &bytes[40..44] == b" EMF" {
+        let (w, h, pixels) = emf(bytes, width)?;
+        encoder.SetPixelData(BitmapPixelFormat::Bgra8, BitmapAlphaMode::Ignore, w, h, 96.0, 96.0, &pixels)?;
+    } else {
+        let stream = InMemoryRandomAccessStream::new()?;
+        let writer = DataWriter::CreateDataWriter(&stream)?;
+        writer.WriteBytes(bytes)?;
+        writer.StoreAsync()?.join()?;
+        writer.DetachStream()?;
+        let bitmap = BitmapDecoder::CreateAsync(&stream)?.join()?.GetSoftwareBitmapAsync()?.join()?;
+        encoder.SetSoftwareBitmap(&SoftwareBitmap::ConvertWithAlpha(&bitmap, BitmapPixelFormat::Bgra8, BitmapAlphaMode::Premultiplied)?)?;
+    }
+    encoder.FlushAsync()?.join()?;
+    let size = out.Size()? as u32;
+    let reader = DataReader::CreateDataReader(&out.GetInputStreamAt(0)?)?;
+    reader.LoadAsync(size)?.join()?;
+    let mut png = vec![0u8; size as usize];
+    reader.ReadBytes(&mut png)?;
+    Ok(png)
+}
+
+// EMF → BGRA-Pixel; Höhe aus dem Seitenverhältnis des Bildrahmens, beides gedeckelt (Speicher)
+fn emf(bytes: &[u8], width: u32) -> windows::core::Result<(u32, u32, Vec<u8>)> {
+    use windows::Win32::Foundation::{E_FAIL, RECT};
+    use windows::Win32::Graphics::Gdi::*;
+    unsafe {
+        let meta = SetEnhMetaFileBits(bytes);
+        if meta.is_invalid() {
+            return Err(E_FAIL.into());
+        }
+        let mut head = ENHMETAHEADER::default();
+        GetEnhMetaFileHeader(meta, std::mem::size_of::<ENHMETAHEADER>() as u32, Some(&mut head));
+        let frame = head.rclFrame;
+        let (fw, fh) = ((frame.right - frame.left).max(1) as f64, (frame.bottom - frame.top).max(1) as f64);
+        let w = width.clamp(16, 3000);
+        let h = ((w as f64 * fh / fw).round() as u32).clamp(1, 6000);
+        let dc = CreateCompatibleDC(None);
+        let info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER { biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32, biWidth: w as i32, biHeight: -(h as i32), biPlanes: 1, biBitCount: 32, ..Default::default() },
+            ..Default::default()
+        };
+        let mut bits = std::ptr::null_mut();
+        let result = CreateDIBSection(Some(dc), &info, DIB_RGB_COLORS, &mut bits, None, 0).and_then(|bmp| {
+            let old = SelectObject(dc, bmp.into());
+            let pixels = std::slice::from_raw_parts_mut(bits as *mut u8, (w * h * 4) as usize);
+            pixels.fill(255);
+            let ok = PlayEnhMetaFile(dc, meta, &RECT { left: 0, top: 0, right: w as i32, bottom: h as i32 }).as_bool();
+            let _ = GdiFlush();
+            pixels.chunks_exact_mut(4).for_each(|p| p[3] = 255);
+            let copy = pixels.to_vec();
+            SelectObject(dc, old);
+            let _ = DeleteObject(bmp.into());
+            if ok { Ok((w, h, copy)) } else { Err(E_FAIL.into()) }
+        });
+        let _ = DeleteDC(dc);
+        let _ = DeleteEnhMetaFile(Some(meta));
+        result
+    }
+}
+
+#[tauri::command]
+pub async fn onenote_picture(data: String, width: u32) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        unsafe {
+            let _ = RoInitialize(RO_INIT_MULTITHREADED);
+        }
+        let bytes = STANDARD.decode(data.trim()).map_err(|e| e.to_string())?;
+        picture(&bytes, width).map(|png| STANDARD.encode(png)).map_err(|e| format!("Bild nicht lesbar: {e}"))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn png_size(png: &[u8]) -> (u32, u32) {
+        let n = |i: usize| u32::from_be_bytes(png[i..i + 4].try_into().unwrap());
+        assert_eq!(&png[1..4], b"PNG");
+        (n(16), n(20))
+    }
+
+    // EMF mit GDI selbst zeichnen (schwarzes Rechteck links oben), dann als PNG in gewünschter Breite
+    #[test]
+    fn emf_und_bmp_als_png() {
+        use windows::core::PCWSTR;
+        use windows::Win32::Foundation::RECT;
+        use windows::Win32::Graphics::Gdi::*;
+        unsafe {
+            let _ = RoInitialize(RO_INIT_MULTITHREADED);
+        }
+        let bytes = unsafe {
+            // Rahmen 100 × 50 mm (Einheit 0,01 mm)
+            let dc = CreateEnhMetaFileW(None, PCWSTR::null(), Some(&RECT { left: 0, top: 0, right: 10000, bottom: 5000 }), PCWSTR::null());
+            SelectObject(dc, GetStockObject(BLACK_BRUSH));
+            let _ = Rectangle(dc, 0, 0, 40, 40);
+            let meta = CloseEnhMetaFile(dc);
+            let mut buf = vec![0u8; GetEnhMetaFileBits(meta, None) as usize];
+            GetEnhMetaFileBits(meta, Some(&mut buf));
+            let _ = DeleteEnhMetaFile(Some(meta));
+            buf
+        };
+        assert_eq!(&bytes[40..44], b" EMF");
+        let (w, h, pixels) = emf(&bytes, 400).expect("EMF lesbar");
+        assert_eq!((w, h), (400, 200));
+        assert!(pixels[..3].iter().all(|&b| b < 50), "links oben schwarz");
+        assert!(pixels[pixels.len() - 4..].iter().all(|&b| b == 255), "rechts unten weiß");
+        assert_eq!(png_size(&picture(&bytes, 400).unwrap()), (400, 200));
+        // BMP 2 × 1, 24 Bit
+        let mut bmp = b"BM".to_vec();
+        for v in [62u32, 0, 54, 40, 2, 1] {
+            bmp.extend(v.to_le_bytes());
+        }
+        bmp.extend([1, 0, 24, 0]);
+        bmp.extend([0u8; 24]);
+        bmp.extend([0, 0, 255, 255, 0, 0, 0, 0]);
+        assert_eq!(png_size(&picture(&bmp, 400).unwrap()), (2, 1));
+        assert!(picture(b"kein bild", 400).is_err());
+    }
 
     #[test]
     fn ids_und_base64() {

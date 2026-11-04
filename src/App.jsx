@@ -1299,6 +1299,7 @@ export default function App() {
           toMarkdown: htmlToMarkdown,
           importFile: (source, name) => invoke('import_attachment', { source, id: crypto.randomUUID(), name }),
           ink: (data) => invoke('onenote_ink', { data }),
+          picture: (data, width) => invoke('onenote_picture', { data, width }),
           progress: show,
           stopped: () => stopSync.current,
           // vor dem Umbau in Ordner oder dem Neuübernehmen aller Seiten: Kopie der Datenbank im Datenordner

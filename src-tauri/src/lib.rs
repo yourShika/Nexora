@@ -164,6 +164,7 @@ pub fn run() {
             preview::attachment_preview,
             onenote::onenote,
             onenote::onenote_ink,
+            onenote::onenote_picture,
             interop::list_folder,
             interop::unzip_import,
             interop::drop_import,

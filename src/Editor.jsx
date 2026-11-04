@@ -123,12 +123,50 @@ function adminLinkAt(view, pos) {
   return adminLinks(text).find((l) => l.from <= $pos.parentOffset && $pos.parentOffset <= l.to)
 }
 
-// Farbe, Hervorhebung, Schrift und Größe (z. B. aus OneNote) stehen im Markdown als <span style>; beim Laden liest
-// der Editor sie über dieselben Erweiterungen wieder ein
+// Farbe, Hervorhebung, Schrift und Größe (z. B. aus OneNote) stehen im Markdown als <span style>. Der Inhalt bleibt
+// Markdown und wird auch so gelesen: als HTML gelesen ging Fett verloren und jedes Speichern verdoppelte die
+// Backslashes (LOP-058)
 const STYLE = [['color', 'color'], ['backgroundColor', 'background-color'], ['fontFamily', 'font-family'], ['fontSize', 'font-size']]
+function spanAttrs(style) {
+  const attrs = {}
+  for (const part of style.split(';')) {
+    const [prop, ...rest] = part.split(':')
+    const key = STYLE.find(([, p]) => p === prop.trim().toLowerCase())?.[0]
+    if (key && rest.join(':').trim()) attrs[key] = rest.join(':').trim()
+  }
+  return attrs
+}
 const Stil = TextStyle.extend({
+  markdownTokenName: 'nexoraSpan',
+  markdownTokenizer: {
+    name: 'nexoraSpan',
+    level: 'inline',
+    start: (src) => src.indexOf('<span style="'),
+    tokenize(src, _tokens, h) {
+      const open = /^<span style="([^"<>]*)">/.exec(src)
+      if (!open) return
+      // passendes </span>, innere Spans zählen mit
+      const tag = /<span\b[^>]*>|<\/span>/g
+      tag.lastIndex = open[0].length
+      for (let depth = 1, m; (m = tag.exec(src)); ) {
+        depth += m[0] === '</span>' ? -1 : 1
+        if (!depth) return { type: 'nexoraSpan', raw: src.slice(0, tag.lastIndex), style: open[1], tokens: h.inlineTokens(src.slice(open[0].length, m.index)) }
+      }
+    },
+  },
+  // ein Text hat nur einen Stil: innere Spans ergänzen den äußeren statt ihn zu ersetzen
+  parseMarkdown: (token, h) => {
+    const attrs = spanAttrs(token.style)
+    const style = (nodes) =>
+      nodes.map((n) => {
+        if (n.type !== 'text') return n.content ? { ...n, content: style(n.content) } : n
+        const own = n.marks?.find((m) => m.type === 'textStyle')
+        return { ...n, marks: [...(n.marks ?? []).filter((m) => m !== own), { type: 'textStyle', attrs: { ...attrs, ...own?.attrs } }] }
+      })
+    return style(h.parseInline(token.tokens))
+  },
   renderMarkdown: (node, h) => {
-    const css = STYLE.filter(([k]) => node.attrs?.[k]).map(([k, prop]) => `${prop}: ${node.attrs[k]}`).join('; ')
+    const css = STYLE.filter(([k]) => node.attrs?.[k]).map(([k, prop]) => `${prop}: ${String(node.attrs[k]).replace(/"/g, "'")}`).join('; ')
     return css ? `<span style="${css}">${h.renderChildren(node)}</span>` : h.renderChildren(node)
   },
 })

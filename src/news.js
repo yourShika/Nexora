@@ -2,6 +2,16 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.45.0',
+    date: '2026-11-04',
+    title: 'OneNote-Seiten wie im Original',
+    items: [
+      '**Formatierung bleibt:** Fett, Kursiv und Links in farbigem oder vergrößertem Text bleiben erhalten. Bisher gingen sie beim Öffnen verloren, und jedes Speichern fügte Backslashes hinzu (z. B. „\\\\\\*\\\\\\*ScanState“).',
+      '**Dateiausdrucke als Bild:** Ausdrucke aus OneNote (etwa eine Excel-Tabelle auf der Seite) erscheinen als Bild wie in OneNote. Die Datei selbst hängt als Anhang daneben.',
+      '**Einmal alles neu:** Der nächste OneNote-Abgleich holt alle Seiten neu und repariert so beschädigte Seiten. Vorher sichert Nexora die Datenbank, die bisherige Fassung jeder Seite steht im Verlauf. Das kann beim ersten Mal einige Minuten dauern.',
+    ],
+  },
+  {
     version: '0.44.0',
     date: '2026-11-03',
     title: 'Modell frei wählen',

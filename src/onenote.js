@@ -12,10 +12,15 @@ const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>'
 const plain = (html) => new DOMParser().parseFromString(html, 'text/html').body.textContent
 export const link = (node) => node?.config?.onenote ?? null
 
-// Bildformat an den ersten Bytes (OneNote gibt keins an); andere Formate (EMF, BMP …) bleiben draußen
+// Bildformat an den ersten Bytes (OneNote gibt keins an); andere Formate (EMF bei Dateiausdrucken, BMP, TIFF …)
+// wandelt onenote_picture in PNG
 const IMAGE_TYPES = [['iVBOR', 'png'], ['/9j/', 'jpg'], ['R0lGOD', 'gif'], ['UklGR', 'webp']]
-// Stand der Umwandlung: steigt er, übernimmt der nächste Abgleich alle Seiten neu (2: Format, Dateien, Freihand)
-export const CONVERT = 2
+// Stand der Umwandlung: steigt er, übernimmt der nächste Abgleich alle Seiten neu (2: Format, Dateien, Freihand;
+// 3: EMF-Bilder)
+export const CONVERT = 3
+// Seiten, die vor diesem Stand übernommen wurden, hat ein Fehler beim Speichern verändert (Backslashes, LOP-058):
+// sie gelten nicht als in Nexora geändert, der Abgleich ersetzt sie (alte Fassung im Verlauf)
+const REPAIR = 3
 
 // OneNote-Format (CSS im Text) auf das, was Nexora behält: Farbe, Hintergrund, Schrift und Größe, sofern sie vom
 // Absatzformat abweichen; fett, kursiv, unterstrichen erkennt der Editor selbst
@@ -110,10 +115,10 @@ function block(el, ctx) {
         .join('')}</tbody></table>`
     case 'Image': {
       const data = kid(el, 'Data')?.textContent.replace(/\s/g, '')
-      const ext = data && IMAGE_TYPES.find(([magic]) => data.startsWith(magic))?.[1]
-      if (!ext) return note('Bild in einem Format, das Nexora nicht übernimmt')
-      ctx.images.push({ data, ext })
-      return `<img src="nximg:${ctx.images.length - 1}" width="${px(kid(el, 'Size')?.getAttribute('width')) || 400}">`
+      if (!data) return note('Bild in einem Format, das Nexora nicht übernimmt')
+      const width = px(kid(el, 'Size')?.getAttribute('width')) || 400
+      ctx.images.push({ data, ext: IMAGE_TYPES.find(([magic]) => data.startsWith(magic))?.[1] ?? null, width })
+      return `<img src="nximg:${ctx.images.length - 1}" width="${width}">`
     }
     case 'InkDrawing':
     case 'InkWord':
@@ -226,10 +231,15 @@ export function hash(text) {
 }
 
 // Platzhalter auflösen: Bilder speichern, Dateien als Anhänge übernehmen, Freihand als SVG-Bild.
-// api: saveImage(bytes, ext), importFile(path, name) → [rel, size], ink([base64]) → Striche je Stück
+// api: saveImage(bytes, ext), importFile(path, name) → [rel, size], ink([base64]) → Striche je Stück,
+// picture(base64, Breite) → PNG als Base64
+const bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
 async function pageBody(source, api) {
   const { boxes, images, files, ink } = convertPage(source)
-  const srcs = await Promise.all(images.map((img) => api.saveImage(Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0)), img.ext)))
+  // fremde Formate doppelt so breit wie angezeigt, damit kleine Schrift in Ausdrucken lesbar bleibt
+  const srcs = await Promise.all(
+    images.map((img) => (img.ext ? api.saveImage(bytes(img.data), img.ext) : api.picture(img.data, Math.min(3000, img.width * 2)).then((png) => api.saveImage(bytes(png), 'png')).catch(() => null))),
+  )
   const kept = await Promise.all(files.map((f) => (f.path ? api.importFile(f.path, f.name).catch(() => null) : null)))
   // ink: je Platzhalter eine Liste von Stücken; die Striche kommen flach in derselben Reihenfolge zurück
   const strokes = ink.length ? await api.ink(ink.flat()).catch(() => ink.flat().map(() => null)) : []
@@ -242,7 +252,7 @@ async function pageBody(source, api) {
   )
   const html = (b) =>
     b.html
-      .replace(/nximg:(\d+)/g, (_, i) => srcs[i])
+      .replace(/<img src="nximg:(\d+)"([^>]*)>/g, (_, i, rest) => (srcs[i] ? `<img src="${srcs[i]}"${rest}>` : note('Bild in einem Format, das Nexora nicht übernimmt')))
       .replace(/<img src="nxink:(\d+)"[^>]*>/g, (_, i) => (drawn[i] ? `<img src="${drawn[i].src}" width="${drawn[i].width}" alt="Freihand">` : note('Freihand aus OneNote nicht lesbar')))
       .replace(/<div data-attachment="nxfile:(\d+)"[^>]*><\/div>/g, (_, i) =>
         kept[i] ? `<div data-attachment="${esc(kept[i][0])}" data-size="${kept[i][1]}" data-preview="0"></div>` : note(`Datei „${files[i].name}“ ist in OneNote nicht zwischengespeichert`),
@@ -253,7 +263,7 @@ async function pageBody(source, api) {
 // Abgleich OneNote → Nexora. Nie löschen: Seiten, die in OneNote fehlen, bleiben und werden nur gezählt.
 // Geändert in OneNote und unverändert in Nexora: ersetzen (alte Fassung in den Verlauf).
 // Geändert in beiden: OneNote-Fassung als eigene Seite daneben.
-// api: create, update, loadBody, snapshot, saveImage(bytes, ext), importFile, ink, toMarkdown(html),
+// api: create, update, loadBody, snapshot, saveImage(bytes, ext), importFile, ink, picture, toMarkdown(html),
 // progress({ text, done, total }), stopped() → true bricht ab, before() einmal vor dem ersten Umbau (Sicherung)
 export async function syncNotebook(nb, all, api) {
   const step = (text, done, total) => {
@@ -261,14 +271,16 @@ export async function syncNotebook(nb, all, api) {
     api.progress({ text, done, total })
   }
   step('OneNote wird gelesen …', 0, 0)
-  const book = parseNotebook(await invoke('onenote', { op: 'notebook', id: link(nb).id }))
+  // api.read ersetzt im Test das installierte OneNote
+  const read = api.read ?? ((op, id) => invoke('onenote', { op, id }))
+  const book = parseNotebook(await read('notebook', link(nb).id))
   const known = new Map(all.filter((n) => !n.deleted_at && link(n)?.id).map((n) => [link(n).id, n]))
   const report = { neu: 0, geaendert: 0, konflikte: 0, gesperrt: 0, fehlt: 0 }
   const pages = book.sections.flatMap((s) => (s.locked ? [] : s.pages))
 
   // Änderungen am Inhalt erkennen: OneNote setzt den Zeitstempel der Seite nicht bei jeder Änderung.
   // Erst alle Seiten ohne Bilddaten (schnell), dann nur neue, geänderte und mit älterer Umwandlung übernommene
-  const versions = await fetchPages('pageinfo', pages, 40, (i) => step('Seiten werden geprüft', i, pages.length))
+  const versions = await fetchPages(read, 'pageinfo', pages, 40, (i) => step('Seiten werden geprüft', i, pages.length))
   for (const p of pages) p.version = versions.get(p.id) ? hash(versions.get(p.id)) : null
   const stale = pages.filter((p) => p.version && (link(known.get(p.id))?.version !== p.version || (link(known.get(p.id))?.conv ?? 1) < CONVERT))
 
@@ -303,7 +315,7 @@ export async function syncNotebook(nb, all, api) {
       report.gesperrt++
       continue
     }
-    const sources = await fetchPages('pages', s.pages.filter((p) => stale.includes(p)), 10, () => {})
+    const sources = await fetchPages(read, 'pages', s.pages.filter((p) => stale.includes(p)), 10, () => {})
     const levels = [] // letzte Seite je Ebene, für Unterseiten
     for (const p of s.pages) {
       const parent = (p.level > 1 && levels[p.level - 2]) || sec.id
@@ -319,7 +331,7 @@ export async function syncNotebook(nb, all, api) {
           node = await api.create('page', parent, p.name, { config: fresh })
           await api.update(node.id, { body, locked: 1 })
           report.neu++
-        } else if (hash(await api.loadBody(node.id)) === link(node).hash) {
+        } else if (hash(await api.loadBody(node.id)) === link(node).hash || (link(node).conv ?? 1) < REPAIR) {
           await api.snapshot(node.id)
           await api.update(node.id, { title: p.name, body, parent_id: parent, config: fresh })
           report.geaendert++
@@ -343,12 +355,12 @@ export async function syncNotebook(nb, all, api) {
 }
 
 // Seiteninhalte in Paketen; eine fehlende Seite kommt leer zurück und fehlt dann in der Map
-async function fetchPages(op, pages, size, progress) {
+async function fetchPages(read, op, pages, size, progress) {
   const out = new Map()
   for (let i = 0; i < pages.length; i += size) {
     progress(i + 1)
     const batch = pages.slice(i, i + size)
-    const xmls = (await invoke('onenote', { op, id: batch.map((p) => p.id).join(';') })).split('\0')
+    const xmls = (await read(op, batch.map((p) => p.id).join(';'))).split('\0')
     batch.forEach((p, j) => xmls[j] && out.set(p.id, xmls[j]))
   }
   return out
