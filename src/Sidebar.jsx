@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import {
-  AppWindow, ArrowCircleUp, ArrowsLeftRight, FileArrowDown, FileArrowUp, FolderSimplePlus, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, Plus,
+  AppWindow, ArrowCircleUp, ArrowsLeftRight, FileArrowDown, FileArrowUp, FolderSimplePlus, BookOpenText, Briefcase, ChartBar, House, LockSimpleOpen, ArrowsClockwise, LinkBreak, PlugsConnected, CalendarBlank, CaretRight, CheckSquare, Code, DotsThree, DownloadSimple, Export, FileText, FolderSimple, FrameCorners, GearSix, Lightning, ListChecks, MagnifyingGlass, Notebook, PencilSimple, PencilSimpleLine, Plus,
   Browsers, Compass, LockSimple, Microphone, PushPin, SidebarSimple, Sparkle, Stamp, Star, Table, Timer, Trash, Tray, Warning, Wrench,
 } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
@@ -247,6 +247,9 @@ export default function Sidebar({ tree, area, favorites, counts, current, expand
           {m.kind === 'notebook' && m.config?.onenote && (
             <>
               <MenuItem icon={ArrowsClockwise} onClick={run(() => actions.oneNoteSync(m.id))}>Mit OneNote abgleichen</MenuItem>
+              <MenuItem icon={PencilSimpleLine} onClick={run(() => actions.oneNoteWrite(m.id, !m.config.onenote.write))}>
+                {m.config.onenote.write ? 'Nicht mehr nach OneNote schreiben' : 'Änderungen nach OneNote schreiben'}
+              </MenuItem>
               <MenuItem icon={LinkBreak} onClick={run(() => actions.oneNoteUnlink(m.id))}>OneNote-Verbindung lösen</MenuItem>
             </>
           )}
@@ -477,7 +480,7 @@ function OneNoteMark({ node }) {
   if (node.kind === 'section' && one.locked) return <LockSimple size={12} className="shrink-0 text-faint" aria-label="In OneNote kennwortgeschützt, nicht übernommen" />
   if (node.kind !== 'notebook') return null
   const busy = run?.id === node.id && !run.finished
-  const title = busy ? 'OneNote wird abgeglichen …' : one.synced ? `Mit OneNote verbunden, abgeglichen ${ago(one.synced)}` : 'Mit OneNote verbunden'
+  const title = (busy ? 'OneNote wird abgeglichen …' : one.synced ? `Mit OneNote verbunden, abgeglichen ${ago(one.synced)}` : 'Mit OneNote verbunden') + (one.write ? ', schreibt Änderungen zurück' : '')
   return (
     <span title={title} aria-label={title} className="ml-auto shrink-0 text-faint">
       <ArrowsClockwise size={12} className={busy ? 'animate-spin text-accent' : ''} />

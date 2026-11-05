@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLineDown, BookOpenText, Copy, PencilSimple } from '@phosphor-icons/react'
 import { EditorContent, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
-import { Extension, generateJSON, resolveExtensions } from '@tiptap/core'
+import { Extension, generateHTML, generateJSON, resolveExtensions } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { invoke } from '@tauri-apps/api/core'
@@ -207,6 +207,12 @@ export function htmlToMarkdown(html) {
   manager ??= new MarkdownManager({ extensions: resolveExtensions(extensions) })
   return manager.serialize(generateJSON(html, extensions))
 }
+// Umgekehrt fürs Zurückschreiben nach OneNote: Markdown → Blöcke (JSON) → HTML einzelner Blöcke
+export function markdownToJson(md) {
+  manager ??= new MarkdownManager({ extensions: resolveExtensions(extensions) })
+  return manager.parse(md)
+}
+export const jsonToHtml = (nodes) => generateHTML({ type: 'doc', content: nodes }, extensions)
 
 // Inhalt kommt und geht als Markdown; ein Editor je Seite (key im Aufrufer)
 export default function Editor({ markdown, onChange, onReady, editable = true }) {

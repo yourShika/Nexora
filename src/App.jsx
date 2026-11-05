@@ -26,13 +26,14 @@ import { isPermissionGranted } from '@tauri-apps/plugin-notification'
 import { checkReminders, message, sendNotification } from './notify.js'
 import { bmpToPng, importImage, initImages, saveImageBytes } from './images.js'
 import { describeReport, hash, link as oneNoteLink, syncNotebook } from './onenote.js'
+import { pushNotebook } from './onenote-write.js'
 import { desiredEvents, followUpMail, pushDue, readEvents } from './outlook.js'
 import Journal from './Journal.jsx'
 import Stats from './Stats.jsx'
 import Print, { PrintAsk } from './Print.jsx'
 import OneNoteConnect, { OneNoteProgress } from './OneNote.jsx'
 import { VaultPicker, VaultUnlock, setVaultPicker, vault } from './Vault.jsx'
-import { htmlToMarkdown } from './Editor.jsx'
+import { htmlToMarkdown, jsonToHtml, markdownToJson } from './Editor.jsx'
 import { indexText } from './ocr.js'
 import { loadBackupSettings, maybeBackup, runBackup } from './backup.js'
 import { findUpdate, installUpdate } from './updates.js'
@@ -1396,6 +1397,8 @@ export default function App() {
           importFile: (source, name) => invoke('import_attachment', { source, id: crypto.randomUUID(), name }),
           ink: (data) => invoke('onenote_ink', { data }),
           picture: (data, width) => invoke('onenote_picture', { data, width }),
+          parse: markdownToJson,
+          toHtml: jsonToHtml,
           progress: show,
           stopped: () => stopSync.current,
           // vor dem Umbau in Ordner oder dem Neuübernehmen aller Seiten: Kopie der Datenbank im Datenordner
@@ -1409,9 +1412,14 @@ export default function App() {
             }
           },
         }
-        const report = await syncNotebook(nb, all, api)
+        // eingeschaltet: erst Nexora → OneNote, dann wie immer OneNote → Nexora
+        const pushed = oneNoteLink(nb)?.write ? await pushNotebook(nb, all, api) : null
+        const pulled = await syncNotebook(nb, all, { ...api, written: new Set(pushed?.written) })
+        const report = { ...pushed, ...pulled, touched: [...(pushed?.touched ?? []), ...pulled.touched] }
         await reload()
-        const changed = report.neu + report.geaendert + report.konflikte
+        // offene Seiten holen den neuen Stand (oder fragen, wenn gerade getippt wird)
+        for (const touched of new Set(report.touched)) dispatchEvent(new CustomEvent('nexora-extern', { detail: touched }))
+        const changed = report.neu + report.geaendert + report.konflikte + (report.geschrieben ?? 0) + (report.angelegt ?? 0) + (report.fehler?.length ?? 0)
         if (silent) (setOneNoteRun((r) => (r?.silent ? null : { ...r, finished: true, text: describeReport(report) })), changed && setNotice(describeReport(report)))
         else show({ finished: true, text: describeReport(report) })
         return { text: describeReport(report) }
@@ -1426,7 +1434,30 @@ export default function App() {
     },
     oneNoteUnlink(id) {
       save(id, { config: null })
-      setNotice('Verbindung zu OneNote gelöst. Die Seiten bleiben in Nexora und sind weiter gesperrt.')
+      setNotice('Verbindung zu OneNote gelöst. Die Seiten bleiben in Nexora.')
+    },
+    // Rückschreiben pro Notizbuch: an macht die Seiten bearbeitbar (beim nächsten Abgleich, der gleich startet),
+    // aus sperrt sie wieder
+    async oneNoteWrite(id, on) {
+      const all = await db.allNodes()
+      const nb = all.find((n) => n.id === id)
+      if (!oneNoteLink(nb)) return
+      await db.update(id, { config: { ...nb.config, onenote: { ...oneNoteLink(nb), write: on } } })
+      const byId = new Map(all.map((n) => [n.id, n]))
+      const below = (n) => {
+        for (let p = byId.get(n.parent_id); p; p = byId.get(p.parent_id)) if (p.id === id) return true
+        return false
+      }
+      // an: schon vorbereitete Seiten (Kästen bekannt) gleich frei, die übrigen beim Einlesen gleich danach
+      for (const n of all)
+        if (n.kind === 'page' && oneNoteLink(n)?.id && below(n) && (!on || oneNoteLink(n).boxes)) await db.update(n.id, { locked: on ? 0 : 1 })
+      await reload()
+      setNotice(
+        on
+          ? 'Nexora schreibt Änderungen an diesem Notizbuch beim Abgleich nach OneNote. Die Seiten werden dabei bearbeitbar.'
+          : 'Nexora schreibt nicht mehr nach OneNote. Die Seiten sind wieder gesperrt.',
+      )
+      if (on) actions.oneNoteSync(id)
     },
     toggle(id) {
       setExpanded((s) => {

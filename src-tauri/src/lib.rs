@@ -165,6 +165,7 @@ pub fn run() {
             onenote::onenote,
             onenote::onenote_ink,
             onenote::onenote_picture,
+            onenote::onenote_write,
             interop::list_folder,
             interop::obsidian_write,
             interop::obsidian_rename,

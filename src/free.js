@@ -1,7 +1,8 @@
 // Freie Seite: Markdown mit unsichtbaren Positionszeilen, damit Suche, Verlauf, Links und Export unverändert laufen.
 // shortcut: eine Zeile "<!-- box … -->" mitten in einem Codeblock würde den Kasten teilen; erst ändern, wenn das vorkommt
 export const CANVAS = '<!-- nexora:canvas -->'
-const BOX = /^<!-- box x=(\d+) y=(\d+) w=(\d+) -->$/
+// one= verbindet den Kasten mit seinem Container in OneNote (Rückschreiben, onenote-write.js)
+const BOX = /^<!-- box x=(\d+) y=(\d+) w=(\d+)(?: one=(\{[\w{}-]+\}))? -->$/
 // Ein Strich je Zeile, immer hinter den Kästen; die Suche schneidet ab dem ersten Strich ab (Migration 007).
 // Punkte "x,y" oder mit Stiftdruck "x,y,druck" (1–100)
 const STROKE = 't=(pen|marker|line|arrow|rect|ellipse) c=(text|#[0-9a-f]{6}) w=(\\d+) p=(-?\\d+,-?\\d+(?:,\\d+)?(?: -?\\d+,-?\\d+(?:,\\d+)?)*)'
@@ -20,7 +21,7 @@ export function parseBoxes(body) {
   for (const line of body.slice(CANVAS.length).split('\n')) {
     if (INK.test(line.trim())) continue
     const m = BOX.exec(line.trim())
-    if (m) boxes.push((box = { x: +m[1], y: +m[2], w: +m[3], lines: [] }))
+    if (m) boxes.push((box = { x: +m[1], y: +m[2], w: +m[3], ...(m[4] ? { one: m[4] } : {}), lines: [] }))
     else if (box) box.lines.push(line)
     // Text vor dem ersten Kasten (von Hand bearbeitet) wird ein eigener Kasten
     else if (line.trim()) boxes.push((box = { x: 0, y: 20, w: 480, lines: [line] }))
@@ -57,7 +58,7 @@ export function searchText(body) {
 // Leere Kästen fallen weg; Reihenfolge von oben nach unten, damit der Export lesbar bleibt
 export function serializeBoxes(boxes, ink = []) {
   const kept = boxes.filter((b) => b.md.trim()).sort(reading)
-  return [CANVAS, ...kept.map((b) => `<!-- box x=${Math.round(b.x)} y=${Math.round(b.y)} w=${Math.round(b.w)} -->\n${b.md}\n`), ...ink.map(inkLine)].join('\n')
+  return [CANVAS, ...kept.map((b) => `<!-- box x=${Math.round(b.x)} y=${Math.round(b.y)} w=${Math.round(b.w)}${b.one ? ` one=${b.one}` : ''} -->\n${b.md}\n`), ...ink.map(inkLine)].join('\n')
 }
 
 const INK_NAMES = { pen: 'Stift', marker: 'Textmarker', line: 'Linie', arrow: 'Pfeil', rect: 'Rechteck', ellipse: 'Ellipse' }

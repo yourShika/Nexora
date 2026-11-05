@@ -1,5 +1,6 @@
-// OneNote-Brücke, nur lesend: festes PowerShell-Skript spricht das installierte OneNote über COM an.
-// Das Frontend wählt nur den Befehl und gibt IDs mit, eigenen Code kann es nicht ausführen.
+// OneNote-Brücke: festes PowerShell-Skript spricht das installierte OneNote über COM an.
+// Das Frontend wählt nur den Befehl und gibt IDs (und beim Schreiben das Seiten-XML) mit, eigenen Code kann es nicht
+// ausführen.
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use std::os::windows::process::CommandExt;
@@ -16,7 +17,7 @@ fn valid_ids(ids: &str) -> bool {
     ids.chars().all(|c| c.is_ascii_alphanumeric() || "{}-;".contains(c))
 }
 
-fn call(op: &str, id: &str) -> Result<String, String> {
+fn call(op: &str, id: &str, extra: &[(&str, &str)]) -> Result<String, String> {
     // -EncodedCommand umgeht jede Maskierung von Anführungszeichen
     let utf16: Vec<u8> = SCRIPT.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
     let encoded = base64(&utf16);
@@ -24,6 +25,7 @@ fn call(op: &str, id: &str) -> Result<String, String> {
         .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", &encoded])
         .env("NEXORA_OP", op)
         .env("NEXORA_ID", id)
+        .envs(extra.iter().copied())
         .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|e| format!("PowerShell nicht gestartet: {e}"))?;
@@ -51,7 +53,79 @@ pub async fn onenote(op: String, id: String) -> Result<String, String> {
     if !matches!(op.as_str(), "notebooks" | "notebook" | "pages" | "pageinfo") || !valid_ids(&id) {
         return Err("Ungültige Anfrage an OneNote".into());
     }
-    tauri::async_runtime::spawn_blocking(move || call(&op, &id)).await.map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || call(&op, &id, &[])).await.map_err(|e| e.to_string())?
+}
+
+// Bilder und Anhänge aus Nexora im Seiten-XML: src="nexora-url:bilder/…" und pathSource="nexora-path:anhaenge/…"
+// werden Kopien in `dir`. OneNote liest Dateien aus manchen Datenordnern nicht (Sonderrechte, 0x80042016), aus Temp
+// schon; es übernimmt sie beim Schreiben in das Notizbuch, danach können die Kopien weg
+fn stage(xml: &str, data: &std::path::Path, dir: &std::path::Path) -> Result<String, String> {
+    let mut out = String::with_capacity(xml.len());
+    let mut rest = xml;
+    let mut n = 0;
+    loop {
+        let next = [("src=\"nexora-url:", true), ("pathSource=\"nexora-path:", false)].into_iter().filter_map(|(m, url)| rest.find(m).map(|i| (i, m, url))).min_by_key(|x| x.0);
+        let Some((i, marker, url)) = next else { break };
+        let start = i + marker.len();
+        let end = start + rest[start..].find('"').ok_or("Ungültiger Dateiverweis")?;
+        let rel = rest[start..end].replace("&amp;", "&");
+        if !(rel.starts_with("bilder/") || rel.starts_with("anhaenge/")) {
+            return Err("Ungültiger Dateiverweis".into());
+        }
+        let source = data.join(crate::attach::safe_rel(&rel)?);
+        n += 1;
+        // eigener Unterordner je Datei: der Dateiname bleibt, wie er ist
+        let target = dir.join(n.to_string()).join(source.file_name().ok_or("Ungültiger Dateiverweis")?);
+        std::fs::create_dir_all(target.parent().unwrap_or(dir)).map_err(|e| e.to_string())?;
+        std::fs::copy(&source, &target).map_err(|e| format!("{rel} nicht lesbar: {e}"))?;
+        let path = target.to_string_lossy().into_owned();
+        out.push_str(&rest[..i + marker.find("nexora-").unwrap_or(0)]);
+        if url {
+            let slashed = path.replace('\\', "/");
+            out.push_str("file:///");
+            for b in slashed.bytes() {
+                if b.is_ascii_alphanumeric() || b"-._~/:".contains(&b) { out.push(b as char) } else { out.push_str(&format!("%{b:02X}")) }
+            }
+        } else {
+            out.push_str(&path.replace('&', "&amp;"));
+        }
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    Ok(out)
+}
+
+// Eine Seite schreiben (page = Seiten-ID oder "new:<Abschnitts-ID>"): Seiten-XML (Schema 2013, neue Seite mit
+// ID="nexora:neu"), danach die Kästen in `delete` (durch ; getrennt) entfernen. Das XML geht über eine Datei, weil
+// Umgebungsvariablen bei 32 KB enden. Zurück: Seiten-ID und die Seite, wie OneNote sie jetzt hat (ohne Bilddaten)
+#[tauri::command]
+pub async fn onenote_write(app: tauri::AppHandle, page: String, xml: String, delete: String) -> Result<(String, String), String> {
+    use tauri::Manager;
+    if !valid_ids(page.strip_prefix("new:").unwrap_or(&page)) || !valid_ids(&delete) {
+        return Err("Ungültige Anfrage an OneNote".into());
+    }
+    let data = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        // Kopien früherer Aufrufe erst nach 10 Minuten weg: liest OneNote eine eingefügte Datei später, ist sie noch da
+        if let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) {
+            for e in entries.flatten() {
+                let old = e.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age.as_secs() > 600);
+                if old && e.file_name().to_string_lossy().starts_with("nexora-onenote-") {
+                    let _ = std::fs::remove_dir_all(e.path());
+                }
+            }
+        }
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("nexora-onenote-{}-{stamp}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Seite nicht zwischengespeichert: {e}"))?;
+        let file = dir.join("seite.xml");
+        std::fs::write(&file, stage(&xml, &data, &dir)?.as_bytes()).map_err(|e| format!("Seite nicht zwischengespeichert: {e}"))?;
+        let out = call("write", &page, &[("NEXORA_FILE", &file.to_string_lossy()), ("NEXORA_DELETE", &delete)])?;
+        let (id, xml) = out.split_once('\0').ok_or("OneNote hat die Seite nicht bestätigt")?;
+        Ok((id.to_string(), xml.to_string()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // Ein Freihand-Strich in DIPs (1/96 Zoll), wie Windows ihn aus dem ISF liest
@@ -178,6 +252,30 @@ pub async fn onenote_picture(data: String, width: u32) -> Result<String, String>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Dateiverweise im Seiten-XML: Kopie in Temp, URL bzw. Pfad eingesetzt, nichts außerhalb von bilder/ und anhaenge/
+    #[test]
+    fn dateien_fuer_onenote_kopiert() {
+        let root = std::env::temp_dir().join(format!("nexora-stage-test-{}", std::process::id()));
+        let (data, dir) = (root.join("daten"), root.join("aus"));
+        std::fs::create_dir_all(data.join("bilder")).unwrap();
+        std::fs::create_dir_all(data.join("anhaenge/u1")).unwrap();
+        std::fs::write(data.join("bilder/x.png"), b"png").unwrap();
+        std::fs::write(data.join("anhaenge/u1/a & b.txt"), b"txt").unwrap();
+        let xml = r#"<img src="nexora-url:bilder/x.png" width="4"><one:InsertedFile pathSource="nexora-path:anhaenge/u1/a &amp; b.txt" preferredName="a"/> Text nexora-url:bilder/x.png bleibt"#;
+        let out = stage(xml, &data, &dir).unwrap();
+        let img = dir.join("1").join("x.png");
+        let file = dir.join("2").join("a & b.txt");
+        assert_eq!(std::fs::read(&img).unwrap(), b"png");
+        assert_eq!(std::fs::read(&file).unwrap(), b"txt");
+        assert!(out.contains(r#"src="file:///"#) && out.contains("/1/x.png\" width=\"4\">"), "{out}");
+        assert!(out.contains(&format!("pathSource=\"{}\"", file.to_string_lossy().replace('&', "&amp;"))), "{out}");
+        assert!(out.ends_with(" Text nexora-url:bilder/x.png bleibt"));
+        for bad in [r#"src="nexora-url:../geheim.txt""#, r#"src="nexora-url:bilder/../../geheim""#, r#"pathSource="nexora-path:C:\Windows\win.ini""#] {
+            assert!(stage(bad, &data, &dir).is_err(), "{bad}");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     fn png_size(png: &[u8]) -> (u32, u32) {
         let n = |i: usize| u32::from_be_bytes(png[i..i + 4].try_into().unwrap());

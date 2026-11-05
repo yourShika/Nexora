@@ -1,14 +1,15 @@
 import { invoke } from '@tauri-apps/api/core'
-import { serializeBoxes } from './free.js'
+import { DRAWING, parseBoxes, parseInk, serializeBoxes } from './free.js'
 
-// OneNote-Brücke, nur lesend: Hierarchie und Seiten kommen als XML (Schema 2013) über onenote.rs.
+// OneNote-Brücke: Hierarchie und Seiten kommen als XML (Schema 2013) über onenote.rs; zurückgeschrieben wird nur in
+// Notizbücher, für die das eingeschaltet ist (onenote-write.js).
 // Eine Seite wird eine freie Seite: jeder OneNote-Container ein Kasten an derselben Stelle.
-const NS = 'http://schemas.microsoft.com/office/onenote/2013/onenote'
-const parseXml = (s) => new DOMParser().parseFromString(s, 'application/xml')
-const kids = (el, name) => (el ? [...el.children].filter((c) => c.localName === name) : [])
+export const NS = 'http://schemas.microsoft.com/office/onenote/2013/onenote'
+export const parseXml = (s) => new DOMParser().parseFromString(s, 'application/xml')
+export const kids = (el, name) => (el ? [...el.children].filter((c) => c.localName === name) : [])
 const kid = (el, name) => kids(el, name)[0]
 const px = (pt) => Math.round(((Number(pt) || 0) * 4) / 3) // OneNote rechnet in Punkt
-const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+export const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 const plain = (html) => new DOMParser().parseFromString(html, 'text/html').body.textContent
 export const link = (node) => node?.config?.onenote ?? null
 
@@ -16,8 +17,8 @@ export const link = (node) => node?.config?.onenote ?? null
 // wandelt onenote_picture in PNG
 const IMAGE_TYPES = [['iVBOR', 'png'], ['/9j/', 'jpg'], ['R0lGOD', 'gif'], ['UklGR', 'webp']]
 // Stand der Umwandlung: steigt er, übernimmt der nächste Abgleich alle Seiten neu (2: Format, Dateien, Freihand;
-// 3: EMF-Bilder)
-export const CONVERT = 3
+// 3: EMF-Bilder; 4: alle Absatzgruppen eines Containers, nicht nur die erste)
+export const CONVERT = 4
 // Seiten, die vor diesem Stand übernommen wurden, hat ein Fehler beim Speichern verändert (Backslashes, LOP-058):
 // sie gelten nicht als in Nexora geändert, der Abgleich ersetzt sie (alte Fassung im Verlauf)
 const REPAIR = 3
@@ -106,6 +107,8 @@ export function parseNotebook(source) {
 }
 
 const note = (text) => `<p><em>(${esc(text)})</em></p>`
+// OneNote-Objekt, zu dem ein Bild, eine Freihand oder eine Datei gehört: der Absatz (OE) darum, sonst es selbst
+const owner = (el) => (el.parentElement?.localName === 'OE' ? el.parentElement : el).getAttribute('objectID')
 
 function block(el, ctx) {
   switch (el.localName) {
@@ -117,7 +120,7 @@ function block(el, ctx) {
       const data = kid(el, 'Data')?.textContent.replace(/\s/g, '')
       if (!data) return note('Bild in einem Format, das Nexora nicht übernimmt')
       const width = px(kid(el, 'Size')?.getAttribute('width')) || 400
-      ctx.images.push({ data, ext: IMAGE_TYPES.find(([magic]) => data.startsWith(magic))?.[1] ?? null, width })
+      ctx.images.push({ data, ext: IMAGE_TYPES.find(([magic]) => data.startsWith(magic))?.[1] ?? null, width, oe: owner(el) })
       return `<img src="nximg:${ctx.images.length - 1}" width="${width}">`
     }
     case 'InkDrawing':
@@ -128,11 +131,12 @@ function block(el, ctx) {
       const data = inkData(el)
       if (!data.length) return ''
       ctx.ink.push(data)
+      ctx.inkOe.push(owner(el))
       return `<img src="nxink:${ctx.ink.length - 1}" alt="Freihand">`
     }
     case 'InsertedFile': {
       // OneNote hält eine Kopie im Zwischenspeicher (pathCache); pageBody übernimmt sie als Anhang
-      ctx.files.push({ path: el.getAttribute('pathCache') || el.getAttribute('pathSource'), name: el.getAttribute('preferredName') || 'Datei' })
+      ctx.files.push({ path: el.getAttribute('pathCache') || el.getAttribute('pathSource'), name: el.getAttribute('preferredName') || 'Datei', oe: owner(el) })
       return `<div data-attachment="nxfile:${ctx.files.length - 1}" data-size="0" data-preview="0"></div>`
     }
     case 'MediaFile':
@@ -177,6 +181,9 @@ function listKind(oe, ctx) {
 
 const OPEN = { ul: '<ul>', ol: '<ol>', task: '<ul data-type="taskList">' }
 
+// Ein Container oder Absatz kann mehrere Absatzgruppen haben (OEChildren mit indent), alle nacheinander
+const groups = (el, ctx) => kids(el, 'OEChildren').map((c) => children(c, ctx)).join('')
+
 // Absätze nacheinander; aufeinanderfolgende Listenpunkte werden eine Liste, eingerückte eine Unterliste
 function children(el, ctx) {
   let html = ''
@@ -185,7 +192,7 @@ function children(el, ctx) {
   for (const oe of kids(el, 'OE')) {
     const kind = listKind(oe, ctx)
     if (kind !== open) (close(), (open = kind), kind && (html += OPEN[kind]))
-    const inner = children(kid(oe, 'OEChildren'), ctx)
+    const inner = groups(oe, ctx)
     if (!kind) html += content(oe, ctx) + inner
     else if (kind === 'task') html += `<li data-type="taskItem" data-checked="${kid(oe, 'Tag').getAttribute('completed') === 'true'}">${content(oe, ctx) || '<p></p>'}${inner}</li>`
     else html += `<li>${content(oe, ctx) || '<p></p>'}${inner}</li>`
@@ -203,6 +210,7 @@ export function convertPage(source) {
     base: defs.find((d) => d.name === 'p') ?? { name: 'p', font: 'Calibri', size: 11 }, // Standard-Absatz der Seite
     files: [],
     ink: [],
+    inkOe: [],
     // Aufgaben-Kästchen: Symbol 3 oder ein Name wie "Aufgabe"/"To Do"
     todos: new Set(kids(page, 'TagDef').filter((t) => t.getAttribute('symbol') === '3' || /aufgabe|to ?do|erledig/i.test(t.getAttribute('name') ?? '')).map((t) => t.getAttribute('index'))),
     images: [],
@@ -214,13 +222,23 @@ export function convertPage(source) {
       y: px(kid(el, 'Position')?.getAttribute('y')),
       // Kasten etwas breiter als in OneNote (Innenabstand), aber nie winzig
       w: Math.max(240, px(kid(el, 'Size')?.getAttribute('width')) + 24),
-      html: el.localName === 'Outline' ? children(kid(el, 'OEChildren'), ctx) : block(el, ctx),
+      one: el.getAttribute('objectID'),
+      html: el.localName === 'Outline' ? groups(el, ctx) : block(el, ctx),
     }))
     .filter((b) => b.html)
   // Titelbereich von OneNote fällt weg: Kästen nach links oben rücken
-  const minX = Math.min(...boxes.map((b) => b.x))
-  const minY = Math.min(...boxes.map((b) => b.y))
-  return { title: page.getAttribute('name') || 'Ohne Titel', images: ctx.images, files: ctx.files, ink: ctx.ink, boxes: boxes.map((b) => ({ ...b, x: b.x - minX, y: b.y - minY + 20 })) }
+  const minX = boxes.length ? Math.min(...boxes.map((b) => b.x)) : 0
+  const minY = boxes.length ? Math.min(...boxes.map((b) => b.y)) : 0
+  return {
+    title: page.getAttribute('name') || 'Ohne Titel',
+    images: ctx.images,
+    files: ctx.files,
+    ink: ctx.ink,
+    inkOe: ctx.inkOe,
+    // um so viel (px) sind die Kästen verschoben; das Rückschreiben rechnet damit zurück
+    origin: { x: minX, y: minY - 20 },
+    boxes: boxes.map((b) => ({ ...b, x: b.x - minX, y: b.y - minY + 20 })),
+  }
 }
 
 // FNV-1a: erkennt, ob eine Seite seit dem letzten Abgleich in Nexora geändert wurde
@@ -230,12 +248,19 @@ export function hash(text) {
   return (h >>> 0).toString(16)
 }
 
+// Stand der Kästen beim letzten Abgleich: OneNote-Container → [Hash des Textes, x, y]; Seiten ohne Kästen
+// (fließend, von Nexora angelegt) zählen als ein Kasten
+export function boxState(body, outline) {
+  if (outline) return { [outline]: [hash(body), 0, 20] }
+  return Object.fromEntries(parseBoxes(body).filter((b) => b.one).map((b) => [b.one, [hash(b.md), b.x, b.y]]))
+}
+
 // Platzhalter auflösen: Bilder speichern, Dateien als Anhänge übernehmen, Freihand als SVG-Bild.
 // api: saveImage(bytes, ext), importFile(path, name) → [rel, size], ink([base64]) → Striche je Stück,
-// picture(base64, Breite) → PNG als Base64
+// picture(base64, Breite) → PNG als Base64. keep: Bild/Anhang in Nexora → OneNote-Objekt (fürs Rückschreiben)
 const bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
 async function pageBody(source, api) {
-  const { boxes, images, files, ink } = convertPage(source)
+  const { boxes, images, files, ink, inkOe, origin } = convertPage(source)
   // fremde Formate doppelt so breit wie angezeigt, damit kleine Schrift in Ausdrucken lesbar bleibt
   const srcs = await Promise.all(
     images.map((img) => (img.ext ? api.saveImage(bytes(img.data), img.ext) : api.picture(img.data, Math.min(3000, img.width * 2)).then((png) => api.saveImage(bytes(png), 'png')).catch(() => null))),
@@ -257,14 +282,29 @@ async function pageBody(source, api) {
       .replace(/<div data-attachment="nxfile:(\d+)"[^>]*><\/div>/g, (_, i) =>
         kept[i] ? `<div data-attachment="${esc(kept[i][0])}" data-size="${kept[i][1]}" data-preview="0"></div>` : note(`Datei „${files[i].name}“ ist in OneNote nicht zwischengespeichert`),
       )
-  return serializeBoxes(boxes.map((b) => ({ ...b, md: api.toMarkdown(html(b)) })))
+  const keep = {}
+  srcs.forEach((src, i) => src && images[i].oe && (keep[src] = images[i].oe))
+  drawn.forEach((d, i) => d && inkOe[i] && (keep[d.src] = inkOe[i]))
+  kept.forEach((k, i) => k && files[i].oe && (keep[k[0]] = files[i].oe))
+  return { body: serializeBoxes(boxes.map((b) => ({ ...b, md: api.toMarkdown(html(b)) }))), keep, origin }
+}
+
+// Was nur Nexora kennt (eigene Striche auf freien Seiten, Zeichnungen), bleibt beim Ersetzen aus OneNote stehen
+function keepNexora(body, old) {
+  const ink = parseInk(old)
+  const drawings = old.split('\n').filter((l) => DRAWING.test(l.trim()))
+  if (!ink.length && !drawings.length) return body
+  const boxes = parseBoxes(body)
+  const below = Math.max(20, ...boxes.map((b) => b.y + 300))
+  return serializeBoxes(drawings.length ? [...boxes, { x: 0, y: below, w: 640, md: drawings.join('\n\n') }] : boxes, ink)
 }
 
 // Abgleich OneNote → Nexora. Nie löschen: Seiten, die in OneNote fehlen, bleiben und werden nur gezählt.
 // Geändert in OneNote und unverändert in Nexora: ersetzen (alte Fassung in den Verlauf).
 // Geändert in beiden: OneNote-Fassung als eigene Seite daneben.
 // api: create, update, loadBody, snapshot, saveImage(bytes, ext), importFile, ink, picture, toMarkdown(html),
-// progress({ text, done, total }), stopped() → true bricht ab, before() einmal vor dem ersten Umbau (Sicherung)
+// progress({ text, done, total }), stopped() → true bricht ab, before() einmal vor dem ersten Umbau (Sicherung),
+// written: Seiten, die das Zurückschreiben in diesem Abgleich geschrieben hat
 export async function syncNotebook(nb, all, api) {
   const step = (text, done, total) => {
     if (api.stopped?.()) throw new Error('Abgleich abgebrochen')
@@ -275,19 +315,21 @@ export async function syncNotebook(nb, all, api) {
   const read = api.read ?? ((op, id) => invoke('onenote', { op, id }))
   const book = parseNotebook(await read('notebook', link(nb).id))
   const known = new Map(all.filter((n) => !n.deleted_at && link(n)?.id).map((n) => [link(n).id, n]))
-  const report = { neu: 0, geaendert: 0, konflikte: 0, gesperrt: 0, fehlt: 0 }
+  const report = { neu: 0, geaendert: 0, konflikte: 0, gesperrt: 0, fehlt: 0, touched: [] }
+  // Rückschreiben eingeschaltet: Seiten bearbeitbar, und jede braucht einmal die Kennungen ihrer Kästen
+  const write = !!link(nb).write
   const pages = book.sections.flatMap((s) => (s.locked ? [] : s.pages))
 
   // Änderungen am Inhalt erkennen: OneNote setzt den Zeitstempel der Seite nicht bei jeder Änderung.
   // Erst alle Seiten ohne Bilddaten (schnell), dann nur neue, geänderte und mit älterer Umwandlung übernommene
   const versions = await fetchPages(read, 'pageinfo', pages, 40, (i) => step('Seiten werden geprüft', i, pages.length))
   for (const p of pages) p.version = versions.get(p.id) ? hash(versions.get(p.id)) : null
-  const stale = pages.filter((p) => p.version && (link(known.get(p.id))?.version !== p.version || (link(known.get(p.id))?.conv ?? 1) < CONVERT))
+  const stale = pages.filter((p) => p.version && (link(known.get(p.id))?.version !== p.version || (link(known.get(p.id))?.conv ?? 1) < CONVERT || (write && !link(known.get(p.id))?.boxes)))
 
   // Umbau (Abschnittsgruppen als Ordner) oder viele Seiten neu: vorher sichern
   // nur wenn schon Abschnitte da sind (beim ersten Verbinden gibt es nichts umzubauen)
   const regroup = book.sections.some((s) => known.has(s.id)) && (book.groups.some((g) => !known.has(g.id)) || book.sections.some((s) => known.has(s.id) && known.get(s.id).title !== s.name))
-  if (regroup || stale.some((p) => known.has(p.id) && (link(known.get(p.id)).conv ?? 1) < CONVERT)) await api.before?.()
+  if (regroup || stale.some((p) => known.has(p.id) && ((link(known.get(p.id)).conv ?? 1) < CONVERT || (write && !link(known.get(p.id)).boxes)))) await api.before?.()
 
   const day = new Date().toLocaleDateString('de-DE')
   // Abschnittsgruppen werden Abschnitte, die Abschnitte enthalten; früher übernommene "Gruppe / Abschnitt" rücken so ein
@@ -322,26 +364,37 @@ export async function syncNotebook(nb, all, api) {
       let node = known.get(p.id)
       const source = sources.get(p.id)
       if (!node && !source) continue // gerade erst in OneNote gelöscht
-      if (source) {
+      if (source && api.written?.has(node?.id)) {
+        // gerade eben von Nexora geschrieben, und OneNote zeigt schon etwas anderes: hat OneNote die Änderung verworfen,
+        // gilt weiter die Nexora-Fassung und geht beim nächsten Abgleich noch einmal hin (statt sie hier zu ersetzen)
+        await api.update(node.id, { config: { ...node.config, onenote: { ...link(node), version: p.version, hash: '' } } })
+        report.nochmal = (report.nochmal ?? 0) + 1
+      } else if (source) {
         step('Seiten werden übernommen', ++done, stale.length)
-        const body = await pageBody(source, api)
-        // weitere Einstellungen der Seite (z. B. Lesemodus) bleiben
-        const fresh = { ...node?.config, onenote: { id: p.id, version: p.version, hash: hash(body), conv: CONVERT } }
+        const page = await pageBody(source, api)
+        const old = node ? await api.loadBody(node.id) : ''
+        const body = node ? keepNexora(page.body, old) : page.body
+        // weitere Einstellungen der Seite (z. B. Lesemodus) bleiben; loose: von Nexora am Abschnittsende angelegt
+        const fresh = {
+          ...node?.config,
+          onenote: { id: p.id, version: p.version, hash: hash(body), conv: CONVERT, boxes: boxState(body), keep: page.keep, origin: page.origin, title: p.name, ...(link(node)?.loose ? { loose: true } : {}) },
+        }
         if (!node) {
           node = await api.create('page', parent, p.name, { config: fresh })
-          await api.update(node.id, { body, locked: 1 })
+          await api.update(node.id, { body, locked: write ? 0 : 1 })
           report.neu++
-        } else if (hash(await api.loadBody(node.id)) === link(node).hash || (link(node).conv ?? 1) < REPAIR) {
+        } else if (hash(old) === link(node).hash || (link(node).conv ?? 1) < REPAIR) {
           await api.snapshot(node.id)
-          await api.update(node.id, { title: p.name, body, parent_id: parent, config: fresh })
+          await api.update(node.id, { title: p.name, body, parent_id: link(node).loose ? node.parent_id : parent, config: fresh, ...(write ? { locked: 0 } : {}) })
+          report.touched.push(node.id)
           report.geaendert++
         } else {
           const copy = await api.create('page', parent, `${p.name} (OneNote-Fassung vom ${day})`, { config: { onenote: { copyOf: p.id } } })
-          await api.update(copy.id, { body, locked: 1 })
+          await api.update(copy.id, { body: page.body, locked: 1 })
           await api.update(node.id, { config: { ...node.config, onenote: { ...link(node), version: p.version, conv: CONVERT } } })
           report.konflikte++
         }
-      } else if (node.parent_id !== parent) {
+      } else if (node.parent_id !== parent && !link(node).loose) {
         await api.update(node.id, { parent_id: parent }) // in OneNote verschoben
       }
       levels[p.level - 1] = node.id
@@ -355,7 +408,7 @@ export async function syncNotebook(nb, all, api) {
 }
 
 // Seiteninhalte in Paketen; eine fehlende Seite kommt leer zurück und fehlt dann in der Map
-async function fetchPages(read, op, pages, size, progress) {
+export async function fetchPages(read, op, pages, size, progress) {
   const out = new Map()
   for (let i = 0; i < pages.length; i += size) {
     progress(i + 1)
@@ -377,5 +430,10 @@ export function describeReport(r) {
   if (r.konflikte) parts.push(`${r.konflikte} in beiden geändert (OneNote-Fassung daneben gelegt)`)
   if (r.gesperrt) parts.push(`${r.gesperrt} gesperrte Abschnitte übersprungen`)
   if (r.fehlt) parts.push(`${r.fehlt} Seiten gibt es in OneNote nicht mehr (bleiben in Nexora)`)
+  if (r.geschrieben) parts.push(`${r.geschrieben} nach OneNote geschrieben`)
+  if (r.angelegt) parts.push(`${r.angelegt} in OneNote angelegt`)
+  if (r.nichtGeschrieben) parts.push(`${r.nichtGeschrieben} Änderungen gehen nicht nach OneNote (Listen, neue Abschnitte, Kästen mit Bild außerhalb von Text)`)
+  if (r.nochmal) parts.push(`${r.nochmal} Seiten hat OneNote nicht behalten, Nexora schreibt sie beim nächsten Abgleich noch einmal`)
+  if (r.fehler?.length) parts.push(`${r.fehler.length} Seiten nicht geschrieben: ${r.fehler[0]}`)
   return `OneNote abgeglichen: ${parts.join(', ')}.`
 }

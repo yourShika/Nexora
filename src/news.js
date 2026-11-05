@@ -2,6 +2,18 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.47.0',
+    date: '2026-11-05',
+    title: 'Änderungen nach OneNote schreiben',
+    items: [
+      '**Pro Notizbuch einschalten:** Rechtsklick auf ein OneNote-Notizbuch → „Änderungen nach OneNote schreiben“. Die Seiten werden dann bearbeitbar. Beim OneNote-Abgleich (beim Start, alle 30 Minuten oder per Knopf) schreibt Nexora zuerst deine Änderungen nach OneNote und holt danach die aus OneNote.',
+      '**Text ersetzen, Rest behalten:** Geänderter Text ersetzt den Text im passenden OneNote-Kasten, samt Überschriften, Listen, Aufgaben, Tabellen, Code und Links. Bilder, Freihand und Dateien aus OneNote bleiben stehen, auch wenn du einen Kasten löschst. Neue Kästen, Bilder und Dateien kommen in OneNote dazu.',
+      '**Neue Seiten:** Neue Seiten legt Nexora am Ende ihres OneNote-Abschnitts an. Unterseiten erscheinen dort als normale Seiten, weil OneNote Seiten über die Schnittstelle nicht einrücken kann. In Nexora bleiben sie, wo sie sind.',
+      '**In beiden geändert:** Die OneNote-Fassung liegt wie bisher als eigene Seite daneben. Solange sie dort liegt, schreibt Nexora diese Seite nicht. Löschst du sie, gilt deine Fassung. Eigene Striche auf freien Seiten bleiben in Nexora.',
+      '**Einmal alles neu:** Bei manchen OneNote-Kästen las Nexora bisher nur den ersten Teil. Der nächste Abgleich holt deshalb alle Seiten neu. Vorher sichert Nexora die Datenbank, die bisherige Fassung jeder Seite steht im Verlauf.',
+    ],
+  },
+  {
     version: '0.46.0',
     date: '2026-11-04',
     title: 'Obsidian-Ordner verbinden',

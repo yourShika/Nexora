@@ -15,6 +15,9 @@ test('Freie Seite: hin und zurück', () => {
     { x: 500, y: 20, w: 300, md: 'rechts' },
   ])
   assert.equal(toFlow(body), '# Links\n\n```powershell\nGet-Date\n```\n\nrechts')
+  // Kennung des OneNote-Containers reist mit
+  const one = { x: 1, y: 2, w: 3, one: '{CE6A5CCC-6C5E-402D-BD45-D58ED7B8DD5A}{29}{B0}', md: 'x' }
+  assert.deepEqual(parseBoxes(serializeBoxes([one])), [one])
 })
 
 test('Freie Seite: umwandeln und Sonderfälle', () => {
