@@ -8,6 +8,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { adminLinks } from './adminlinks.js'
+import { findMentions, mentionData } from './mentions.js'
 import { buildModel, complete, learn, newCounts, partsToCheck, planFix, rankSuggestions, seenInPages, startsSentence, tokens } from './autotext.js'
 import * as db from './db.js'
 
@@ -126,11 +127,11 @@ export function learnArea(area) {
   }, 1500)
 }
 
-// Wörter eines Absatzes mit Stelle im Dokument, ohne Inline-Code, Links und Admin-Links (\\server\freigabe)
+// Wörter eines Absatzes mit Stelle im Dokument, ohne Inline-Code, Links, Admin-Links (\\server\freigabe) und @Personen
 const SKIP_MARKS = ['code', 'link']
 function wordsInBlock(node, start) {
   const text = node.textBetween(0, node.content.size, undefined, '￼')
-  const skip = adminLinks(text)
+  const skip = [...adminLinks(text), ...findMentions(text, mentionData().people.map((p) => p.name))]
   node.forEach((child, offset) => {
     if (child.marks.some((m) => SKIP_MARKS.includes(m.type.name))) skip.push({ from: offset, to: offset + child.nodeSize })
   })

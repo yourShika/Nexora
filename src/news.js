@@ -2,6 +2,17 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.50.0',
+    date: '2026-11-06',
+    title: 'Personen mit @ erwähnen',
+    items: [
+      '**@ tippen:** Im Seitentext, in Kommentaren und in Titeln schlägt @ Personen aus deiner Liste vor (Pfeile wählen, Enter oder Tab übernimmt, Esc schließt). Ein neuer Name lässt sich gleich als „Neue Person“ anlegen.',
+      '**Als Chip:** Bekannte Namen wie @Kim Bura erscheinen in der Farbe der Person. Strg+Klick im Text oder ein Klick im Kommentar zeigt alle Stellen.',
+      '**Suche:** @Name findet jetzt auch, wo jemand erwähnt ist (Text, Titel, Kommentare), nicht nur „Zuständig“. Namen mit Leerzeichen in Anführungszeichen: @"Kim Bura".',
+      '**Reiner Text:** Gespeichert wird einfach „@Kim Bura“. So steht es auch im Export, in Obsidian und in OneNote. Namen aus der Personenliste markiert die Rechtschreibprüfung nicht mehr.',
+    ],
+  },
+  {
     version: '0.49.0',
     date: '2026-11-06',
     title: 'Kommentare bearbeiten',

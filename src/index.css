@@ -175,6 +175,10 @@ body {
 .tiptap .adminlink { text-decoration: underline dotted; text-decoration-color: var(--accent); text-underline-offset: 3px; }
 .tiptap .spell-error { text-decoration: underline wavy; text-decoration-color: var(--danger); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .tiptap .ghost-text { color: var(--faint); pointer-events: none; user-select: none; }
+/* Erwähnung @Name: Farbe der Person nur als Hintergrund, die Schrift bleibt Textfarbe */
+.mention { border-radius: 4px; padding: 0 2px; font-weight: 500; background: color-mix(in oklab, var(--chip, var(--accent)) 18%, transparent); box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--chip, var(--accent)) 50%, transparent); }
+button.mention { cursor: pointer; }
+button.mention:hover { background: color-mix(in oklab, var(--chip, var(--accent)) 30%, transparent); }
 .tiptap > * + * { margin-top: 0.6em; }
 .tiptap p.is-empty::before,
 .tiptap h1.is-empty::before,

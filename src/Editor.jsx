@@ -23,6 +23,7 @@ import { SlashCommand } from './SlashMenu.jsx'
 import { CodeBlockView } from './CodeBlock.jsx'
 import BlockHandle from './BlockHandle.jsx'
 import { LopEmbed, PageLink, PageLinkSuggest } from './Links.jsx'
+import { Mentions } from './Mentions.jsx'
 import { assetUrl, imagePng, isImage, relativeSrc, saveImage } from './images.js'
 import { Attachment, saveAttachment } from './Attachment.jsx'
 import { Drawing } from './Drawing.jsx'
@@ -193,6 +194,7 @@ const extensions = [
   Drawing,
   PageLink,
   PageLinkSuggest,
+  Mentions,
   LopEmbed,
   VaultRef,
   AdminLinks,

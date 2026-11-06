@@ -11,6 +11,7 @@ import { TYPES, between, isDone, newId, sortRows, sortsOf, statusField } from '.
 import { ChipColor } from './ColorPicker.jsx'
 import Menu, { MenuItem } from './Menu.jsx'
 import Select from './Select.jsx'
+import { useMentionInput } from './Mentions.jsx'
 
 const TITLE = { id: 'title', name: 'Titel', type: 'title' }
 // Startbreiten in Pixeln; gezogene Breiten stehen je Liste in config.widths
@@ -372,18 +373,22 @@ function TableView({ db, rows, fields, sorts, onSorts, widths, onWidths, onField
 function TitleCell({ row, onOpen, onTitle }) {
   const [text, setText] = useState(row.title)
   useEffect(() => setText(row.title), [row.title])
+  const mention = useMentionInput(text, setText)
   return (
     <span className="flex items-center">
       <span className="min-w-0 flex-1">
         <input
+          ref={mention.ref}
           value={text}
           aria-label="Titel"
           placeholder="Ohne Titel"
-          onChange={(e) => setText(e.target.value)}
-          onBlur={() => text !== row.title && onTitle(text)}
-          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          onChange={(e) => (setText(e.target.value), mention.track(e))}
+          onSelect={mention.track}
+          onBlur={() => (mention.close(), text !== row.title && onTitle(text))}
+          onKeyDown={(e) => mention.keyDown(e) || (e.key === 'Enter' && e.currentTarget.blur())}
           className="w-full min-w-0 rounded bg-transparent px-1.5 py-1 font-medium outline-none placeholder:text-faint hover:bg-hover focus:bg-raised focus:ring-1 focus:ring-accent"
         />
+        {mention.list}
         <LastComment id={row.id} className="-mt-1 px-1.5 pb-1" />
       </span>
       <CommentCount id={row.id} />

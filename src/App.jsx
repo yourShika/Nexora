@@ -54,7 +54,8 @@ import { getLook, loadLook, motionOn, setLook, useLook } from './theme.js'
 import { COMMENT_DEFAULTS, dayOf, daysBetween, describe, emptyConfig, fieldsOf, formatDate, isDone, lopConfig, nextDate, shiftDate, statusField, today, toggleDone } from './fields.js'
 import CalendarView from './Calendar.jsx'
 import { CalendarBlank } from '@phosphor-icons/react'
-import { parseQuick } from './quick.js'
+import { parseQuick, quickName } from './quick.js'
+import { setMentionData } from './mentions.js'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { buildExport, decodeText, importedPage, packNotebook, safeName, unpackNotebook } from './io.js'
 import { IMAGE, planImport } from './interop.js'
@@ -1597,6 +1598,14 @@ export default function App() {
   // Seitenlinks brauchen den aktuellen Titel auch beim Speichern als Markdown
   const byId = new Map(nodes.map((n) => [n.id, n]))
   setLinkData({ get: (id) => byId.get(id), list: () => [...tree.alive.values()] })
+  const findPerson = (name) => setSearching(quickName('@', name))
+  const mentionPeople = (list) => setMentionData({ people: list, find: findPerson, add: (name) => {
+    if (list.some((p) => p.name.toLowerCase() === name.toLowerCase())) return
+    // sofort für den Editor (der Chip erscheint mit dem Einfügen), gespeichert wie unter Einstellungen → Personen
+    mentionPeople([...list, { name }])
+    savePeople([...list, { name }])
+  } })
+  mentionPeople(people)
   const app = {
     alive: tree.alive,
     // Bereich der Seite, die hier bearbeitet wird; ein Seitenfenster kann in einem anderen liegen als das Hauptfenster
@@ -1619,6 +1628,7 @@ export default function App() {
     notice: setNotice,
     people,
     savePeople,
+    findPerson,
     renamePerson,
     removePerson,
     pinPage: windowPage ? null : actions.pinPage,
@@ -1947,7 +1957,7 @@ export default function App() {
           }}
         />
       )}
-      {searching && <Search tree={areaTree} pathOf={pathOf} commands={commands} onOpen={actions.open} onClose={() => setSearching(false)} />}
+      {searching && <Search initial={typeof searching === 'string' ? searching : ''} tree={areaTree} pathOf={pathOf} commands={commands} onOpen={actions.open} onClose={() => setSearching(false)} />}
       <SpeechBar />
       <MeetingDone app={app} />
       {meeting && <MeetingDialog app={app} onClose={() => setMeeting(false)} />}

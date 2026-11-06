@@ -3,7 +3,8 @@ import { AppWindow, Article, Printer, ArrowBendDownRight, ArrowSquareIn, ClockCo
 import Menu, { MenuItem } from './Menu.jsx'
 import { NodeIcon } from './Sidebar.jsx'
 import { useApp } from './ctx.js'
-import { commentParts, taskCount, today } from './fields.js'
+import { taskCount, today } from './fields.js'
+import { RichText, useMentionInput } from './Mentions.jsx'
 import { Cover, IconRow } from './PageHead.jsx'
 import History from './History.jsx'
 import * as db from './db.js'
@@ -20,6 +21,12 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
   const [body, setBody] = useState(null)
   const [loadError, setLoadError] = useState(false)
   const [title, setTitle] = useState(node.title)
+  const changeTitle = (value) => {
+    setTitle(value)
+    onPatch(node.id, { title: value })
+    queue({ title: value })
+  }
+  const mention = useMentionInput(title, changeTitle)
   const [status, setStatus] = useState('saved')
   const [history, setHistory] = useState(false)
   const [latest, setLatest] = useState(null)
@@ -235,17 +242,17 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
       <article data-page-id={node.id} className={`${free && !reading ? '' : 'mx-auto max-w-[var(--page)]'} px-6 md:px-12 ${node.cover ? 'pt-4' : 'pt-8'}`}>
         <IconRow node={node} onSave={onSave} />
         <input
+          ref={mention.ref}
           autoFocus={autoFocus}
           readOnly={!!node.locked}
           value={title}
           placeholder="Ohne Titel"
           aria-label="Titel"
-          onChange={(e) => {
-            setTitle(e.target.value)
-            onPatch(node.id, { title: e.target.value })
-            queue({ title: e.target.value })
-          }}
+          onChange={(e) => (changeTitle(e.target.value), mention.track(e))}
+          onSelect={mention.track}
+          onBlur={mention.close}
           onKeyDown={(e) => {
+            if (mention.keyDown(e)) return
             if (e.key === 'Enter' || e.key === 'ArrowDown') {
               e.preventDefault()
               editor.current?.commands.focus('start')
@@ -253,6 +260,7 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
           }}
           className="mb-2 w-full bg-transparent text-[32px] font-semibold leading-tight tracking-tight outline-none placeholder:text-faint"
         />
+        {mention.list}
         <Backlinks id={node.id} />
         <div className="mb-4" />
         {checklist && <ChecklistDialog pageId={node.id} onClose={() => setChecklist(false)} />}
@@ -372,20 +380,28 @@ function RowActivity({ row }) {
   )
 }
 
-// Enter speichert, Umschalt+Enter macht eine neue Zeile; wächst bis 8 Zeilen mit
-function CommentInput({ value, onChange, onEnter, onEscape, className = '', ...rest }) {
+// Enter speichert, Umschalt+Enter macht eine neue Zeile; wächst bis 8 Zeilen mit; @ schlägt Personen vor
+function CommentInput({ value, onChange, onEnter, onEscape, onBlur, className = '', ...rest }) {
+  const m = useMentionInput(value, onChange)
   return (
-    <textarea
-      {...rest}
-      rows={Math.min(8, value.split('\n').length)}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) (e.preventDefault(), onEnter())
-        else if (e.key === 'Escape' && onEscape) (e.preventDefault(), e.stopPropagation(), onEscape())
-      }}
-      className={`block w-full resize-none rounded-md border border-line bg-raised px-3 py-1.5 outline-none placeholder:text-faint focus:border-accent ${className}`}
-    />
+    <>
+      <textarea
+        {...rest}
+        ref={m.ref}
+        rows={Math.min(8, value.split('\n').length)}
+        value={value}
+        onChange={(e) => (onChange(e.target.value), m.track(e))}
+        onSelect={m.track}
+        onBlur={(e) => (m.close(), onBlur?.(e))}
+        onKeyDown={(e) => {
+          if (m.keyDown(e)) return
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) (e.preventDefault(), onEnter())
+          else if (e.key === 'Escape' && onEscape) (e.preventDefault(), e.stopPropagation(), onEscape())
+        }}
+        className={`block w-full resize-none rounded-md border border-line bg-raised px-3 py-1.5 outline-none placeholder:text-faint focus:border-accent ${className}`}
+      />
+      {m.list}
+    </>
   )
 }
 
@@ -415,7 +431,7 @@ function Comment({ a, rowId, onChange }) {
   return (
     <div className="group relative">
       <p className="whitespace-pre-wrap break-words">
-        {commentParts(a.text).map((p, i) => (p.url ? <a key={i} href={p.url} className="text-accent underline">{p.text}</a> : p.text))}
+        <RichText text={a.text} />
       </p>
       <div className="absolute -top-1 right-0 flex rounded-md bg-raised opacity-0 shadow-[var(--shadow)] group-hover:opacity-100 focus-within:opacity-100">
         <IconButton label="Kommentar kopieren" onClick={() => navigator.clipboard.writeText(a.text).then(() => app.notice('Kommentar kopiert.'))}>

@@ -3,6 +3,7 @@ import { emit } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { commentTrace, taskCount, today } from './fields.js'
 import { searchText } from './free.js'
+import { norm } from './searchquery.js'
 
 let conn
 const db = async () => (conn ??= await Database.load('sqlite:nexora.db'))
@@ -132,6 +133,16 @@ export async function search(match, limit = 40) {
   )
   const seen = new Set(text.map((r) => r.id))
   return [...text, ...files.filter((r) => !seen.has(r.id) && seen.add(r.id))]
+}
+
+// Wo "@person" steht (Text, Titel, Felder über die Volltextsuche, dazu Kommentare); person wie norm() es liefert
+export async function mentionedIds(person) {
+  const c = await db()
+  const needle = `@${person}`
+  const ids = new Set()
+  if (needle.length >= 3) for (const r of await c.select('SELECT id FROM search WHERE search MATCH $1 LIMIT 500', [`"${needle.replace(/"/g, '""')}"`])) ids.add(r.id)
+  for (const r of await c.select("SELECT node_id, text FROM activity WHERE kind = 'comment' AND instr(text, '@') > 0")) if (norm(r.text).includes(needle)) ids.add(r.node_id)
+  return ids
 }
 
 export async function ocrFiles() {

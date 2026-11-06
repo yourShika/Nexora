@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { addDays, between, chipHex, commentParts, commentTrace, taskCount, daysBetween, nextDate, sortRows, sortsOf, isoWeek, parseTime } from './fields.js'
+import { addDays, between, chipHex, commentTrace, taskCount, daysBetween, nextDate, sortRows, sortsOf, isoWeek, parseTime } from './fields.js'
 import { parseQuick } from './quick.js'
 
 test('nächster Termin einer Wiederholung', () => {
@@ -70,11 +70,7 @@ test('Optionsfarbe: fester Name, eigene Farbe oder grau', () => {
   assert.deepEqual(['rot', '#12AbEf', '#123', 'toString', undefined, 'lila'].map(chipHex), ['#c8434b', '#12AbEf', '#7b8487', '#7b8487', '#7b8487', '#7b8487'])
 })
 
-test('Kommentar: Links und Spur im Verlauf', () => {
-  assert.deepEqual(commentParts('Siehe https://example.com/a?b=1. Danke'), [{ text: 'Siehe ' }, { text: 'https://example.com/a?b=1', url: 'https://example.com/a?b=1' }, { text: '. Danke' }])
-  assert.deepEqual(commentParts('(http://x.de)'), [{ text: '(' }, { text: 'http://x.de', url: 'http://x.de' }, { text: ')' }])
-  assert.deepEqual(commentParts('ohne Link'), [{ text: 'ohne Link' }])
-  assert.deepEqual(commentParts(''), [])
+test('Kommentar: Spur im Verlauf', () => {
   assert.equal(commentTrace('alt\nzwei', 'neu'), 'Kommentar geändert: „alt zwei“ → „neu“')
   assert.equal(commentTrace('weg', null), 'Kommentar gelöscht: „weg“')
   assert.equal(commentTrace('x'.repeat(100), null), `Kommentar gelöscht: „${'x'.repeat(79)}…“`)

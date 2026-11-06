@@ -6,29 +6,15 @@ import { personsOf } from './people.js'
 import { NodeIcon } from './Sidebar.jsx'
 import { fieldsOf, option, statusField } from './fields.js'
 
-export const norm = (s) => (s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
-
-// "#tag @person status:offen in:exchange rest" -> Filter + Suchwörter
-export function parseSearch(q) {
-  const f = { tags: [], text: [] }
-  for (const tok of q.trim().split(/\s+/).filter(Boolean)) {
-    if (/^#./.test(tok)) f.tags.push(norm(tok.slice(1)))
-    else if (/^@./.test(tok)) f.person = norm(tok.slice(1))
-    else if (/^status:./i.test(tok)) f.status = norm(tok.slice(7))
-    else if (/^in:./i.test(tok)) f.in = norm(tok.slice(3))
-    else f.text.push(norm(tok))
-  }
-  return f
-}
-
-// FTS5-Ausdruck: trigram braucht mindestens 3 Zeichen pro Wort
-export const ftsQuery = (words) => words.filter((w) => w.length >= 3).map((w) => `"${w.replace(/"/g, '""')}"`).join(' ')
+import { ftsQuery, norm, parseSearch } from './searchquery.js'
+export { ftsQuery, norm, parseSearch }
 
 const hasFilters = (f) => f.tags.length || f.person || f.status || f.in
 
-export default function Search({ tree, pathOf, commands, onOpen, onClose }) {
-  const [q, setQ] = useState('')
+export default function Search({ tree, pathOf, commands, onOpen, onClose, initial = '' }) {
+  const [q, setQ] = useState(initial)
   const [fts, setFts] = useState([])
+  const [mentioned, setMentioned] = useState(new Set())
   const [active, setActive] = useState(0)
   const list = useRef(null)
   const f = useMemo(() => parseSearch(q), [q])
@@ -45,12 +31,23 @@ export default function Search({ tree, pathOf, commands, onOpen, onClose }) {
     }
   }, [f])
 
+  // @person findet auch, wo die Person im Text, Titel oder in Kommentaren erwähnt ist
+  useEffect(() => {
+    if (!f.person) return setMentioned(new Set())
+    let alive = true
+    const t = setTimeout(() => db.mentionedIds(f.person).then((ids) => alive && setMentioned(ids)).catch(() => {}), 120)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [f.person])
+
   const results = useMemo(() => {
     const nodes = [...tree.alive.values()]
     const dbOf = (n) => (n.kind === 'row' ? tree.alive.get(n.parent_id) : null)
     const passes = (n) => {
       if (f.tags.length && !f.tags.every((t) => (n.props?.tags ?? []).some((x) => norm(x) === t))) return false
-      if (f.person && !personsOf(n.props?.person).some((p) => norm(p).includes(f.person))) return false
+      if (f.person && !personsOf(n.props?.person).some((p) => norm(p).includes(f.person)) && !mentioned.has(n.id) && !norm(n.title).includes(`@${f.person}`)) return false
       if (f.status) {
         const o = option(statusField(fieldsOf(dbOf(n))), n.props?.status)
         if (n.kind !== 'row' || !o || !(norm(o.name).startsWith(f.status) || norm(o.id).startsWith(f.status))) return false
@@ -72,7 +69,7 @@ export default function Search({ tree, pathOf, commands, onOpen, onClose }) {
       .filter((r) => !seen.has(r.id) && tree.alive.has(r.id) && passes(tree.alive.get(r.id)))
       .map((r) => ({ node: tree.alive.get(r.id), snip: r.snip, label: r.file && hitLabel(r.file) }))
     return [...cmds.map((c) => ({ cmd: c })), ...byTitle.slice(0, 30).map((n) => ({ node: n })), ...byText].slice(0, 50)
-  }, [f, fts, tree, pathOf, commands])
+  }, [f, fts, mentioned, tree, pathOf, commands])
 
   useEffect(() => setActive(0), [results.length, q])
   useEffect(() => {

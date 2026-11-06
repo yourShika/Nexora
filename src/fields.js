@@ -56,19 +56,6 @@ const quoteComment = (t) => {
   return `„${s.length > 80 ? `${s.slice(0, 79)}…` : s}“`
 }
 export const commentTrace = (old, text) => (text == null ? `Kommentar gelöscht: ${quoteComment(old)}` : `Kommentar geändert: ${quoteComment(old)} → ${quoteComment(text)}`)
-// Kommentartext in Stücke: Adressen (http/https) als Link, Satzzeichen am Ende gehören nicht dazu
-export function commentParts(text) {
-  const out = []
-  let at = 0
-  for (const m of text.matchAll(/https?:\/\/[^\s<>"“”]+/g)) {
-    const url = m[0].replace(/[.,;:!?)\]]+$/, '')
-    if (m.index > at) out.push({ text: text.slice(at, m.index) })
-    out.push({ text: url, url })
-    at = m.index + url.length
-  }
-  if (at < text.length) out.push({ text: text.slice(at) })
-  return out
-}
 export const CHIP_NAMES = { grau: 'Grau', blau: 'Blau', petrol: 'Petrol', gruen: 'Grün', gelb: 'Gelb', orange: 'Orange', rot: 'Rot', rosa: 'Rosa' }
 // Optionsfarbe ist ein Name aus CHIP_COLORS oder eine eigene Farbe "#rrggbb"
 export const chipHex = (color) => (Object.hasOwn(CHIP_COLORS, color ?? '') ? CHIP_COLORS[color] : /^#[0-9a-f]{6}$/i.test(color ?? '') ? color : CHIP_COLORS.grau)
