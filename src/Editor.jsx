@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLineDown, BookOpenText, Copy, PencilSimple } from '@phosphor-icons/react'
+import { ArrowLineDown, BookOpenText, Copy, ImageSquare, PencilSimple } from '@phosphor-icons/react'
 import { EditorContent, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
 import { Extension, generateHTML, generateJSON, resolveExtensions } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
@@ -23,7 +23,7 @@ import { SlashCommand } from './SlashMenu.jsx'
 import { CodeBlockView } from './CodeBlock.jsx'
 import BlockHandle from './BlockHandle.jsx'
 import { LopEmbed, PageLink, PageLinkSuggest } from './Links.jsx'
-import { assetUrl, isImage, relativeSrc, saveImage } from './images.js'
+import { assetUrl, imagePng, isImage, relativeSrc, saveImage } from './images.js'
 import { Attachment, saveAttachment } from './Attachment.jsx'
 import { Drawing } from './Drawing.jsx'
 import { VaultRef } from './Vault.jsx'
@@ -318,6 +318,14 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
     }
   }
   const copyText = (file) => withText(file, (text) => navigator.clipboard.writeText(text).then(() => app?.notice('Text aus dem Bild kopiert.')))
+  // Promise im ClipboardItem: der Schreibvorgang beginnt noch im Klick, das Bild wird danach gelesen
+  const copyImage = (file) => {
+    setMenu(null)
+    navigator.clipboard.write([new ClipboardItem({ 'image/png': imagePng(file) })]).then(
+      () => app?.notice('Bild kopiert.'),
+      (err) => setError(`Bild nicht kopiert: ${err}`),
+    )
+  }
   const insertText = (file) =>
     withText(file, (text) => {
       let at = null
@@ -345,6 +353,7 @@ export default function Editor({ markdown, onChange, onReady, editable = true })
       {secret && <SecretDialog text={secret.text} spans={secret.spans} onChoose={pasteChosen} />}
       {menu && (
         <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+          <MenuItem icon={ImageSquare} onClick={() => copyImage(menu.file)}>Bild kopieren</MenuItem>
           {editable && <MenuItem icon={PencilSimple} onClick={() => (setMenu(null), setEditImage(menu.file))}>Bild bearbeiten …</MenuItem>}
           <MenuItem icon={Copy} onClick={() => copyText(menu.file)}>Text aus dem Bild kopieren</MenuItem>
           {editable && <MenuItem icon={ArrowLineDown} onClick={() => insertText(menu.file)}>Text unter dem Bild einfügen</MenuItem>}

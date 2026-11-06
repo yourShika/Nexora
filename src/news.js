@@ -2,6 +2,14 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.48.0',
+    date: '2026-11-06',
+    title: 'Bilder kopieren',
+    items: [
+      '**Bild kopieren:** Rechtsklick auf ein Bild → „Bild kopieren“ legt das Bild selbst in die Zwischenablage, nicht nur seinen Text. Du kannst es dann in Outlook, Teams, Word, Paint oder wieder in Nexora einfügen. Das geht auch auf schreibgeschützten Seiten und in OneNote-Kästen.',
+    ],
+  },
+  {
     version: '0.47.0',
     date: '2026-11-05',
     title: 'Änderungen nach OneNote schreiben',
