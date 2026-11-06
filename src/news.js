@@ -2,6 +2,16 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.49.0',
+    date: '2026-11-06',
+    title: 'Kommentare bearbeiten',
+    items: [
+      '**Bearbeiten und löschen:** Fährst du über einen Kommentar, erscheinen Kopieren, Bearbeiten und Löschen. Beim Bearbeiten speichert Enter oder ein Klick daneben, Esc bricht ab. Gelöscht ist sofort, im Hinweis unten steht „Rückgängig“.',
+      '**Spur im Verlauf:** Im Verlauf des Punkts steht, was aus einem Kommentar geworden ist, z. B. „Kommentar geändert: „alt“ → „neu““ oder „Kommentar gelöscht: …“.',
+      '**Mehrzeilig und mit Links:** Umschalt+Enter macht eine neue Zeile, das Feld wächst mit. Adressen wie https://… im Kommentar sind klickbar und öffnen im Browser.',
+    ],
+  },
+  {
     version: '0.48.0',
     date: '2026-11-06',
     title: 'Bilder kopieren',

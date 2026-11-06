@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AppWindow, Article, Printer, ArrowBendDownRight, ArrowSquareIn, ClockCounterClockwise, DotsThree, FrameCorners, ListChecks, LockSimple, LockSimpleOpen, PushPin, Stamp, EnvelopeSimple, Star, Trash, WarningCircle } from '@phosphor-icons/react'
+import { AppWindow, Article, Printer, ArrowBendDownRight, ArrowSquareIn, ClockCounterClockwise, Copy, DotsThree, FrameCorners, ListChecks, LockSimple, LockSimpleOpen, PencilSimple, PushPin, Stamp, EnvelopeSimple, Star, Trash, WarningCircle } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { NodeIcon } from './Sidebar.jsx'
 import { useApp } from './ctx.js'
-import { taskCount, today } from './fields.js'
+import { commentParts, taskCount, today } from './fields.js'
 import { Cover, IconRow } from './PageHead.jsx'
 import History from './History.jsx'
 import * as db from './db.js'
@@ -325,12 +325,12 @@ function RowActivity({ row }) {
     load()
   }, [load, row.updated_at])
 
+  const changed = () => (load(), app.comments?.refresh())
   async function comment() {
     if (!text.trim()) return
     await db.addActivity(row.id, 'comment', text.trim())
     setText('')
-    load()
-    app.comments?.refresh()
+    changed()
   }
 
   // Eigener Block (Einstellung "kommentare"): Kommentare hervorgehoben oben, darunter der automatische Verlauf
@@ -341,20 +341,13 @@ function RowActivity({ row }) {
   const when = (t) => new Date(t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
   return (
     <section aria-label="Verlauf des Punkts" className="mb-8 border-b border-line pb-5">
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && comment()}
-        placeholder="Kommentar schreiben, Enter speichert"
-        aria-label="Kommentar"
-        className="mb-3 w-full rounded-md border border-line bg-raised px-3 py-1.5 outline-none placeholder:text-faint focus:border-accent"
-      />
+      <CommentInput value={text} onChange={setText} onEnter={comment} placeholder="Kommentar schreiben, Enter speichert, Umschalt+Enter neue Zeile" aria-label="Kommentar" className="mb-3" />
       {notes.length > 0 && (
         <ul aria-label="Kommentare" className="mb-4 space-y-2">
           {notes.map((a) => (
             <li key={a.id} className="rounded-md border-l-2 border-accent bg-accent-soft px-3 py-1.5">
               <time className="block text-xs text-faint">{when(a.created_at)}</time>
-              <p className="whitespace-pre-wrap break-words">{a.text}</p>
+              <Comment a={a} rowId={row.id} onChange={changed} />
             </li>
           ))}
         </ul>
@@ -364,7 +357,7 @@ function RowActivity({ row }) {
         {shown.map((a) => (
           <li key={a.id} className="flex gap-3 text-sm">
             <time className="w-28 shrink-0 text-xs leading-5 text-faint">{new Date(a.created_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</time>
-            <span className={a.kind === 'comment' ? '' : 'text-muted'}>{a.text}</span>
+            {a.kind === 'comment' ? <div className="min-w-0 flex-1"><Comment a={a} rowId={row.id} onChange={changed} /></div> : <span className="text-muted">{a.text}</span>}
           </li>
         ))}
         <li className="flex gap-3 text-sm">
@@ -376,6 +369,66 @@ function RowActivity({ row }) {
         <button onClick={() => setAll(!all)} className="mt-2 text-xs text-muted hover:text-text">{all ? 'Weniger zeigen' : `Alle ${log.length} Einträge zeigen`}</button>
       )}
     </section>
+  )
+}
+
+// Enter speichert, Umschalt+Enter macht eine neue Zeile; wächst bis 8 Zeilen mit
+function CommentInput({ value, onChange, onEnter, onEscape, className = '', ...rest }) {
+  return (
+    <textarea
+      {...rest}
+      rows={Math.min(8, value.split('\n').length)}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) (e.preventDefault(), onEnter())
+        else if (e.key === 'Escape' && onEscape) (e.preventDefault(), e.stopPropagation(), onEscape())
+      }}
+      className={`block w-full resize-none rounded-md border border-line bg-raised px-3 py-1.5 outline-none placeholder:text-faint focus:border-accent ${className}`}
+    />
+  )
+}
+
+// Ein Kommentar; beim Drüberfahren Kopieren, Bearbeiten, Löschen (Rückgängig über den Hinweis)
+function Comment({ a, rowId, onChange }) {
+  const app = useApp()
+  const [draft, setDraft] = useState(null)
+  // Enter und das folgende Blur dürfen nur einmal speichern
+  const editing = useRef(false)
+  const start = () => ((editing.current = true), setDraft(a.text))
+  async function finish(keep) {
+    if (!editing.current) return
+    editing.current = false
+    const text = draft.trim()
+    setDraft(null)
+    if (!keep || !text || text === a.text) return
+    await db.editComment(rowId, a, text)
+    onChange()
+  }
+  async function remove() {
+    const trace = await db.deleteComment(rowId, a)
+    onChange()
+    app.notice({ text: 'Kommentar gelöscht.', label: 'Rückgängig', run: () => db.restoreComment(rowId, a, trace).then(onChange) })
+  }
+  if (draft !== null)
+    return <CommentInput autoFocus value={draft} onChange={setDraft} onEnter={() => finish(true)} onEscape={() => finish(false)} onBlur={() => finish(true)} aria-label="Kommentar bearbeiten" className="my-0.5" />
+  return (
+    <div className="group relative">
+      <p className="whitespace-pre-wrap break-words">
+        {commentParts(a.text).map((p, i) => (p.url ? <a key={i} href={p.url} className="text-accent underline">{p.text}</a> : p.text))}
+      </p>
+      <div className="absolute -top-1 right-0 flex rounded-md bg-raised opacity-0 shadow-[var(--shadow)] group-hover:opacity-100 focus-within:opacity-100">
+        <IconButton label="Kommentar kopieren" onClick={() => navigator.clipboard.writeText(a.text).then(() => app.notice('Kommentar kopiert.'))}>
+          <Copy size={14} />
+        </IconButton>
+        <IconButton label="Kommentar bearbeiten" onClick={start}>
+          <PencilSimple size={14} />
+        </IconButton>
+        <IconButton label="Kommentar löschen" onClick={remove}>
+          <Trash size={14} />
+        </IconButton>
+      </div>
+    </div>
   )
 }
 

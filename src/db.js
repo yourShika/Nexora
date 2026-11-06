@@ -1,7 +1,7 @@
 import Database from '@tauri-apps/plugin-sql'
 import { emit } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { taskCount, today } from './fields.js'
+import { commentTrace, taskCount, today } from './fields.js'
 import { searchText } from './free.js'
 
 let conn
@@ -218,6 +218,25 @@ export async function commentSummary() {
 
 export async function addActivity(id, kind, text) {
   await (await db()).execute('INSERT INTO activity (node_id, kind, text) VALUES ($1, $2, $3)', [id, kind, text])
+}
+
+// Kommentar a ({ id, text, created_at }) am Punkt nodeId ändern oder löschen; die Spur steht im Verlauf
+export async function editComment(nodeId, a, text) {
+  const c = await db()
+  await c.execute("UPDATE activity SET text = $1 WHERE id = $2 AND kind = 'comment'", [text, a.id])
+  await c.execute("INSERT INTO activity (node_id, kind, text) VALUES ($1, 'change', $2)", [nodeId, commentTrace(a.text, text)])
+}
+// Gibt die ID der Spur zurück, damit Rückgängig sie wieder entfernt
+export async function deleteComment(nodeId, a) {
+  const c = await db()
+  await c.execute("DELETE FROM activity WHERE id = $1 AND kind = 'comment'", [a.id])
+  return (await c.execute("INSERT INTO activity (node_id, kind, text) VALUES ($1, 'change', $2)", [nodeId, commentTrace(a.text, null)])).lastInsertId
+}
+// Spur zuerst weg: sie kann die frei gewordene ID des Kommentars bekommen haben
+export async function restoreComment(nodeId, a, trace) {
+  const c = await db()
+  await c.execute("DELETE FROM activity WHERE id = $1 AND kind = 'change'", [trace])
+  await c.execute("INSERT INTO activity (id, node_id, kind, text, created_at) VALUES ($1, $2, 'comment', $3, $4)", [a.id, nodeId, a.text, a.created_at])
 }
 
 // Seiten, die per [[Titel|id]] auf diese Seite verweisen
