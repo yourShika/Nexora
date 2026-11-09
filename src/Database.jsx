@@ -7,7 +7,7 @@ import RulesPanel from './Rules.jsx'
 import { Cover, IconRow } from './PageHead.jsx'
 import CalendarView from './Calendar.jsx'
 import TimelineView from './Timeline.jsx'
-import { TYPES, between, isDone, newId, sortRows, sortsOf, statusField } from './fields.js'
+import { TYPES, between, headSort, isDone, newId, sortRows, sortsOf, statusField } from './fields.js'
 import { ChipColor } from './ColorPicker.jsx'
 import Menu, { MenuItem } from './Menu.jsx'
 import Select from './Select.jsx'
@@ -74,7 +74,7 @@ const VIEWS = [
   { id: 'timeline', label: 'Zeitleiste', icon: ChartBarHorizontal },
 ]
 
-const SORTED = ['table', 'list', 'kanban'] // Kalender und Zeitleiste ordnen nach Datum
+const SORT_BUTTON = ['list', 'kanban'] // die Tabelle sortiert im Spaltenkopf, Kalender und Zeitleiste nach Datum
 
 export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig, onTitle, onSave }) {
   const config = db.config
@@ -138,7 +138,7 @@ export default function DatabaseView({ db, rows, onOpen, onAdd, onRow, onConfig,
                 Erledigte ausblenden
               </label>
             )}
-            {SORTED.includes(config.view) && (
+            {SORT_BUTTON.includes(config.view) && (
               <button
                 onClick={(e) => {
                   const r = e.currentTarget.getBoundingClientRect()
@@ -243,9 +243,9 @@ function SortMenu({ x, y, fields, sorts, onSorts, onClose }) {
 
 function TableView({ db, rows, fields, sorts, onSorts, widths, onWidths, onFields, onOpen, onRow, addOption }) {
   const cols = [...fields.filter((f) => f.type === 'nr'), TITLE, ...fields.filter((f) => f.type !== 'nr')]
-  // Klick auf den Kopf: nur nach dieser Spalte, auf, ab, aus; mehrere Ebenen über "Sortieren"
-  const clickSort = (id) =>
-    onSorts(sorts[0]?.field !== id ? [{ field: id, dir: 'asc' }] : sorts[0].dir === 'asc' ? [{ field: id, dir: 'desc' }] : [])
+  // Sortieren im Kopf: Klick nur nach dieser Spalte, Umschalt+Klick als weitere Ebene, Rechtsklick öffnet ein Menü
+  const [headMenu, setHeadMenu] = useState(null) // { x, y, id }
+  const closeHead = useCallback(() => setHeadMenu(null), [])
   const drag = useRowDrag(rows, onRow, !sorts.length)
   const [live, setLive] = useState(null) // Breiten während des Ziehens
   // Spalten umordnen: Kopf ziehen; Nummer und Titel bleiben vorne. Die Reihenfolge gilt für die ganze Liste
@@ -316,10 +316,15 @@ function TableView({ db, rows, fields, sorts, onSorts, widths, onWidths, onField
                   setColDrag(null)
                   setColOver(null)
                 }}
-                title={movable(c) ? 'Ziehen verschiebt die Spalte' : undefined}
+                title={`${movable(c) ? 'Ziehen verschiebt die Spalte. ' : ''}Klick sortiert, Umschalt+Klick als weitere Ebene, Rechtsklick für mehr`}
+                onContextMenu={(e) => (e.preventDefault(), setHeadMenu({ x: e.clientX, y: e.clientY, id: c.id }))}
                 className={`relative whitespace-nowrap px-1.5 py-1.5 font-medium ${movable(c) ? 'cursor-grab' : ''} ${colDrag === c.id ? 'opacity-50' : ''} ${colOver?.id === c.id ? (colOver.side === 'before' ? 'shadow-[inset_2px_0_0_var(--accent)]' : 'shadow-[inset_-2px_0_0_var(--accent)]') : ''}`}
               >
-                <button onClick={() => clickSort(c.id)} className="flex max-w-full items-center gap-1 overflow-hidden hover:text-text">
+                <button
+                  onMouseDown={(e) => e.shiftKey && e.preventDefault()} // Umschalt+Klick markiert sonst Text
+                  onClick={(e) => onSorts(headSort(sorts, c.id, e.shiftKey))}
+                  className="flex max-w-full items-center gap-1 overflow-hidden hover:text-text"
+                >
                   <span className="truncate">{c.name}</span>
                   {level >= 0 && (sorts[level].dir === 'asc' ? <SortAscending size={13} /> : <SortDescending size={13} />)}
                   {level >= 0 && sorts.length > 1 && <span className="text-[10px] text-faint">{level + 1}</span>}
@@ -366,7 +371,23 @@ function TableView({ db, rows, fields, sorts, onSorts, widths, onWidths, onField
           ))}
         </tbody>
       </table>
+      {headMenu && <HeadSortMenu {...headMenu} sorts={sorts} onSorts={onSorts} onClose={closeHead} />}
     </div>
+  )
+}
+
+// Rechtsklick auf einen Spaltenkopf
+function HeadSortMenu({ x, y, id, sorts, onSorts, onClose }) {
+  const level = sorts.findIndex((s) => s.field === id)
+  const pick = (next) => (onSorts(next), onClose())
+  return (
+    <Menu x={x} y={y} onClose={onClose} label="Sortieren">
+      <MenuItem icon={SortAscending} onClick={() => pick([{ field: id, dir: 'asc' }])}>Aufsteigend sortieren</MenuItem>
+      <MenuItem icon={SortDescending} onClick={() => pick([{ field: id, dir: 'desc' }])}>Absteigend sortieren</MenuItem>
+      {sorts.length > 0 && level < 0 && <MenuItem icon={Plus} onClick={() => pick([...sorts, { field: id, dir: 'asc' }])}>Als weitere Ebene</MenuItem>}
+      {level >= 0 && sorts.length > 1 && <MenuItem icon={X} onClick={() => pick(sorts.filter((_, j) => j !== level))}>Diese Ebene entfernen</MenuItem>}
+      {sorts.length > 0 && <MenuItem icon={X} onClick={() => pick([])}>Sortierung entfernen</MenuItem>}
+    </Menu>
   )
 }
 

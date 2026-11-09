@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { addDays, between, chipHex, commentTrace, taskCount, daysBetween, nextDate, sortRows, sortsOf, isoWeek, parseTime } from './fields.js'
+import { addDays, between, chipHex, commentTrace, taskCount, daysBetween, nextDate, headSort, sortRows, sortsOf, isoWeek, parseTime } from './fields.js'
 import { parseQuick } from './quick.js'
 
 test('nächster Termin einer Wiederholung', () => {
@@ -74,4 +74,19 @@ test('Kommentar: Spur im Verlauf', () => {
   assert.equal(commentTrace('alt\nzwei', 'neu'), 'Kommentar geändert: „alt zwei“ → „neu“')
   assert.equal(commentTrace('weg', null), 'Kommentar gelöscht: „weg“')
   assert.equal(commentTrace('x'.repeat(100), null), `Kommentar gelöscht: „${'x'.repeat(79)}…“`)
+})
+
+test('Sortieren im Spaltenkopf: Klick und Umschalt+Klick', () => {
+  const a = { field: 'a', dir: 'asc' }
+  const b = { field: 'b', dir: 'asc' }
+  // Klick: nur diese Spalte, auf → ab → aus
+  assert.deepEqual(headSort([], 'a'), [a])
+  assert.deepEqual(headSort([a], 'a'), [{ field: 'a', dir: 'desc' }])
+  assert.deepEqual(headSort([{ field: 'a', dir: 'desc' }], 'a'), [])
+  assert.deepEqual(headSort([a, b], 'b'), [b])
+  // Umschalt: anhängen, umdrehen, weg; andere Ebenen bleiben
+  assert.deepEqual(headSort([a], 'b', true), [a, b])
+  assert.deepEqual(headSort([a, b], 'a', true), [{ field: 'a', dir: 'desc' }, b])
+  assert.deepEqual(headSort([{ field: 'a', dir: 'desc' }, b], 'a', true), [b])
+  assert.deepEqual(headSort([], 'a', true), [a])
 })

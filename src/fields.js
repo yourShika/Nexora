@@ -195,6 +195,15 @@ export function sortRows(rows, fields, levels) {
 // Sortierung je Ansicht; ältere Listen hatten eine einzige für alle Ansichten (config.sort)
 export const sortsOf = (config, view) => config.sorts?.[view] ?? (config.sort ? [config.sort] : [])
 
+// Klick auf einen Spaltenkopf: nur nach dieser Spalte, auf → ab → aus.
+// Mit Umschalt als weitere Ebene: anhängen, dann umdrehen, dann wieder weg; die übrigen Ebenen bleiben
+export function headSort(sorts, id, add) {
+  const i = sorts.findIndex((s) => s.field === id)
+  if (!add) return sorts[0]?.field !== id ? [{ field: id, dir: 'asc' }] : sorts[0].dir === 'asc' ? [{ field: id, dir: 'desc' }] : []
+  if (i < 0) return [...sorts, { field: id, dir: 'asc' }]
+  return sorts[i].dir === 'asc' ? sorts.map((s, j) => (j === i ? { ...s, dir: 'desc' } : s)) : sorts.filter((_, j) => j !== i)
+}
+
 // Kalenderwoche nach ISO 8601 (Woche mit dem ersten Donnerstag ist KW 1)
 export function isoWeek(day) {
   const d = new Date(Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10))))

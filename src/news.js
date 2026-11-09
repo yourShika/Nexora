@@ -2,6 +2,17 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.52.0',
+    date: '2026-11-09',
+    title: 'Sortieren im Tabellenkopf',
+    items: [
+      '**Klick auf den Spaltenkopf:** sortiert nach dieser Spalte, erst aufsteigend, dann absteigend, dann wieder aus.',
+      '**Umschalt+Klick:** nimmt die Spalte als weitere Ebene dazu. Nochmal dreht sie um, ein drittes Mal fällt sie wieder weg. Die Zahl neben dem Pfeil zeigt die Ebene.',
+      '**Rechtsklick auf den Kopf:** Aufsteigend, Absteigend, Als weitere Ebene, Diese Ebene entfernen, Sortierung entfernen.',
+      '**Der Button „Sortieren“** steht deshalb nur noch in Liste und Kanban, die keinen Spaltenkopf haben.',
+    ],
+  },
+  {
     version: '0.51.0',
     date: '2026-11-09',
     title: 'Titel bleiben lesbar',
