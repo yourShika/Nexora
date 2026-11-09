@@ -56,19 +56,22 @@ export function RowItem({ row, db, onOpen, onToggle, showDb, actions, drag, mark
         className="size-4 shrink-0 cursor-pointer accent-[var(--accent)]"
       />
       {row.props?.nr && <span className="shrink-0 font-mono text-xs text-faint">{formatNr(db, row.props.nr)}</span>}
-      <span className="min-w-0 flex-1">
-        <button onClick={() => onOpen(row.id)} className={`block w-full truncate text-left ${done ? 'text-faint line-through' : ''}`}>
-          {row.title || 'Ohne Titel'}
-        </button>
-        <LastComment id={row.id} />
-      </span>
-      <span className="flex shrink-0 items-center gap-1.5">
-        <CommentCount id={row.id} />
-        <Progress tasks={row.tasks} />
-        {showDb && <span className="text-xs text-faint">{db?.title ?? 'Eingang'}</span>}
-        {shown.map((f) => <FieldValue key={f.id} field={f} value={row.props?.[f.id]} db={db} done={done} />)}
-        {row.props?.followup && !done && <span className="text-xs text-muted">WV <DateText value={row.props.followup} /></span>}
-        {actions}
+      {/* Der Titel behält mindestens 40 % der Zeile; reicht der Platz nicht, rutschen die Felder in eine zweite Zeile darunter */}
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="min-w-[40%] flex-1">
+          <button onClick={() => onOpen(row.id)} className={`block w-full truncate text-left ${done ? 'text-faint line-through' : ''}`}>
+            {row.title || 'Ohne Titel'}
+          </button>
+          <LastComment id={row.id} />
+        </span>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+          <CommentCount id={row.id} />
+          <Progress tasks={row.tasks} />
+          {showDb && <span className="text-xs text-faint">{db?.title ?? 'Eingang'}</span>}
+          {shown.map((f) => <FieldValue key={f.id} field={f} value={row.props?.[f.id]} db={db} done={done} />)}
+          {row.props?.followup && !done && <span className="text-xs text-muted">WV <DateText value={row.props.followup} /></span>}
+          {actions}
+        </span>
       </span>
     </li>
   )

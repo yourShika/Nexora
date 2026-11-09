@@ -2,6 +2,14 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.51.0',
+    date: '2026-11-09',
+    title: 'Titel bleiben lesbar',
+    items: [
+      '**Titel zuerst:** In „Heute“, im Eingang und in Listen bekommt der Titel eines Punkts immer mindestens 40 % der Zeile. Reicht der Platz für Personen, Datum und Tags nicht, rutschen sie in eine zweite Zeile unter den Titel, statt ihn zu „P…“ zusammenzudrücken.',
+    ],
+  },
+  {
     version: '0.50.0',
     date: '2026-11-06',
     title: 'Personen mit @ erwähnen',
