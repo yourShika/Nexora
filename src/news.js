@@ -2,6 +2,17 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.53.0',
+    date: '2026-11-09',
+    title: 'Kalender mit Tag, Woche und Monat',
+    items: [
+      '**Tag, Woche, Monat:** Oben rechts im Kalender schaltest du um, wie in Outlook. Die Wahl gilt für den großen Kalender und die Kalenderansicht in Listen und bleibt gespeichert.',
+      '**Stundenraster:** In Tag und Woche stehen Punkte mit Uhrzeit an ihrer Stunde, Outlook-Termine so lang, wie sie dauern. Was sich überschneidet, steht nebeneinander. Punkte ohne Uhrzeit und ganztägige Termine stehen oben in der Zeile „ganztägig“. Eine rote Linie zeigt die aktuelle Uhrzeit.',
+      '**Ziehen:** Ein Punkt lässt sich auf eine andere Stunde oder einen anderen Tag ziehen (in Viertelstunden). In die Zeile „ganztägig“ gezogen verliert er die Uhrzeit.',
+      '**Anlegen:** Doppelklick ins Raster legt einen Punkt zu dieser Uhrzeit an, das Plus in der Ganztags-Zeile einen ohne Uhrzeit. Ein Klick auf einen Tag im Kopf oder auf die Tageszahl im Monat zeigt diesen Tag.',
+    ],
+  },
+  {
     version: '0.52.0',
     date: '2026-11-09',
     title: 'Sortieren im Tabellenkopf',
