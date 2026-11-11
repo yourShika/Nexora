@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Printer } from '@phosphor-icons/react'
+import { invoke } from '@tauri-apps/api/core'
+import { FileDoc, FilePdf, Printer } from '@phosphor-icons/react'
 import * as db from './db.js'
 import Editor from './Editor.jsx'
 import FreeCanvas from './FreeCanvas.jsx'
@@ -27,9 +28,9 @@ function fit(el) {
   }
 }
 
-// Seiten unsichtbar aufbauen und drucken; immer hell. Als PDF: im Druckdialog "Microsoft Print to PDF" wählen.
-// pages: [{ node, path, fields, list }], fields nur bei LOP-Punkten
-export default function Print({ pages, onDone }) {
+// Seiten unsichtbar aufbauen, immer hell, dann je nach mode drucken (Druckdialog), als PDF (ohne Dialog, über WebView2)
+// oder als Word-Datei (docx.js) nach target speichern. pages: [{ node, path, fields, list }], fields nur bei LOP-Punkten
+export default function Print({ pages, mode = 'print', target, onDone }) {
   const [bodies, setBodies] = useState(null)
   const root = useRef(null)
   const done = useRef(onDone)
@@ -47,8 +48,17 @@ export default function Print({ pages, onDone }) {
     settle(root.current).then(() => {
       if (!alive) return
       fit(root.current)
-      addEventListener('afterprint', () => done.current(), { once: true })
-      window.print()
+      const finish = (what) => [() => done.current(), (e) => done.current(`${what} nicht gespeichert: ${e?.message ?? e}`)]
+      if (mode === 'pdf') invoke('print_pdf', { path: target }).then(...finish('PDF'))
+      else if (mode === 'word')
+        import('./docx.js')
+          .then(({ toDocx }) => toDocx(root.current))
+          .then((bytes) => invoke('save_docx', bytes, { headers: { 'x-path': encodeURIComponent(target) } }))
+          .then(...finish('Word-Datei'))
+      else {
+        addEventListener('afterprint', () => done.current(), { once: true })
+        window.print()
+      }
     })
     return () => {
       alive = false
@@ -62,7 +72,7 @@ export default function Print({ pages, onDone }) {
         pages.map(({ node, path, fields, list }, i) => (
           <section key={node.id} className="print-page">
             <p className="mb-1 text-xs text-muted">
-              {path.map((p) => p.title || 'Ohne Titel').join(' / ')} · gedruckt am {printed}
+              {path.map((p) => p.title || 'Ohne Titel').join(' / ')} · {mode === 'print' ? 'gedruckt am' : 'Stand'} {printed}
             </p>
             <h1 className="mb-4 text-[28px] font-semibold leading-tight tracking-tight">{node.title || 'Ohne Titel'}</h1>
             {fields && (
@@ -91,13 +101,16 @@ export default function Print({ pages, onDone }) {
   )
 }
 
-// Hat die Seite Unterseiten, wird vorher gefragt
-export function PrintAsk({ node, count, onChoose }) {
+const ASK = { print: ['Drucken', 'drucken', Printer], pdf: ['Als PDF speichern', 'als PDF speichern', FilePdf], word: ['Als Word speichern', 'als Word-Datei speichern', FileDoc] }
+
+// Hat die Seite Unterseiten, wird vorher gefragt (alles kommt in dieselbe Datei)
+export function PrintAsk({ node, count, mode = 'print', onChoose }) {
+  const [label, verb, Icon] = ASK[mode]
   return (
-    <div role="dialog" aria-modal="true" aria-label="Drucken" className="anim-fade fixed inset-0 z-50 grid place-items-center bg-[rgb(10_20_22/0.35)] p-6" onClick={() => onChoose(null)} onKeyDown={(e) => e.key === 'Escape' && onChoose(null)}>
+    <div role="dialog" aria-modal="true" aria-label={label} className="anim-fade fixed inset-0 z-50 grid place-items-center bg-[rgb(10_20_22/0.35)] p-6" onClick={() => onChoose(null)} onKeyDown={(e) => e.key === 'Escape' && onChoose(null)}>
       <div onClick={(e) => e.stopPropagation()} className="anim-pop w-full max-w-sm rounded-lg border border-line bg-raised p-4 shadow-[var(--shadow)]">
-        <h2 className="mb-1 flex items-center gap-2 font-medium"><Printer size={18} className="text-accent" /> „{node.title || 'Ohne Titel'}“ drucken</h2>
-        <p className="mb-4 text-sm text-muted">Die Seite hat {count === 1 ? 'eine Unterseite' : `${count} Unterseiten`}. Als PDF: im Druckdialog „Microsoft Print to PDF“ wählen.</p>
+        <h2 className="mb-1 flex items-center gap-2 font-medium"><Icon size={18} className="text-accent" /> „{node.title || 'Ohne Titel'}“ {verb}</h2>
+        <p className="mb-4 text-sm text-muted">Die Seite hat {count === 1 ? 'eine Unterseite' : `${count} Unterseiten`}.</p>
         <div className="flex flex-wrap justify-end gap-2">
           <button onClick={() => onChoose(null)} className="rounded-md px-3 py-1.5 text-muted hover:bg-hover">Abbrechen</button>
           <button onClick={() => onChoose(false)} className="rounded-md border border-line px-3 py-1.5 hover:bg-hover">Nur diese Seite</button>

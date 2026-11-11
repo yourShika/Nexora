@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import { enable as enableAutostart } from '@tauri-apps/plugin-autostart'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -1699,13 +1699,22 @@ export default function App() {
     today: liveRows.filter((r) => !isDone(r, fieldsOf(dbOf(r))) && [r.props?.due, r.props?.followup].some((d) => d && dayOf(d) <= t)).length,
   }
 
-  // Drucken: Seite, auf Wunsch mit allen Unterseiten (Tiefe zuerst, wie in der Seitenleiste)
+  // Drucken oder als PDF/Word speichern (mode 'print' | 'pdf' | 'word'): Seite, auf Wunsch mit allen Unterseiten
+  // (Tiefe zuerst, wie in der Seitenleiste), alles in eine Datei
   const subpages = (id) => tree.children(id).filter((n) => n.kind === 'page').flatMap((n) => [n, ...subpages(n.id)])
-  function printPage(page, withKids) {
+  async function printPage(page, withKids, mode = 'print') {
     const kids = page.kind === 'page' ? subpages(page.id) : []
-    if (withKids === undefined && kids.length) return setPrinting({ ask: page, count: kids.length })
+    if (withKids === undefined && kids.length) return setPrinting({ ask: page, count: kids.length, mode })
     const list = [page, ...(withKids ? kids : [])]
-    setPrinting({ pages: list.map((n) => ({ node: n, path: n.kind !== 'row' ? pathOf(n.id).slice(0, -1) : dbOf(n) ? pathOf(dbOf(n).id) : [{ id: 'inbox', title: 'Eingang' }], fields: n.kind === 'row' ? fieldsOf(dbOf(n)) : null, list: dbOf(n) })) })
+    let target
+    if (mode !== 'print') {
+      const ext = mode === 'pdf' ? 'pdf' : 'docx'
+      setPrinting(null)
+      target = await saveDialog({ title: mode === 'pdf' ? 'Als PDF speichern' : 'Als Word-Datei speichern', defaultPath: `${safeName(page.title)}.${ext}`, filters: [{ name: mode === 'pdf' ? 'PDF' : 'Word-Dokument', extensions: [ext] }] }).catch(fail)
+      if (!target) return
+      if (!target.toLowerCase().endsWith(`.${ext}`)) target += `.${ext}`
+    }
+    setPrinting({ mode, target, pages: list.map((n) => ({ node: n, path: n.kind !== 'row' ? pathOf(n.id).slice(0, -1) : dbOf(n) ? pathOf(dbOf(n).id) : [{ id: 'inbox', title: 'Eingang' }], fields: n.kind === 'row' ? fieldsOf(dbOf(n)) : null, list: dbOf(n) })) })
   }
 
   let view
@@ -1921,8 +1930,20 @@ export default function App() {
       <main key={`${current}/${mainBump}`} data-tour="inhalt" className="page-main min-w-0 flex-1 bg-bg">{view}</main>
       </div>
 
-      {printing?.ask && <PrintAsk node={printing.ask} count={printing.count} onChoose={(kids) => (kids === null ? setPrinting(null) : printPage(printing.ask, kids))} />}
-      {printing?.pages && <Print pages={printing.pages} onDone={(err) => (setPrinting(null), err && setError(err))} />}
+      {printing?.ask && <PrintAsk node={printing.ask} count={printing.count} mode={printing.mode} onChoose={(kids) => (kids === null ? setPrinting(null) : printPage(printing.ask, kids, printing.mode))} />}
+      {printing?.pages && (
+        <Print
+          pages={printing.pages}
+          mode={printing.mode}
+          target={printing.target}
+          onDone={(err) => {
+            const saved = printing.target
+            setPrinting(null)
+            if (err) setError(err)
+            else if (saved) setNotice({ text: `Gespeichert: ${saved}`, label: 'Im Ordner zeigen', run: () => revealItemInDir(saved).catch(fail) })
+          }}
+        />
+      )}
       {secretAsk && (
         <SecretDialog
           text={secretAsk.text}

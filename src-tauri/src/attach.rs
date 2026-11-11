@@ -175,6 +175,67 @@ pub fn export_zip(app: AppHandle, target: String, files: Vec<ExportFile>, copies
     Ok(files.len())
 }
 
+// Word-Export (die .docx baut das Frontend): Bytes roh im Body, Ziel aus dem Speichern-Dialog im Header x-path.
+// Nur .docx, damit der Befehl keine anderen Dateien überschreiben kann
+#[tauri::command]
+pub fn save_docx(request: Request) -> Result<(), String> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Keine Daten erhalten".into());
+    };
+    let path = percent_decode(request.headers().get("x-path").and_then(|v| v.to_str().ok()).unwrap_or_default());
+    if !path.to_lowercase().ends_with(".docx") {
+        return Err(format!("Kein Word-Ziel: {path}"));
+    }
+    fs::write(&path, bytes).map_err(|e| format!("Nicht gespeichert: {e}"))
+}
+
+// PDF-Export ohne Druckdialog: WebView2 druckt die Druckansicht (#print-root, siehe Print.jsx) direkt in eine Datei
+#[tauri::command]
+pub async fn print_pdf(window: tauri::WebviewWindow, path: String) -> Result<(), String> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2Environment6, ICoreWebView2_7};
+    use webview2_com::PrintToPdfCompletedHandler;
+    use windows::core::{Interface, HSTRING};
+    if !path.to_lowercase().ends_with(".pdf") {
+        return Err(format!("Kein PDF-Ziel: {path}"));
+    }
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    let fail = tx.clone();
+    window
+        .with_webview(move |wv| {
+            let start = move || -> windows::core::Result<()> {
+                unsafe {
+                    let view: ICoreWebView2_7 = wv.controller().CoreWebView2()?.cast()?;
+                    let settings = wv.environment().cast::<ICoreWebView2Environment6>()?.CreatePrintSettings()?;
+                    // A4 mit 16 mm Rand wie die Druckansicht (Maße in Zoll)
+                    settings.SetPageWidth(8.27)?;
+                    settings.SetPageHeight(11.69)?;
+                    settings.SetMarginTop(0.63)?;
+                    settings.SetMarginBottom(0.63)?;
+                    settings.SetMarginLeft(0.63)?;
+                    settings.SetMarginRight(0.63)?;
+                    settings.SetShouldPrintHeaderAndFooter(false)?;
+                    settings.SetShouldPrintBackgrounds(true)?;
+                    let done = PrintToPdfCompletedHandler::create(Box::new(move |hr, ok| {
+                        let _ = tx.send(match hr {
+                            Err(e) => Err(e.to_string()),
+                            Ok(()) if !ok => Err("PDF nicht geschrieben".into()),
+                            Ok(()) => Ok(()),
+                        });
+                        Ok(())
+                    }));
+                    view.PrintToPdf(&HSTRING::from(path.as_str()), &settings, &done)
+                }
+            };
+            if let Err(e) = start() {
+                let _ = fail.send(Err(e.to_string()));
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || rx.recv_timeout(std::time::Duration::from_secs(120)).unwrap_or_else(|_| Err("Zeitüberschreitung beim PDF".into())))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());

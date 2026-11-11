@@ -2,6 +2,16 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.55.0',
+    date: '2026-11-11',
+    title: 'Als Word oder PDF speichern',
+    items: [
+      '**Als PDF speichern:** Im Menü einer Seite (⋯) speichert „Als PDF speichern …“ die Seite direkt als PDF, ohne Druckdialog. Sie sieht aus wie gedruckt, im A4-Format.',
+      '**Als Word speichern:** „Als Word speichern …“ legt eine .docx an, mit Überschriften, Hervorhebungen und Farben, Links, Listen und Aufgaben, Tabellen, Code, Zitaten und Bildern. Word muss dafür nicht installiert sein.',
+      'Hat die Seite Unterseiten, fragt Nexora wie beim Drucken, ob sie mit in dieselbe Datei sollen. Nach dem Speichern zeigt **Im Ordner zeigen** die Datei. „Drucken …“ bleibt für den Drucker.',
+    ],
+  },
+  {
     version: '0.54.0',
     date: '2026-11-11',
     title: 'Reiter in eigene Fenster',

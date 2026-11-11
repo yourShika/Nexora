@@ -219,6 +219,8 @@ pub fn run() {
             attach::reveal_attachment,
             attach::read_text_file,
             attach::export_files,
+            attach::save_docx,
+            attach::print_pdf,
             package::export_nexora,
             package::import_nexora
         ])

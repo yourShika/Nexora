@@ -1,6 +1,6 @@
 {
   "name": "nexora",
-  "version": "0.54.0",
+  "version": "0.55.0",
   "description": "Notizen, LOP und Runbooks in einer schlanken Desktop-App",
   "private": true,
   "type": "module",
@@ -41,6 +41,7 @@
     "@tiptap/starter-kit": "^3.32.0",
     "@tiptap/suggestion": "^3.32.0",
     "chart.js": "^4.6.1",
+    "docx": "^9.15.3",
     "emojibase-data": "17.0.0",
     "highlight.js": "^11.12.0",
     "lowlight": "^3.3.0",

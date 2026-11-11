@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AppWindow, Article, Printer, ArrowBendDownRight, ArrowSquareIn, ClockCounterClockwise, Copy, DotsThree, FrameCorners, ListChecks, LockSimple, LockSimpleOpen, PencilSimple, PushPin, Stamp, EnvelopeSimple, Star, Trash, WarningCircle } from '@phosphor-icons/react'
+import { AppWindow, Article, FileDoc, FilePdf, Printer, ArrowBendDownRight, ArrowSquareIn, ClockCounterClockwise, Copy, DotsThree, FrameCorners, ListChecks, LockSimple, LockSimpleOpen, PencilSimple, PushPin, Stamp, EnvelopeSimple, Star, Trash, WarningCircle } from '@phosphor-icons/react'
 import Menu, { MenuItem } from './Menu.jsx'
 import { NodeIcon } from './Sidebar.jsx'
 import { useApp } from './ctx.js'
@@ -199,7 +199,11 @@ export default function Page({ node, path, autoFocus, onPatch, onSave, onRemove,
               <MenuItem icon={EnvelopeSimple} onClick={() => (setMenu(null), onFollowUp(node))}>Nachhaken (Mail-Entwurf)</MenuItem>
             )}
             {onPrint && (
-              <MenuItem icon={Printer} onClick={async () => (setMenu(null), await flush(), onPrint(node))}>Drucken / Als PDF …</MenuItem>
+              <>
+                <MenuItem icon={Printer} onClick={async () => (setMenu(null), await flush(), onPrint(node))}>Drucken …</MenuItem>
+                <MenuItem icon={FilePdf} onClick={async () => (setMenu(null), await flush(), onPrint(node, undefined, 'pdf'))}>Als PDF speichern …</MenuItem>
+                <MenuItem icon={FileDoc} onClick={async () => (setMenu(null), await flush(), onPrint(node, undefined, 'word'))}>Als Word speichern …</MenuItem>
+              </>
             )}
             {onWindow && <MenuItem icon={AppWindow} onClick={() => (flush(), setMenu(null), onWindow())}>In eigenem Fenster öffnen</MenuItem>}
             {windowed && <MenuItem icon={ArrowSquareIn} onClick={() => (setMenu(null), windowed.onMain())}>Im Hauptfenster öffnen</MenuItem>}
