@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { enable as enableAutostart } from '@tauri-apps/plugin-autostart'
-import { emitTo, listen } from '@tauri-apps/api/event'
+import { emit, emitTo, listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
-import { AppWindow, X } from '@phosphor-icons/react'
+import { AppWindow, PushPin, X } from '@phosphor-icons/react'
 import { closeWindow, label, openWindow as openPageWindow, restoreWindows, windowKey, windowPage } from './windows.js'
 import * as db from './db.js'
 import { CANVAS } from './free.js'
@@ -559,7 +559,7 @@ export default function App() {
         db.getSetting('einrichtung').then((v) => v === 'offen' && setSetup({ first: true })).catch(() => {})
         // Text in Bildern und Anhängen erst, wenn die App steht; läuft still im Hintergrund
         setTimeout(indexText, 5000)
-        return restoreWindows((id) => all.some((n) => n.id === id && !n.deleted_at)).then((ids) => setWindows(new Set(ids)))
+        return restoreWindows((id) => !!VIEWS[id] || all.some((n) => n.id === id && !n.deleted_at)).then((ids) => setWindows(new Set(ids)))
       })
       .catch((e) => setError(`Datenbank nicht erreichbar: ${e}`))
     return () => {
@@ -633,7 +633,7 @@ export default function App() {
   }, [reload])
 
   // Fenstertitel folgt dem Seitentitel
-  const windowTitle = windowPage && nodes ? (nodes.find((n) => n.id === windowPage)?.title ?? null) : null
+  const windowTitle = windowPage && nodes ? (VIEWS[windowPage]?.[0] ?? nodes.find((n) => n.id === windowPage)?.title ?? null) : null
   useEffect(() => {
     if (windowTitle !== null) getCurrentWindow().setTitle(`${windowTitle || 'Ohne Titel'} – Nexora`).catch(() => {})
   }, [windowTitle])
@@ -709,6 +709,7 @@ export default function App() {
     [tree, outlook.push],
   )
   useEffect(() => {
+    if (windowPage) return
     if (!outlook.push && !outlook.read) return setEvents([])
     const soon = setTimeout(outlookSync, 10_000)
     return () => clearTimeout(soon)
@@ -718,6 +719,19 @@ export default function App() {
     const every = setInterval(outlookSync, 15 * 60e3)
     return () => clearInterval(every)
   }, [outlook.push, outlook.read, outlookSync])
+  // Eigene Fenster (Heute, Kalender …) bekommen Termine und Bereich vom Hauptfenster; beim Start fragen sie nach
+  const eventsRef = useRef(events)
+  eventsRef.current = events
+  useEffect(() => {
+    const offs = windowPage
+      ? [listen('termine', (e) => setEvents(e.payload)), listen('bereich', (e) => setArea(e.payload))]
+      : [listen('termine-bitte', () => emit('termine', eventsRef.current).catch(() => {}))]
+    if (windowPage) Promise.all(offs).then(() => emitTo('main', 'termine-bitte')).catch(() => {})
+    return () => offs.forEach((p) => p.then((off) => off()))
+  }, [])
+  useEffect(() => {
+    if (!windowPage) emit('termine', events).catch(() => {})
+  }, [events])
   // Aufgaben (zeitgesteuert): Aktualisieren nutzt die vorhandenen Abläufe, Fehler kommen als Ausnahme zurück in den Verlauf
   const [mainBump, setMainBump] = useState(0) // Neuaufbau der offenen Seite, wenn eine Aufgabe sie neu geschrieben hat
   const jobState = useJobs(loaded && !windowPage, {
@@ -1494,6 +1508,7 @@ export default function App() {
     setArea(next) {
       setArea(next)
       db.setSetting('area', next).catch(fail)
+      emit('bereich', next).catch(() => {})
       // offene Seite aus dem anderen Bereich nicht stehen lassen
       if (tree.alive.has(current) && tree.areaOf(current) !== next) {
         // zum letzten Reiter, den der Bereich zeigt; gibt es keinen, ein neuer mit Heute
@@ -1848,7 +1863,20 @@ export default function App() {
     <div className="flex h-full flex-col" data-focus={focusMode || undefined}>
       <TitleBar>
         {windowPage ? (
-          <span data-tauri-drag-region className="min-w-0 self-center truncate text-sm text-muted">{windowTitle || 'Ohne Titel'}</span>
+          <>
+            <span data-tauri-drag-region className="min-w-0 self-center truncate text-sm text-muted">{windowTitle || 'Ohne Titel'}</span>
+            {/* Seiten haben den Pin oben in der Seite, Ansichten und Listen hier */}
+            {!['page', 'row'].includes(node?.kind) && (
+              <button
+                aria-label={pinned ? 'Nicht mehr im Vordergrund' : 'Immer im Vordergrund'}
+                title={pinned ? 'Nicht mehr im Vordergrund' : 'Immer im Vordergrund'}
+                onClick={() => togglePin().catch((e) => setError(String(e)))}
+                className="ml-1 grid size-7 shrink-0 place-items-center self-center rounded-md text-muted hover:bg-hover hover:text-text"
+              >
+                <PushPin size={14} weight={pinned ? 'fill' : 'regular'} className={pinned ? 'text-accent' : ''} />
+              </button>
+            )}
+          </>
         ) : (
           !focusMode && (
             <Tabs

@@ -21,6 +21,7 @@ test('Reiter wie im Browser', () => {
   assert.equal(views(s), '*a *b e d')
   s = show(s, 'f', true)
   assert.equal(views(s), '*a *b e f d')
+  assert.equal(views(show(s, 'e', true)), '*a *b e f e d') // ausdrücklich neuer Reiter: auch wenn schon offen
   s = openTab(s, 'today', { atEnd: true })
   assert.equal(views(s), '*a *b e f d today')
   // schließen: rechter Nachbar wird aktiv, am Ende der linke

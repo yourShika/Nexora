@@ -17,7 +17,7 @@ function TabIcon({ tab, size = 14 }) {
 }
 
 // Reiter in der Titelleiste wie im Browser (Logik in tabs.js). Angepinnte schmal mit Symbol und ohne X.
-// Ziehen ordnet um; aus dem Fenster gezogen und losgelassen öffnet die Seite in einem eigenen Fenster.
+// Ziehen ordnet um; aus dem Fenster gezogen und losgelassen oder doppelt angeklickt öffnet sich der Reiter in einem eigenen Fenster.
 // Mittelklick schließt, Rechtsklick zeigt das Menü
 export default function Tabs({ tabs, active, onSelect, onClose, onPin, onMove, onCloseOthers, onCloseRight, onNew, onWindow, onDropNode }) {
   const [drag, setDrag] = useState(null)
@@ -37,7 +37,8 @@ export default function Tabs({ tabs, active, onSelect, onClose, onPin, onMove, o
     const r = e.currentTarget.getBoundingClientRect()
     return e.clientX - r.left < r.width / 2 ? 'before' : 'after'
   }
-  const canWindow = (t) => ['page', 'row'].includes(t.node?.kind)
+  // Einstellungen und Aufgaben hängen am Hauptfenster (Sicherung, Tastenkürzel, geplante Aufgaben laufen nur dort)
+  const canWindow = (t) => !['settings', 'jobs'].includes(t.view)
 
   // Verlässt der Ziehvorgang das Fenster, gibt es keinen dragleave mit Ziel mehr (relatedTarget null)
   const leave = (e) => !e.relatedTarget && (outside.current = true)
@@ -105,6 +106,7 @@ export default function Tabs({ tabs, active, onSelect, onClose, onPin, onMove, o
               setOver(null)
             }}
             onAuxClick={(e) => e.button === 1 && !t.pinned && onClose(t.key)}
+            onDoubleClick={() => canWindow(t) && onWindow(t.key, null)}
             onContextMenu={(e) => (e.preventDefault(), setMenu({ tab: t, x: e.clientX, y: e.clientY }))}
             className={`group relative flex shrink items-center self-end rounded-t-lg ${t.pinned ? 'w-10 shrink-0 justify-center' : 'w-52 min-w-14'} ${on ? 'bg-bg text-text' : 'text-muted hover:bg-hover hover:text-text'} ${mark}`}
           >

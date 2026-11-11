@@ -57,11 +57,13 @@ export function navigate(s, view) {
   return { ...s, tabs: s.tabs.map((t) => (t.key === a.key ? { ...t, view } : t)) }
 }
 
-// aus Seitenleiste, Suche, Links: ist die Seite schon in einem Reiter, dorthin wechseln
+// aus Seitenleiste, Suche, Links: ist die Seite schon in einem Reiter, dorthin wechseln.
+// Ausdrücklich in neuem Reiter (Menü, Mittelklick) gibt es wie im Browser immer einen weiteren
 export function show(s, view, newTab = false) {
+  if (newTab) return openTab(s, view)
   const there = s.tabs.find((t) => t.view === view)
   if (there) return there.key === s.active ? s : { ...s, active: there.key }
-  return newTab ? openTab(s, view) : navigate(s, view)
+  return navigate(s, view)
 }
 
 // schließen; aktiv wird der rechte Nachbar, sonst der linke

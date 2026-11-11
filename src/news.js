@@ -2,6 +2,17 @@
 // Neueste zuerst; **fett** wird hervorgehoben. Bei jedem Release oben ergänzen.
 export const NEWS = [
   {
+    version: '0.54.0',
+    date: '2026-11-11',
+    title: 'Reiter in eigene Fenster',
+    items: [
+      '**Jeder Reiter in ein eigenes Fenster:** Heute, Eingang, Kalender, Tagebuch, Statistik, Snippets, Papierkorb, Listen und Notizbücher lassen sich jetzt wie Seiten aus der Reiterleiste ziehen. Nur Einstellungen und Aufgaben bleiben im Hauptfenster.',
+      '**Doppelklick auf einen Reiter** öffnet ihn ebenfalls in einem eigenen Fenster.',
+      'Im Fenster bleibt die Ansicht stehen: Ein Klick auf einen Punkt öffnet ihn im Hauptfenster. Outlook-Termine und der Bereich Arbeit/Privat kommen vom Hauptfenster. Der **Pin** oben neben dem Titel hält das Fenster im Vordergrund.',
+      '**„In neuem Reiter öffnen“** öffnet jetzt immer einen weiteren Reiter, auch wenn die Seite schon offen ist (vorher passierte dann nichts). Das gilt auch für den Mittelklick.',
+    ],
+  },
+  {
     version: '0.53.0',
     date: '2026-11-09',
     title: 'Kalender mit Tag, Woche und Monat',
